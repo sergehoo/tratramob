@@ -1,0 +1,71 @@
+#// Users/ogahserge/Documents/handy_tratra/flutter_tratra/pubspec.yaml
+name: flutter_tratra
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.6.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  google_fonts: ^6.3.1
+  flutter_rating_bar: ^4.0.1
+  intl: ^0.20.2
+  carousel_slider: ^5.1.1
+  flutter_svg: ^2.2.0
+  shimmer: ^3.0.0
+  cached_network_image: ^3.2.3
+  provider: ^6.0.5
+  geolocator: ^14.0.2
+  http: ^1.5.0
+  shared_preferences: ^2.5.3
+  share_plus: ^12.0.0
+  chewie: ^1.13.0
+  video_player: ^2.10.0
+  flutter_secure_storage: ^9.2.4
+  font_awesome_flutter: ^10.7.0
+  url_launcher: ^6.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  # (optionnel) si tu génères les icônes/splash :
+  # flutter_launcher_icons: ^0.13.1
+  # flutter_native_splash: ^2.4.1
+
+flutter:
+  uses-material-design: true  # <= DOIT être ici, sous "flutter:"
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/handy.sqlite
+    - assets/images/tratra_logo.webp
+    - assets/images/tratra_logo_dark.webp
+    - assets/images/placeholder-1-1.png 
+    # Assure-toi que ces fichiers existent réellement :
+    # - assets/images/logo.webp
+    # - assets/images/logo_dark.png
+
+# Configs outils (facultatives) — laisses-les ICI, hors de "flutter:"
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/images/tratra_logo.webp
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: assets/images/tratra_logo.webp
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  color_dark: "#000000"
+  image: assets/images/tratra_logo.webp
+  image_dark: assets/images/tratra_logo_dark.webp
+  android_12:
+    color: "#FFFFFF"
+    color_dark: "#000000"
+    image: assets/images/tratra_logo.webp
+    image_dark: assets/images/tratra_logo_dark.webp
