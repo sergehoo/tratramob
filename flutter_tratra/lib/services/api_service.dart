@@ -10,6 +10,7 @@ import 'package:flutter_tratra/models/user.dart';
 import 'package:flutter_tratra/models/review.dart';
 import 'package:flutter_tratra/models/conversation.dart';
 import 'package:flutter_tratra/models/message.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../core/constants.dart';
 
 class ApiService {
@@ -19,7 +20,7 @@ class ApiService {
 
   // Méthode pour définir le token d'authentification
   void setAuthToken(String token) {
-    authToken = token;
+    authToken = token.isEmpty ? null : token;
   }
 
   // Headers communs
@@ -86,6 +87,18 @@ class ApiService {
       }
       setAuthToken(access);
 
+      // Persiste access + refresh dans le secure storage (clés partagées avec
+      // BaseApi -> auto-refresh sur 401 pour toutes les requêtes de l'app).
+      final refresh = data['refresh'] as String?;
+      const secure = FlutterSecureStorage();
+      await secure.write(key: AppConstants.authTokenKey, value: access);
+      if (refresh != null && refresh.isNotEmpty) {
+        await secure.write(key: AppConstants.refreshTokenKey, value: refresh);
+      } else {
+        // Évite de réutiliser le refresh token d'une session précédente.
+        await secure.delete(key: AppConstants.refreshTokenKey);
+      }
+
       // Récupération du profil courant (protégé)
       final me = await getCurrentUser();
       return me;
@@ -97,15 +110,28 @@ class ApiService {
   }
 
   Future<void> logout() async {
-    // Optionnel: si tu as mis en place le blacklist (refresh token)
-    final resp = await client.post(
-      Uri.parse('$baseUrl/auth/logout/'),
-      headers: _headers,
-    );
-    if (resp.statusCode != 200) {
-      _handleError(resp);
+    const secure = FlutterSecureStorage();
+    final refresh = await secure.read(key: AppConstants.refreshTokenKey);
+    try {
+      if (refresh != null && refresh.isNotEmpty) {
+        final resp = await client.post(
+          Uri.parse('$baseUrl${AppConstants.authLogoutEndpoint}'),
+          headers: _headers,
+          body: json.encode({'refresh': refresh}),
+        );
+        if (resp.statusCode != 200 &&
+            resp.statusCode != 204 &&
+            resp.statusCode != 205) {
+          _handleError(resp);
+        }
+      }
+    } catch (_) {
+      // La session locale doit être supprimée même sans réseau.
+    } finally {
+      setAuthToken('');
+      await secure.delete(key: AppConstants.authTokenKey);
+      await secure.delete(key: AppConstants.refreshTokenKey);
     }
-    setAuthToken('');
   }
 
   Future<User> getCurrentUser() async {
@@ -123,10 +149,12 @@ class ApiService {
   }
 
   Future<User> updateUser(User user) async {
-    final response = await client.put(
+    // PATCH évite d'exiger le mot de passe à chaque édition de profil et ne
+    // soumet pas de champs serveur en lecture seule.
+    final response = await client.patch(
       Uri.parse('$baseUrl${AppConstants.usersEndpoint}/${user.id}/'),
       headers: _headers,
-      body: json.encode(user.toJson()),
+      body: json.encode(user.toProfileUpdateJson()),
     );
 
     if (response.statusCode == 200) {
@@ -531,9 +559,17 @@ class ApiService {
       if (loginResponse.statusCode == 200) {
         final loginData = json.decode(loginResponse.body);
         final token = loginData['access'] as String?;
+        final refresh = loginData['refresh'] as String?;
 
         if (token != null && token.isNotEmpty) {
           setAuthToken(token); // ⬅️ IMPORTANT : on mémorise le token
+          const secure = FlutterSecureStorage();
+          await secure.write(key: AppConstants.authTokenKey, value: token);
+          if (refresh != null && refresh.isNotEmpty) {
+            await secure.write(key: AppConstants.refreshTokenKey, value: refresh);
+          } else {
+            await secure.delete(key: AppConstants.refreshTokenKey);
+          }
         }
         return {
           'success': true,

@@ -4,7 +4,7 @@ import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/models/category.dart';
 
 class CategoryService extends BaseApi {
-  CategoryService({http.Client? client}) : super(client: client);
+  CategoryService({super.client});
 
   Future<List<Category>> list({int page = 1}) async {
     final uri = Uri.parse('$baseUrl/categories/').replace(queryParameters: {

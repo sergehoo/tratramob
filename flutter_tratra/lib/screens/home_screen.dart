@@ -78,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Category? _selectedCategory;
   bool _onlyNearby = false;
   String _ordering = '-created_at';
-  double _nearbyRadiusKm = 15;
+  final double _nearbyRadiusKm = 15;
 
   // ====== Navigation state ======
   int _navIndex = 0;
@@ -245,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         'radius_km': '$_nearbyRadiusKm',
         'page_size': '12',
         if (_selectedCategory != null)
-          'category_id': '${_selectedCategory!.id}',
+          'category_id': _selectedCategory!.id,
         if (_searchText.trim().isNotEmpty) 'search': _searchText.trim(),
       });
 
@@ -260,7 +260,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       'is_active': 'true',
       'page_size': '12',
       'ordering': _ordering,
-      if (_selectedCategory != null) 'category': '${_selectedCategory!.id}',
+      if (_selectedCategory != null) 'category': _selectedCategory!.id,
       if (_searchText.trim().isNotEmpty) 'search': _searchText.trim(),
     };
 
@@ -282,7 +282,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       'lng': '${pos.longitude}',
       'radius_km': '$_nearbyRadiusKm',
       'page_size': '12',
-      if (_selectedCategory != null) 'category_id': '${_selectedCategory!.id}',
+      if (_selectedCategory != null) 'category_id': _selectedCategory!.id,
     });
 
     final r = await _getPublic(uri);
@@ -1128,8 +1128,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final parts = apiIcon.trim().split(RegExp(r'\s+'));
       final faName = parts.isNotEmpty ? parts.last : '';
       final iconData = _faMap[faName];
-      if (iconData != null)
+      if (iconData != null) {
         return FaIcon(iconData, color: Colors.white, size: 22);
+      }
     }
     return const Icon(Icons.category, color: Colors.white, size: 22);
   }
@@ -2570,7 +2571,7 @@ class _PremiumBottomNav extends StatelessWidget {
       data: NavigationBarThemeData(
         backgroundColor: _HomeScreenState._card,
         indicatorColor: accent.withOpacity(.12),
-        labelTextStyle: MaterialStateProperty.all(
+        labelTextStyle: WidgetStateProperty.all(
           const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
         ),
       ),

@@ -15,7 +15,7 @@ import 'package:flutter_tratra/widgets/loading_widget.dart';
 import 'package:flutter_tratra/widgets/empty_state_widget.dart';
 
 class AllUrgentServicesScreen extends StatefulWidget {
-  const AllUrgentServicesScreen({Key? key}) : super(key: key);
+  const AllUrgentServicesScreen({super.key});
 
   @override
   State<AllUrgentServicesScreen> createState() =>
@@ -159,7 +159,7 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
 
       // Pagination safe (aucune supposition sur la structure)
       dynamic nextVal;
-      if (rawPagination is Map && rawPagination['next'] != null) {
+      if (rawPagination['next'] != null) {
         nextVal = rawPagination['next'];
       } else if (decoded is Map && decoded['next'] != null) {
         nextVal = decoded['next'];
@@ -704,7 +704,7 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
   /// IMPORTANT : accepte `null` (toutes catégories)
   Widget _buildCategoryDropdown() {
     return DropdownButtonFormField<String?>(
-      value: widget.selectedCategory,
+      initialValue: widget.selectedCategory,
       decoration: const InputDecoration(
         border: OutlineInputBorder(),
         isDense: true,

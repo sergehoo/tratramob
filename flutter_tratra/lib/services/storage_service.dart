@@ -30,7 +30,7 @@ class StorageService {
   Future<void> saveUserData(User user) async {
     await _storage.write(
       key: AppConstants.userDataKey,
-      value: jsonEncode(user.toJson()),
+      value: jsonEncode(user.toStorageJson()),
     );
   }
 
@@ -46,6 +46,7 @@ class StorageService {
 
   Future<void> clearAuthData() async {
     await _storage.delete(key: AppConstants.authTokenKey);
+    await _storage.delete(key: AppConstants.refreshTokenKey);
     await _storage.delete(key: AppConstants.userDataKey);
   }
 }

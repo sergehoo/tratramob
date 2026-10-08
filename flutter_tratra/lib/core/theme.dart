@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 class AppTheme {
   static const Color primaryColor = Color(0xFF00B14F);
   static const Color primaryLight = Color(0xFF00D25F);
+  static const Color accentColor = Color(0xFFF6C90E); // jaune marque
   static const Color backgroundColor = Color(0xFFF8F9FA);
   static const Color textPrimary = Color(0xFF2D3436);
   static const Color textSecondary = Color(0xFF636E72);
@@ -11,7 +12,13 @@ class AppTheme {
   static const Color borderColor = Color(0xFFE5E5E5);
 
   static ThemeData get lightTheme => ThemeData(
+        useMaterial3: true,
         primaryColor: primaryColor,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: primaryColor,
+          primary: primaryColor,
+          secondary: accentColor,
+        ),
         scaffoldBackgroundColor: backgroundColor,
         fontFamily: 'Inter',
         appBarTheme: const AppBarTheme(

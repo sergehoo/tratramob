@@ -2,6 +2,7 @@
 // lib/screens/profile_screen.dart ✅ (Provider + token OK)
 // ===============================
 import 'package:flutter/material.dart';
+import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/models/user.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/services/auth_service.dart';
@@ -48,10 +49,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout() async {
-    await _auth.logout();
-    await _storage.clearAuthData();
+    await context.read<Session>().logout();
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, RouteNames.login);
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      RouteNames.login,
+      (route) => false,
+    );
   }
 
   @override

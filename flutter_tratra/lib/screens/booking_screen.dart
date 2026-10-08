@@ -124,9 +124,6 @@ class _BookingScreenState extends State<BookingScreen> {
     }
   }
 
-  String _formatTimeOfDay(TimeOfDay t) =>
-      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-
   bool get _isFormValid {
     return _addressController.text.trim().isNotEmpty &&
         _cityController.text.trim().isNotEmpty &&
@@ -142,15 +139,12 @@ class _BookingScreenState extends State<BookingScreen> {
 
     try {
       final s = widget.service!;
-      final req = BookingCreateRequest(
+      final req = BookingCreateRequest.fromDateAndTime(
         serviceId: s.id,
         handymanId: s.handymanId.isNotEmpty ? s.handymanId : '',
-        date: DateTime(
-          _selectedDate.year,
-          _selectedDate.month,
-          _selectedDate.day,
-        ),
-        time: _formatTimeOfDay(_selectedTime),
+        date: _selectedDate,
+        hour: _selectedTime.hour,
+        minute: _selectedTime.minute,
         address: _addressController.text.trim(),
         notes: _notesController.text.trim().isEmpty
             ? null
@@ -158,6 +152,10 @@ class _BookingScreenState extends State<BookingScreen> {
         city: _cityController.text.trim(),
         postalCode: _postalController.text.trim(),
       );
+
+      if (!req.scheduledAt.isAfter(DateTime.now().toUtc())) {
+        throw ArgumentError('Veuillez choisir une date et une heure futures.');
+      }
 
       final booking = await _bookingApi.create(req);
 

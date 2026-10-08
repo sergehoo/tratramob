@@ -10,10 +10,10 @@ class UserService {
   UserService(this.api);
 
   Future<User> update(User user) async {
-    final r = await api.client.put(
+    final r = await api.client.patch(
       Uri.parse('${api.baseUrl}/users/${user.id}/'),
       headers: await api.headers,
-      body: jsonEncode(user.toJson()),
+      body: jsonEncode(user.toProfileUpdateJson()),
     );
     if (r.statusCode != 200) api.handleError(r);
     return User.fromJson(api.decodeBody(r));

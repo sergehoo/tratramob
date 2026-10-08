@@ -3,11 +3,10 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Permissions retirées (non utilisées par le code, risque de rejet Play Store) :
-         READ_MEDIA_IMAGES/VIDEO/AUDIO (aucun image_picker/caméra)
-         ACCESS_BACKGROUND_LOCATION (aucune géoloc en arrière-plan). -->
+    <!-- image_picker utilise le sélecteur et la caméra système : aucune permission
+         large de médiathèque, ni localisation en arrière-plan, n'est demandée. -->
     <application
-        android:label="tratra"
+        android:label="Tratra"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

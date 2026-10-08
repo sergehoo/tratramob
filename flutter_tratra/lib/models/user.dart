@@ -80,21 +80,29 @@ class User {
       return null;
     }
 
+    dynamic _firstPresent(List<String> keys) {
+      for (final key in keys) {
+        final value = json[key];
+        if (value != null) return value;
+      }
+      return null;
+    }
+
+    String? _optionalString(dynamic value) {
+      final parsed = _asString(value).trim();
+      return parsed.isEmpty ? null : parsed;
+    }
+
     return User(
       id: _asString(json['id']), // accepte int | string
       email: _asString(json['email']),
-      firstName: _asString(json['first_name'], fallback: '').isEmpty
-          ? null
-          : _asString(json['first_name']),
-      lastName: _asString(json['last_name'], fallback: '').isEmpty
-          ? null
-          : _asString(json['last_name']),
-      phoneNumber: _asString(json['phone_number'], fallback: '').isEmpty
-          ? null
-          : _asString(json['phone_number']),
-      profileImage: _asString(json['profile_image'], fallback: '').isEmpty
-          ? null
-          : _asString(json['profile_image']),
+      firstName: _optionalString(json['first_name']),
+      lastName: _optionalString(json['last_name']),
+      // L'API Django expose `phone` et `profile_picture`; les alias conservent
+      // la compatibilité avec les anciennes réponses mobile.
+      phoneNumber: _optionalString(_firstPresent(['phone', 'phone_number'])),
+      profileImage:
+          _optionalString(_firstPresent(['profile_picture', 'profile_image'])),
       userType: _asString(json['user_type'], fallback: 'client'),
       dateJoined: _asDate(json['date_joined']),
       isActive: _asBool(json['is_active'], fallback: true),
@@ -105,13 +113,45 @@ class User {
     );
   }
 
-  Map<String, dynamic> toJson() => {
+  /// Format d'écriture de l'API Django. Les champs calculés / lecture seule ne
+  /// sont pas envoyés, et une image doit être téléversée en multipart plutôt
+  /// qu'en envoyant une URL dans un JSON de profil.
+  Map<String, dynamic> toJson() {
+    final body = <String, dynamic>{
+      'email': email,
+      'user_type': userType,
+    };
+    if ((username ?? '').trim().isNotEmpty) body['username'] = username!.trim();
+    if ((firstName ?? '').trim().isNotEmpty) {
+      body['first_name'] = firstName!.trim();
+    }
+    if ((lastName ?? '').trim().isNotEmpty) {
+      body['last_name'] = lastName!.trim();
+    }
+    if ((phoneNumber ?? '').trim().isNotEmpty) {
+      body['phone'] = phoneNumber!.trim();
+    }
+    return body;
+  }
+
+  /// Un utilisateur ne peut pas changer son rôle depuis l'écran profil.
+  /// Le PATCH côté API permet aussi d'éviter de redemander son mot de passe.
+  Map<String, dynamic> toProfileUpdateJson() {
+    final body = toJson();
+    body.remove('user_type');
+    return body;
+  }
+
+  /// Représentation complète destinée uniquement au cache chiffré local.
+  /// Elle ne doit pas être envoyée à l'API car elle contient des champs
+  /// serveur en lecture seule.
+  Map<String, dynamic> toStorageJson() => {
         'id': id,
         'email': email,
         'first_name': firstName,
         'last_name': lastName,
-        'phone_number': phoneNumber,
-        'profile_image': profileImage,
+        'phone': phoneNumber,
+        'profile_picture': profileImage,
         'user_type': userType,
         'date_joined': dateJoined?.toIso8601String(),
         'is_active': isActive,

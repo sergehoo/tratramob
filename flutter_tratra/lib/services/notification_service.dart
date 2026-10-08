@@ -4,8 +4,7 @@ import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/models/notification.dart' as model;
 
 class NotificationService extends BaseApi {
-  NotificationService(BaseApi api, {http.Client? client})
-      : super(client: client);
+  NotificationService(BaseApi api, {super.client});
 
   Future<List<model.Notification>> list() async {
     final r = await client.get(Uri.parse('$baseUrl/notifications/'),

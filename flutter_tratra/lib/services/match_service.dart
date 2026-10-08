@@ -5,7 +5,7 @@ import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/models/artisan.dart';
 
 class MatchService extends BaseApi {
-  MatchService(BaseApi api, {http.Client? client}) : super(client: client);
+  MatchService(BaseApi api, {super.client});
 
   Future<List<Artisan>> find({
     required String serviceType,

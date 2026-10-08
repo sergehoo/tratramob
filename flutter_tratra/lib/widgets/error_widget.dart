@@ -7,11 +7,11 @@ class CustomErrorWidget extends StatelessWidget {
   final String? retryText;
 
   const CustomErrorWidget({
-    Key? key,
+    super.key,
     required this.error,
     this.onRetry,
     this.retryText,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

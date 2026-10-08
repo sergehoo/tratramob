@@ -97,14 +97,14 @@ class Service {
 
   factory Service.fromJson(Map<String, dynamic> json) {
     // Conversions tolérantes
-    double? _toDouble(dynamic v) {
+    double? toDouble(dynamic v) {
       if (v == null) return null;
       if (v is num) return v.toDouble();
       if (v is String) return double.tryParse(v.replaceAll(',', '.'));
       return null;
     }
 
-    int? _toInt(dynamic v) {
+    int? toInt(dynamic v) {
       if (v == null) return null;
       if (v is int) return v;
       if (v is num) return v.toInt();
@@ -112,7 +112,7 @@ class Service {
       return null;
     }
 
-    bool _toBool(dynamic v, {bool fallback = false}) {
+    bool toBool(dynamic v, {bool fallback = false}) {
       if (v is bool) return v;
       if (v is num) return v != 0;
       if (v is String) {
@@ -123,12 +123,12 @@ class Service {
       return fallback;
     }
 
-    Duration? _durationFromMinutes(dynamic v) {
-      final m = _toInt(v);
+    Duration? durationFromMinutes(dynamic v) {
+      final m = toInt(v);
       return (m == null) ? null : Duration(minutes: m);
     }
 
-    String _safeAbsUrl(dynamic v) {
+    String safeAbsUrl(dynamic v) {
       final raw = (v ?? '').toString().trim();
       if (raw.isEmpty) return '';
       final u = Uri.tryParse(raw);
@@ -149,16 +149,16 @@ class Service {
     }
 
     // Images : on NE CONSTRUIT PAS d’URL locale → on ne conserve que les URLs absolues
-    String mainImageUrl = _safeAbsUrl(json['image_url']) // priorité image_url
+    String mainImageUrl = safeAbsUrl(json['image_url']) // priorité image_url
             .isNotEmpty
-        ? _safeAbsUrl(json['image_url'])
-        : _safeAbsUrl(json['banner']);
+        ? safeAbsUrl(json['image_url'])
+        : safeAbsUrl(json['banner']);
 
     // Images supplémentaires (si la liste est fournie)
     List<String> additionalImages = [];
     if (json['images'] is List) {
       additionalImages = (json['images'] as List)
-          .map((e) => (e is Map ? _safeAbsUrl(e['image'] ?? e['url']) : ''))
+          .map((e) => (e is Map ? safeAbsUrl(e['image'] ?? e['url']) : ''))
           .where((u) => u.isNotEmpty)
           .toList();
     }
@@ -175,12 +175,12 @@ class Service {
           'https://via.placeholder.com/1000x600?text=Service'; // placeholder sûr
     }
 
-    final price = _toDouble(json['price']);
+    final price = toDouble(json['price']);
     final discounted =
-        _toDouble(json['discounted_price'] ?? json['promo_price']);
-    final rating = _toDouble(json['rating_avg'] ?? json['rating']);
-    final reviewCount = _toInt(json['review_count']);
-    final duration = _durationFromMinutes(json['duration']);
+        toDouble(json['discounted_price'] ?? json['promo_price']);
+    final rating = toDouble(json['rating_avg'] ?? json['rating']);
+    final reviewCount = toInt(json['review_count']);
+    final duration = durationFromMinutes(json['duration']);
 
     // Listes optionnelles
     List<String> included = const [];
@@ -210,7 +210,7 @@ class Service {
       duration: duration,
       imageUrl: mainImageUrl,
       imageUrls: additionalImages,
-      isActive: _toBool(json['is_active'], fallback: true),
+      isActive: toBool(json['is_active'], fallback: true),
       createdAt: (json['created_at'] != null)
           ? (DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now())
           : DateTime.now(),
@@ -219,7 +219,7 @@ class Service {
           : DateTime.now(),
       rating: rating,
       reviewCount: reviewCount,
-      isUrgent: _toBool(json['is_urgent']),
+      isUrgent: toBool(json['is_urgent']),
       discountedPrice: discounted,
       includedServices: included,
       requiredTools: tools,
@@ -227,14 +227,6 @@ class Service {
     );
   }
 
-  /// NE PAS préfixer avec un domaine interne : garder la valeur telle quelle si absolue,
-  /// sinon laisser vide/placeholder (géré côté fromJson).
-  static String _buildImageUrl(String imagePath) {
-    final raw = imagePath.trim();
-    if (raw.isEmpty) return '';
-    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
-    return '';
-  }
 
   // ----- Sérialisation minimale -----
   Map<String, dynamic> toJson() {
@@ -312,7 +304,7 @@ class ServiceCategory {
   });
 
   factory ServiceCategory.fromJson(Map<String, dynamic> json) {
-    bool _toBool(dynamic v, {bool fallback = false}) {
+    bool toBool(dynamic v, {bool fallback = false}) {
       if (v is bool) return v;
       if (v is num) return v != 0;
       if (v is String) {
@@ -329,7 +321,7 @@ class ServiceCategory {
       slug: (json['slug'] ?? '').toString(),
       description: json['description']?.toString(),
       icon: json['icon']?.toString(),
-      isActive: _toBool(json['is_active'], fallback: true),
+      isActive: toBool(json['is_active'], fallback: true),
       parentId: json['parent']?.toString(),
       children: (json['children'] is List)
           ? (json['children'] as List)
@@ -371,7 +363,7 @@ class ServiceImage {
   });
 
   factory ServiceImage.fromJson(Map<String, dynamic> json) {
-    String _safeAbsUrl(dynamic v) {
+    String safeAbsUrl(dynamic v) {
       final raw = (v ?? '').toString().trim();
       if (raw.isEmpty) return '';
       final u = Uri.tryParse(raw);
@@ -386,7 +378,7 @@ class ServiceImage {
     return ServiceImage(
       id: (json['id'] ?? '').toString(),
       serviceId: (json['service'] ?? '').toString(),
-      imageUrl: _safeAbsUrl(json['image'] ?? json['url']),
+      imageUrl: safeAbsUrl(json['image'] ?? json['url']),
       altText: json['alt_text']?.toString(),
       uploadedAt: (json['uploaded_at'] != null)
           ? (DateTime.tryParse(json['uploaded_at'].toString()) ??

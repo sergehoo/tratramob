@@ -1,0 +1,7 @@
+# Copiez ce fichier vers android/key.properties, renseignez les valeurs locales
+# puis gardez le fichier réel hors Git. Ne placez jamais un mot de passe ou une
+# clé de production dans ce dépôt.
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=CHANGE_ME
+storeFile=/absolute/path/to/tratra-release.jks

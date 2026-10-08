@@ -6,7 +6,7 @@ import 'package:flutter_tratra/models/conversation.dart';
 import 'package:flutter_tratra/models/message.dart';
 
 class MessagingService extends BaseApi {
-  MessagingService(BaseApi api, {http.Client? client}) : super(client: client);
+  MessagingService(BaseApi api, {super.client});
 
   Future<List<Conversation>> conversations() async {
     final r = await client.get(Uri.parse('$baseUrl/conversations/'),

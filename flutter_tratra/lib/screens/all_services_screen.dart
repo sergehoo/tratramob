@@ -12,7 +12,7 @@ import 'package:flutter_tratra/models/service.dart';
 import 'package:flutter_tratra/routes.dart';
 
 class AllServicesScreen extends StatefulWidget {
-  const AllServicesScreen({Key? key}) : super(key: key);
+  const AllServicesScreen({super.key});
 
   @override
   State<AllServicesScreen> createState() => _AllServicesScreenState();
@@ -152,7 +152,7 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
 
       // Pagination "safe"
       dynamic nextVal;
-      if (pagination is Map && pagination['next'] != null) {
+      if (pagination['next'] != null) {
         nextVal = pagination['next'];
       } else if (decoded is Map && decoded['next'] != null) {
         nextVal = decoded['next'];
@@ -591,20 +591,20 @@ class _ServiceGridCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const _card = Color(0xFFFFFFFF);
-    const _border = Color(0xFFE5E5E5);
-    const _textPrimary = Color(0xFF1E272E);
-    const _textSecondary = Color(0xFF636E72);
-    const _accent = Color(0xFF00B14F);
+    const card = Color(0xFFFFFFFF);
+    const border = Color(0xFFE5E5E5);
+    const textPrimary = Color(0xFF1E272E);
+    const textSecondary = Color(0xFF636E72);
+    const accent = Color(0xFF00B14F);
 
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: Container(
         decoration: BoxDecoration(
-          color: _card,
+          color: card,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _border),
+          border: Border.all(color: border),
         ),
         child: Column(
           children: [
@@ -635,7 +635,7 @@ class _ServiceGridCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    color: _textPrimary, fontWeight: FontWeight.w800),
+                    color: textPrimary, fontWeight: FontWeight.w800),
               ),
             ),
             Padding(
@@ -648,7 +648,7 @@ class _ServiceGridCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style:
-                          const TextStyle(color: _textSecondary, fontSize: 12),
+                          const TextStyle(color: textSecondary, fontSize: 12),
                     ),
                   ),
                 ],
@@ -661,11 +661,11 @@ class _ServiceGridCard extends StatelessWidget {
                 children: [
                   Text(priceText,
                       style: const TextStyle(
-                          color: _accent,
+                          color: accent,
                           fontWeight: FontWeight.w900,
                           fontSize: 13)),
                   const Spacer(),
-                  const Icon(Icons.chevron_right, color: _textSecondary),
+                  const Icon(Icons.chevron_right, color: textSecondary),
                 ],
               ),
             ),
@@ -821,7 +821,7 @@ class _FilterBottomSheetState extends State<_FilterBottomSheet> {
   /// IMPORTANT : accepte `null` (toutes les catégories)
   Widget _buildCategoryDropdown() {
     return DropdownButtonFormField<String?>(
-      value: widget.selectedCategory,
+      initialValue: widget.selectedCategory,
       decoration: const InputDecoration(
         border: OutlineInputBorder(),
         isDense: true,

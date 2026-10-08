@@ -9,13 +9,13 @@ class EmptyStateWidget extends StatelessWidget {
   final String? retryText;
 
   const EmptyStateWidget({
-    Key? key,
+    super.key,
     required this.message,
     this.subtitle,
     this.icon,
     this.onRetry,
     this.retryText,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -72,10 +72,10 @@ class EmptyServicesWidget extends StatelessWidget {
   final String? message;
 
   const EmptyServicesWidget({
-    Key? key,
+    super.key,
     this.onExplore,
     this.message,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

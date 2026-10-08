@@ -29,30 +29,36 @@ class AuthService {
     final refresh = data['refresh']?.toString();
 
     if (access.isEmpty) throw Exception("Token d'accès manquant");
-    await api.setAuthToken(access);
+    await api.setTokens(access, refresh);
 
     return (access, refresh);
   }
 
   Future<void> logout() async {
-    // si ton backend supporte /auth/logout/ tu peux garder.
-    // sinon, on fait juste clear token côté app.
+    final refresh = await api.storage.read(key: AppConstants.refreshTokenKey);
     try {
-      final r = await api.client.post(
-        Uri.parse('${api.baseUrl}${'/auth/logout/'}'),
-        headers: await api.headers,
-      );
-      // On ne bloque pas si endpoint inexistant:
-      if (r.statusCode != 200 && r.statusCode != 204 && r.statusCode != 404) {
-        api.handleError(r);
+      // TokenBlacklistView attend explicitement le refresh token. La révocation
+      // reste best-effort : une déconnexion locale doit toujours purger la session.
+      if (refresh != null && refresh.isNotEmpty) {
+        final r = await api.client.post(
+          Uri.parse('${api.baseUrl}${AppConstants.authLogoutEndpoint}'),
+          headers: await api.headers,
+          body: jsonEncode({'refresh': refresh}),
+        );
+        if (r.statusCode != 200 && r.statusCode != 204 && r.statusCode != 205) {
+          api.handleError(r);
+        }
       }
-    } catch (_) {}
-    await api.setAuthToken(null);
+    } catch (_) {
+      // Hors ligne ou jeton déjà expiré : la purge locale reste requise.
+    } finally {
+      await api.clearTokens();
+    }
   }
 
   Future<User> getCurrentUser() async {
     final r = await api.client.get(
-      Uri.parse('${api.baseUrl}/users/me/'),
+      Uri.parse('${api.baseUrl}${AppConstants.usersMeEndpoint}'),
       headers: await api.headers,
     );
     if (r.statusCode != 200) api.handleError(r);

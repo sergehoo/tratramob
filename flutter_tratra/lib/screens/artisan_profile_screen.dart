@@ -13,10 +13,10 @@ import 'package:flutter_tratra/screens/service_detail_screen.dart';
 
 class ArtisanProfileScreen extends StatefulWidget {
   const ArtisanProfileScreen({
-    Key? key,
+    super.key,
     this.artisanId,
     this.artisan, // alias pratique
-  }) : super(key: key);
+  });
 
   /// Id de l’artisan. Peut être null/empty si on fournit directement [artisan].
   final String? artisanId;
@@ -38,7 +38,6 @@ class _ArtisanProfileScreenState extends State<ArtisanProfileScreen> {
   static const _accent = Color(0xFF00B14F);
 
   static const _phAvatar = 'https://via.placeholder.com/300x300?text=Artisan';
-  static const _phService = 'https://via.placeholder.com/600x400?text=Service';
 
   late final BaseApi _api;
 
@@ -136,7 +135,7 @@ class _ArtisanProfileScreenState extends State<ArtisanProfileScreen> {
 
     try {
       final uri = Uri.parse(
-        '${_api.baseUrl}${AppConstants.artisansEndpoint}/${_artisanId}/',
+        '${_api.baseUrl}${AppConstants.artisansEndpoint}/$_artisanId/',
       );
 
       final r = await _getPublic(uri);
@@ -325,7 +324,7 @@ class _ArtisanProfileScreenState extends State<ArtisanProfileScreen> {
                                   _ChipInfo(
                                     icon: Icons.badge_outlined,
                                     label:
-                                        '${a!.yearsExperience} an${(a!.yearsExperience) > 1 ? "s" : ""} exp.',
+                                        '${a!.yearsExperience} an${(a.yearsExperience) > 1 ? "s" : ""} exp.',
                                   ),
                                 if ((a?.responseTime ?? '').isNotEmpty)
                                   _ChipInfo(
@@ -463,11 +462,11 @@ class _ChipInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const _border = Color(0xFFE5E5E5);
+    const border = Color(0xFFE5E5E5);
     return Chip(
       avatar: Icon(icon, size: 16),
       label: Text(label),
-      side: const BorderSide(color: _border),
+      side: const BorderSide(color: border),
       backgroundColor: Colors.white,
     );
   }

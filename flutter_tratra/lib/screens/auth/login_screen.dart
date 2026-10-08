@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/services/api_service.dart';
 import 'package:flutter_tratra/services/storage_service.dart';
@@ -55,8 +56,13 @@ class _LoginScreenState extends State<LoginScreen> {
       await _storageService.saveAuthToken(token);
       await _storageService.saveUserData(user);
 
+      // Hydrate la session (rôle) et route selon le persona.
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, RouteNames.home);
+      await context.read<Session>().setUser(user);
+
+      if (!mounted) return;
+      final route = context.read<Session>().homeRoute();
+      Navigator.pushReplacementNamed(context, route);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

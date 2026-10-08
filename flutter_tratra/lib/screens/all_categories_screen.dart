@@ -11,7 +11,7 @@ import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/models/category.dart';
 
 class AllCategoriesScreen extends StatefulWidget {
-  const AllCategoriesScreen({Key? key}) : super(key: key);
+  const AllCategoriesScreen({super.key});
 
   @override
   State<AllCategoriesScreen> createState() => _AllCategoriesScreenState();
@@ -110,7 +110,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
 
       // Robustesse pagination (si extractPagination est null ou différent)
       dynamic nextVal;
-      if (pagination is Map && pagination['next'] != null) {
+      if (pagination['next'] != null) {
         nextVal = pagination['next'];
       } else if (decoded is Map && decoded['next'] != null) {
         nextVal = decoded['next'];

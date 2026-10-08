@@ -14,7 +14,7 @@ class TrackingScreen extends StatefulWidget {
 }
 
 class _TrackingScreenState extends State<TrackingScreen> {
-  int _currentStep = 2; // Exemple: étape 2 sur 4
+  final int _currentStep = 2; // Exemple: étape 2 sur 4
 
   @override
   Widget build(BuildContext context) {

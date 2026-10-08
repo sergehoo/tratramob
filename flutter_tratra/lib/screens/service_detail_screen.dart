@@ -8,12 +8,10 @@ import 'package:provider/provider.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/models/service.dart';
-import 'package:flutter_tratra/models/artisan.dart';
 import 'package:flutter_tratra/screens/artisan_profile_screen.dart';
 
 class ServiceDetailScreen extends StatefulWidget {
-  const ServiceDetailScreen({Key? key, required this.service})
-      : super(key: key);
+  const ServiceDetailScreen({super.key, required this.service});
 
   final Service service;
 

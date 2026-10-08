@@ -5,7 +5,7 @@ import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/models/review.dart';
 
 class ReviewService extends BaseApi {
-  ReviewService(BaseApi api, {http.Client? client}) : super(client: client);
+  ReviewService(BaseApi api, {super.client});
 
   Future<Review> create(Review review) async {
     final r = await client.post(

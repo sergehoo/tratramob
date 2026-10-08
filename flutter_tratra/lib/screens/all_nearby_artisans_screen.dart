@@ -11,7 +11,7 @@ import 'package:flutter_tratra/services/location_service.dart';
 import 'package:http/http.dart' as http;
 
 class AllNearbyArtisansScreen extends StatefulWidget {
-  const AllNearbyArtisansScreen({Key? key}) : super(key: key);
+  const AllNearbyArtisansScreen({super.key});
 
   @override
   State<AllNearbyArtisansScreen> createState() =>
@@ -37,7 +37,7 @@ class _AllNearbyArtisansScreenState extends State<AllNearbyArtisansScreen> {
   List<Service> _items = [];
   Position? _pos;
 
-  double _radiusKm = 25;
+  final double _radiusKm = 25;
 
   @override
   void initState() {
@@ -223,11 +223,11 @@ class _ArtisanRowCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const _border = Color(0xFFE5E5E5);
-    const _card = Color(0xFFFFFFFF);
-    const _textPrimary = Color(0xFF1E272E);
-    const _textSecondary = Color(0xFF636E72);
-    const _accent = Color(0xFF00B14F);
+    const border = Color(0xFFE5E5E5);
+    const card = Color(0xFFFFFFFF);
+    const textPrimary = Color(0xFF1E272E);
+    const textSecondary = Color(0xFF636E72);
+    const accent = Color(0xFF00B14F);
 
     return InkWell(
       onTap: onTap,
@@ -236,9 +236,9 @@ class _ArtisanRowCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: _card,
+          color: card,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _border),
+          border: Border.all(color: border),
         ),
         child: Row(
           children: [
@@ -269,7 +269,7 @@ class _ArtisanRowCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            color: _textPrimary,
+                            color: textPrimary,
                             fontWeight: FontWeight.w800,
                             fontSize: 14)),
                     const SizedBox(height: 4),
@@ -277,11 +277,11 @@ class _ArtisanRowCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            color: _textSecondary, fontSize: 12)),
+                            color: textSecondary, fontSize: 12)),
                     const SizedBox(height: 8),
                     Text(priceText,
                         style: const TextStyle(
-                            color: _accent,
+                            color: accent,
                             fontWeight: FontWeight.w800,
                             fontSize: 13)),
                   ]),

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/models/booking.dart';
-import 'package:flutter_tratra/models/service.dart';
 
 class BookingApi {
   final BaseApi api;
