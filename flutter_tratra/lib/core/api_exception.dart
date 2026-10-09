@@ -24,9 +24,16 @@ class ApiException implements Exception {
     if (status == 403) return ApiException(status, 'Accès refusé', body: body);
     if (status == 404) return ApiException(status, 'Ressource non trouvée', body: body);
     if (status == 429) {
-      return ApiException(status, 'Trop de tentatives. Patientez quelques instants puis réessayez.', body: body);
+      // Message précis du serveur (délai avant un nouveau code, essais épuisés…) s'il existe.
+      return ApiException(
+          status, _messageFrom(body) ?? 'Trop de tentatives. Patientez quelques instants puis réessayez.',
+          body: body);
     }
-    if (status >= 500) return ApiException(status, 'Erreur serveur $status', body: body);
+    if (status >= 500) {
+      // 502/503 explicites (ex. SMS indisponible) : message du serveur ; sinon message générique.
+      return ApiException(status, (status == 502 || status == 503 ? _messageFrom(body) : null) ?? 'Erreur serveur $status',
+          body: body);
+    }
     return ApiException(status, _messageFrom(body) ?? 'La requête a été refusée. Vérifiez les informations saisies.',
         body: body);
   }

@@ -44,6 +44,7 @@ class ApiService {
 
   // ============ UTILISATEURS ============
   Future<User> registerUser(User user, String password) async {
+    authToken = null; // point d'accès public : jamais le jeton d'une session précédente
     final response = await client.post(
       Uri.parse('$baseUrl${AppConstants.usersEndpoint}/'),
       headers: _headers,
@@ -62,6 +63,7 @@ class ApiService {
   }
 
   Future<User> loginWithUsername(String username, String password) async {
+    authToken = null; // un jeton périmé/d'un autre compte ferait refuser la connexion (401)
     final resp = await client.post(
       Uri.parse('$baseUrl/auth/login/'),
       headers: _headers,
