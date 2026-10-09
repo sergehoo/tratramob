@@ -2,7 +2,9 @@
 // lib/screens/profile_screen.dart ✅ (Provider + token OK)
 // ===============================
 import 'package:flutter/material.dart';
+import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/core/session.dart';
+import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/user.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/services/auth_service.dart';
@@ -22,6 +24,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   User? _user;
   bool _isLoading = true;
+  bool _isLoggingOut = false;
 
   @override
   void initState() {
@@ -35,10 +38,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       // 1) rapide: cache local si dispo
       final cached = await _storage.getUserData();
+      if (!mounted) return;
       if (cached != null) setState(() => _user = cached);
 
       // 2) source of truth: API
       final me = await _auth.getCurrentUser();
+      if (!mounted) return;
       setState(() => _user = me);
       await _storage.saveUserData(me);
     } catch (e) {
@@ -48,8 +53,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  /// Relance le chargement en réaffichant le squelette (retour visuel sur « Réessayer »).
+  void _retry() {
+    setState(() => _isLoading = true);
+    _loadUserData();
+  }
+
   Future<void> _logout() async {
-    await context.read<Session>().logout();
+    if (_isLoggingOut) return;
+    setState(() => _isLoggingOut = true);
+    try {
+      await context.read<Session>().logout();
+    } catch (_) {
+      if (mounted) setState(() => _isLoggingOut = false);
+      rethrow;
+    }
     if (!mounted) return;
     Navigator.pushNamedAndRemoveUntil(
       context,
@@ -60,63 +78,328 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading)
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    final Widget body;
+    if (_isLoading) {
+      body = const _ProfileSkeleton(key: ValueKey('profile-loading'));
+    } else if (_user != null) {
+      body = _buildProfile(_user!);
+    } else {
+      body = _buildError();
+    }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Profil')),
-      body: _user != null ? _buildProfile() : _buildError(),
+      backgroundColor: TtColors.canvas,
+      appBar: const TratraAppBar(title: 'Profil'),
+      body: AnimatedSwitcher(
+        duration: (MediaQuery.maybeDisableAnimationsOf(context) ?? false)
+            ? Duration.zero
+            : TtMotion.base,
+        switchInCurve: TtMotion.emphasized,
+        child: body,
+      ),
     );
   }
 
-  Widget _buildProfile() {
-    final u = _user!;
+  Widget _buildProfile(User u) {
+    final phone = u.phoneNumber;
+    final username = u.username;
+    final joined = u.dateJoined;
+
     return ListView(
-      padding: const EdgeInsets.all(16),
+      key: const ValueKey('profile-content'),
+      padding: const EdgeInsets.fromLTRB(
+        TtLayout.gutterMobile,
+        TtSpace.s4,
+        TtLayout.gutterMobile,
+        TtSpace.s8,
+      ),
       children: [
-        CircleAvatar(
-          radius: 50,
-          backgroundImage:
-              (u.profileImage != null && u.profileImage!.isNotEmpty)
-                  ? NetworkImage(u.profileImage!)
-                  : null,
-          child: (u.profileImage == null || u.profileImage!.isEmpty)
-              ? const Icon(Icons.person, size: 50)
-              : null,
+        TratraCard(
+          variant: TratraCardVariant.night,
+          padding: const EdgeInsets.symmetric(
+            horizontal: TtSpace.s5,
+            vertical: TtSpace.s6,
+          ),
+          child: Column(
+            children: [
+              TratraAvatar(
+                name: u.fullName,
+                photoUrl: u.profileImage,
+                size: 96,
+              ),
+              const SizedBox(height: TtSpace.s4),
+              Semantics(
+                header: true,
+                child: Text(
+                  u.fullName,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.h2, color: Colors.white),
+                ),
+              ),
+              if (u.email.isNotEmpty) ...[
+                const SizedBox(height: TtSpace.s1),
+                Text(
+                  u.email,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      TratraTheme.style(TtType.bodySm, color: Colors.white70),
+                ),
+              ],
+              const SizedBox(height: TtSpace.s4),
+              TratraBadge(
+                _roleLabel(u.userType),
+                tone: TratraTone.accent,
+                dot: true,
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 16),
-        Text(u.fullName,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleLarge),
-        Text(u.email, textAlign: TextAlign.center),
-        const SizedBox(height: 24),
-        ListTile(
-          leading: const Icon(Icons.phone),
-          title: const Text('Téléphone'),
-          subtitle: Text(u.phoneNumber ?? 'Non renseigné'),
+        const SizedBox(height: TtSpace.s4),
+        TratraCard(
+          padding: const EdgeInsets.symmetric(
+            horizontal: TtSpace.s5,
+            vertical: TtSpace.s2,
+          ),
+          child: Column(
+            children: [
+              _InfoRow(
+                icon: Icons.phone_outlined,
+                label: 'Téléphone',
+                value: phone ?? 'Non renseigné',
+                muted: phone == null,
+              ),
+              if (username != null) ...[
+                const Divider(),
+                _InfoRow(
+                  icon: Icons.alternate_email_outlined,
+                  label: 'Nom d’utilisateur',
+                  value: username,
+                ),
+              ],
+              const Divider(),
+              _InfoRow(
+                icon: Icons.badge_outlined,
+                label: 'Type de compte',
+                value: _roleLabel(u.userType),
+              ),
+              if (joined != null) ...[
+                const Divider(),
+                _InfoRow(
+                  icon: Icons.event_outlined,
+                  label: 'Membre depuis',
+                  value: _memberSince(joined),
+                ),
+              ],
+            ],
+          ),
         ),
-        ListTile(
-          leading: const Icon(Icons.person),
-          title: const Text("Type d'utilisateur"),
-          subtitle: Text(u.userType),
+        const SizedBox(height: TtSpace.s6),
+        TratraButton(
+          label: 'Déconnexion',
+          variant: TratraButtonVariant.outline,
+          size: TratraButtonSize.lg,
+          block: true,
+          loading: _isLoggingOut,
+          leading: const Icon(Icons.logout_rounded),
+          onPressed: _logout,
         ),
-        const SizedBox(height: 24),
-        ElevatedButton(onPressed: _logout, child: const Text('Déconnexion')),
       ],
     );
   }
 
   Widget _buildError() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text('Erreur de chargement du profil'),
-          const SizedBox(height: 12),
-          ElevatedButton(
-              onPressed: _loadUserData, child: const Text('Réessayer')),
-        ],
+    return TratraEmptyState(
+      key: const ValueKey('profile-error'),
+      icon: Icons.cloud_off_outlined,
+      title: 'Erreur de chargement du profil',
+      description: 'Vérifiez votre connexion puis réessayez.',
+      actions: [
+        TratraButton(
+          label: 'Réessayer',
+          leading: const Icon(Icons.refresh_rounded),
+          onPressed: _retry,
+        ),
+      ],
+    );
+  }
+
+  /// Libellé français du type de compte (affichage uniquement) ; valeur brute si inconnue.
+  static String _roleLabel(String userType) => switch (userType) {
+        AppConstants.roleClient => 'Client',
+        AppConstants.roleEmployer => 'Employeur',
+        AppConstants.roleHandyman => 'Artisan',
+        AppConstants.roleCompany => 'Entreprise',
+        AppConstants.roleAdmin => 'Administrateur',
+        _ => userType,
+      };
+
+  static const List<String> _months = [
+    'janvier',
+    'février',
+    'mars',
+    'avril',
+    'mai',
+    'juin',
+    'juillet',
+    'août',
+    'septembre',
+    'octobre',
+    'novembre',
+    'décembre',
+  ];
+
+  static String _memberSince(DateTime date) {
+    final d = date.toLocal();
+    return '${_months[d.month - 1]} ${d.year}';
+  }
+}
+
+/// Ligne d'information en lecture seule (aucune action : ce n'est pas un bouton).
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.muted = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    return MergeSemantics(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: TtSpace.s3),
+        child: Row(
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: TtColors.primarySoft,
+                borderRadius: TtRadius.controlAll,
+              ),
+              child: SizedBox(
+                width: TtLayout.touchTarget,
+                height: TtLayout.touchTarget,
+                child: Icon(icon, size: 20, color: TtColors.primaryDark),
+              ),
+            ),
+            const SizedBox(width: TtSpace.s4),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        TratraTheme.style(TtType.caption, color: TtColors.ash),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TratraTheme.style(
+                      TtType.title,
+                      color: muted ? TtColors.ash : TtColors.ink,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+/// Squelette du profil (carte d'identité + lignes d'infos), annoncé une seule fois.
+class _ProfileSkeleton extends StatelessWidget {
+  const _ProfileSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Chargement du profil',
+      liveRegion: true,
+      child: ExcludeSemantics(
+        child: TratraShimmer(
+          child: SingleChildScrollView(
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              TtLayout.gutterMobile,
+              TtSpace.s4,
+              TtLayout.gutterMobile,
+              TtSpace.s8,
+            ),
+            child: Column(
+              children: [
+                _skeletonCard(
+                  Column(
+                    children: const [
+                      TratraSkeletonBox(height: 96, circle: true),
+                      SizedBox(height: TtSpace.s4),
+                      TratraSkeletonBox(width: 180, height: 22),
+                      SizedBox(height: TtSpace.s3),
+                      TratraSkeletonBox(width: 140, height: 14),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: TtSpace.s4),
+                _skeletonCard(
+                  Column(
+                    children: [
+                      for (var i = 0; i < 3; i++) ...[
+                        if (i > 0) const SizedBox(height: TtSpace.s4),
+                        const Row(
+                          children: [
+                            TratraSkeletonBox(
+                              width: TtLayout.touchTarget,
+                              height: TtLayout.touchTarget,
+                            ),
+                            SizedBox(width: TtSpace.s4),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  TratraSkeletonBox(width: 90, height: 12),
+                                  SizedBox(height: TtSpace.s2),
+                                  TratraSkeletonBox(width: 150, height: 16),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _skeletonCard(Widget child) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(TtSpace.s5),
+        decoration: BoxDecoration(
+          color: TtColors.surface,
+          borderRadius: TtRadius.cardAll,
+          border: Border.all(color: TtColors.lineSoft),
+          boxShadow: TtShadows.soft,
+        ),
+        child: child,
+      );
 }

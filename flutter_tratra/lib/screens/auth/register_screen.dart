@@ -1,6 +1,8 @@
 // Users/ogahserge/Documents/handy_tratra/flutter_tratra/lib/screens/auth/register_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/routes.dart';
+import 'package:flutter_tratra/screens/auth/widgets/auth_frame.dart';
 import 'package:flutter_tratra/services/api_service.dart';
 import 'package:flutter_tratra/services/storage_service.dart';
 import 'package:provider/provider.dart';
@@ -26,9 +28,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   late final StorageService _storageService;
 
   bool _isLoading = false;
-  bool _obscurePassword = true;
-  bool _obscureConfirmPassword = true;
   bool _acceptTerms = false;
+  bool _showTermsWarning = false;
+  String? _error;
 
   final FocusNode _lastNameFocusNode = FocusNode();
   final FocusNode _emailFocusNode = FocusNode();
@@ -63,20 +65,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _register() async {
+    if (_isLoading) return;
     if (!_formKey.currentState!.validate()) return;
     if (!_acceptTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              const Text('Veuillez accepter les conditions d\'utilisation'),
-          backgroundColor: Colors.orange.shade700,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      setState(() => _showTermsWarning = true);
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
 
     try {
       final user = await _apiService.register(
@@ -99,13 +98,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       Navigator.pushReplacementNamed(context, RouteNames.home);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Erreur d\'inscription : $e'),
-          backgroundColor: Colors.red.shade700,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      setState(() => _error = authErrorMessage(e));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -142,785 +135,169 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: isDark
-                ? [
-                    const Color(0xFF1A4B2C),
-                    const Color(0xFF0D2818),
-                    Colors.black,
-                  ]
-                : [
-                    const Color(0xFF00B14F),
-                    const Color(0xFF008E40),
-                    const Color(0xFF006B30),
-                  ],
+    return AuthFrame(
+      eyebrow: 'Nouveau compte',
+      title: 'Créer un compte',
+      subtitle:
+          'Rejoignez Tratra en quelques étapes. Tous les champs sont obligatoires.',
+      onBack: () => Navigator.pop(context),
+      footer: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            'Déjà un compte ?',
+            style: TratraTheme.style(TtType.body, color: TtColors.inkSoft),
           ),
-        ),
-        child: Stack(
-          children: [
-            // Background pattern
-            Positioned(
-              top: -50,
-              right: -50,
-              child: Opacity(
-                opacity: 0.1,
-                child: Image.asset(
-                  'assets/images/tools-pattern.png',
-                  width: 200,
-                  height: 200,
-                  color: Colors.white,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.handyman,
-                    size: 100,
-                    color: Colors.white30,
-                  ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Se connecter'),
+          ),
+        ],
+      ),
+      child: AutofillGroup(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TratraInput(
+                label: 'Prénom',
+                controller: _firstNameController,
+                leadingIcon: Icons.person_outline,
+                autofillHints: const [AutofillHints.givenName],
+                textCapitalization: TextCapitalization.words,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Prénom requis' : null,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _lastNameFocusNode.requestFocus(),
+              ),
+              const SizedBox(height: TtSpace.s4),
+              TratraInput(
+                label: 'Nom',
+                controller: _lastNameController,
+                focusNode: _lastNameFocusNode,
+                leadingIcon: Icons.person_outline,
+                autofillHints: const [AutofillHints.familyName],
+                textCapitalization: TextCapitalization.words,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Nom requis' : null,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _emailFocusNode.requestFocus(),
+              ),
+              const SizedBox(height: TtSpace.s4),
+              TratraInput(
+                label: 'Adresse email',
+                controller: _emailController,
+                focusNode: _emailFocusNode,
+                keyboardType: TextInputType.emailAddress,
+                leadingIcon: Icons.email_outlined,
+                autofillHints: const [AutofillHints.email],
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return 'Email requis';
+                  }
+                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                      .hasMatch(v.trim())) {
+                    return "Format d'email invalide";
+                  }
+                  return null;
+                },
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _usernameFocusNode.requestFocus(),
+              ),
+              const SizedBox(height: TtSpace.s4),
+              TratraInput(
+                label: "Nom d'utilisateur",
+                controller: _usernameController,
+                focusNode: _usernameFocusNode,
+                leadingIcon: Icons.alternate_email_outlined,
+                autofillHints: const [AutofillHints.newUsername],
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? "Nom d'utilisateur requis"
+                    : null,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _phoneFocusNode.requestFocus(),
+              ),
+              const SizedBox(height: TtSpace.s4),
+              TratraInput(
+                label: 'Téléphone',
+                controller: _phoneController,
+                focusNode: _phoneFocusNode,
+                keyboardType: TextInputType.phone,
+                leadingIcon: Icons.phone_outlined,
+                autofillHints: const [AutofillHints.telephoneNumber],
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Numéro de téléphone requis'
+                    : null,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _passwordFocusNode.requestFocus(),
+              ),
+              const SizedBox(height: TtSpace.s4),
+              TratraInput(
+                label: 'Mot de passe',
+                controller: _passwordController,
+                focusNode: _passwordFocusNode,
+                leadingIcon: Icons.lock_outline,
+                obscureText: true,
+                helper:
+                    '8 caractères minimum, avec une majuscule, une minuscule et un chiffre.',
+                autofillHints: const [AutofillHints.newPassword],
+                validator: _validatePassword,
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _confirmPasswordFocusNode.requestFocus(),
+              ),
+              const SizedBox(height: TtSpace.s4),
+              TratraInput(
+                label: 'Confirmer le mot de passe',
+                controller: _confirmPasswordController,
+                focusNode: _confirmPasswordFocusNode,
+                leadingIcon: Icons.lock_outline,
+                obscureText: true,
+                autofillHints: const [AutofillHints.newPassword],
+                validator: _validateConfirmPassword,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _register(),
+              ),
+              const SizedBox(height: TtSpace.s3),
+              CheckboxListTile(
+                value: _acceptTerms,
+                onChanged: (value) => setState(() {
+                  _acceptTerms = value ?? false;
+                  if (_acceptTerms) _showTermsWarning = false;
+                }),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                shape:
+                    RoundedRectangleBorder(borderRadius: TtRadius.controlAll),
+                title: Text(
+                  'J’accepte les conditions d’utilisation et la politique de confidentialité.',
+                  style:
+                      TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft),
                 ),
               ),
-            ),
-
-            Positioned(
-              bottom: -30,
-              left: -30,
-              child: Opacity(
-                opacity: 0.1,
-                child: Image.asset(
-                  'assets/images/gear-pattern.png',
-                  width: 150,
-                  height: 150,
-                  color: Colors.white,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.settings,
-                    size: 80,
-                    color: Colors.white30,
-                  ),
-                ),
+              AuthNotice(
+                tone: TratraAlertTone.warning,
+                message: _showTermsWarning
+                    ? 'Veuillez accepter les conditions d’utilisation'
+                    : null,
               ),
-            ),
-
-            SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 20),
-
-                    // Back button and Logo
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                              color: Colors.white),
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.2),
-                          ),
-                        ),
-                        const Spacer(),
-                        Hero(
-                          tag: 'app-logo',
-                          child: Container(
-                            width: 60,
-                            height: 60,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(15),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Center(
-                              child: Image.asset(
-                                'assets/images/tratra_logo_final.webp',
-                                width: 50,
-                                height: 50,
-                                errorBuilder: (_, __, ___) => const Icon(
-                                  Icons.handyman,
-                                  size: 25,
-                                  color: Color(0xFF00B14F),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        const SizedBox(width: 48), // For balance
-                      ],
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    Text(
-                      'TRATRA',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        letterSpacing: 2,
-                        shadows: [
-                          Shadow(
-                            blurRadius: 10,
-                            color: Colors.black.withOpacity(0.3),
-                            offset: const Offset(2, 2),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    Text(
-                      'Rejoignez la communauté Tratra',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.9),
-                        fontWeight: FontWeight.w300,
-                      ),
-                    ),
-
-                    const SizedBox(height: 30),
-
-                    // Register Card
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.grey.shade900.withOpacity(0.9)
-                            : Colors.white.withOpacity(0.95),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            'Créer un compte',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
-                              color: isDark
-                                  ? Colors.white
-                                  : const Color(0xFF00B14F),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Rejoignez-nous en quelques étapes',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: isDark
-                                  ? Colors.grey.shade400
-                                  : Colors.grey.shade600,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          Form(
-                            key: _formKey,
-                            child: Column(
-                              children: [
-                                // First Name Field
-                                TextFormField(
-                                  controller: _firstNameController,
-                                  decoration: InputDecoration(
-                                    labelText: "Prénom",
-                                    labelStyle: TextStyle(
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : Colors.grey.shade600,
-                                    ),
-                                    prefixIcon: Icon(
-                                      Icons.person_outline,
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : const Color(0xFF00B14F),
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF00B14F),
-                                        width: 2,
-                                      ),
-                                    ),
-                                    filled: true,
-                                    fillColor: isDark
-                                        ? Colors.grey.shade800
-                                        : Colors.grey.shade50,
-                                  ),
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black,
-                                  ),
-                                  validator: (v) =>
-                                      (v == null || v.trim().isEmpty)
-                                          ? "Prénom requis"
-                                          : null,
-                                  textInputAction: TextInputAction.next,
-                                  onFieldSubmitted: (_) =>
-                                      _lastNameFocusNode.requestFocus(),
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                // Last Name Field
-                                TextFormField(
-                                  controller: _lastNameController,
-                                  focusNode: _lastNameFocusNode,
-                                  decoration: InputDecoration(
-                                    labelText: "Nom",
-                                    labelStyle: TextStyle(
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : Colors.grey.shade600,
-                                    ),
-                                    prefixIcon: Icon(
-                                      Icons.person_outline,
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : const Color(0xFF00B14F),
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF00B14F),
-                                        width: 2,
-                                      ),
-                                    ),
-                                    filled: true,
-                                    fillColor: isDark
-                                        ? Colors.grey.shade800
-                                        : Colors.grey.shade50,
-                                  ),
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black,
-                                  ),
-                                  validator: (v) =>
-                                      (v == null || v.trim().isEmpty)
-                                          ? "Nom requis"
-                                          : null,
-                                  textInputAction: TextInputAction.next,
-                                  onFieldSubmitted: (_) =>
-                                      _emailFocusNode.requestFocus(),
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                // Email Field
-                                TextFormField(
-                                  controller: _emailController,
-                                  focusNode: _emailFocusNode,
-                                  keyboardType: TextInputType.emailAddress,
-                                  decoration: InputDecoration(
-                                    labelText: "Adresse email",
-                                    labelStyle: TextStyle(
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : Colors.grey.shade600,
-                                    ),
-                                    prefixIcon: Icon(
-                                      Icons.email_outlined,
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : const Color(0xFF00B14F),
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF00B14F),
-                                        width: 2,
-                                      ),
-                                    ),
-                                    filled: true,
-                                    fillColor: isDark
-                                        ? Colors.grey.shade800
-                                        : Colors.grey.shade50,
-                                  ),
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black,
-                                  ),
-                                  validator: (v) {
-                                    if (v == null || v.trim().isEmpty) {
-                                      return "Email requis";
-                                    }
-                                    if (!RegExp(
-                                            r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                                        .hasMatch(v.trim())) {
-                                      return "Format d'email invalide";
-                                    }
-                                    return null;
-                                  },
-                                  textInputAction: TextInputAction.next,
-                                  onFieldSubmitted: (_) =>
-                                      _usernameFocusNode.requestFocus(),
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                // Username Field
-                                TextFormField(
-                                  controller: _usernameController,
-                                  focusNode: _usernameFocusNode,
-                                  decoration: InputDecoration(
-                                    labelText: "Nom d'utilisateur",
-                                    labelStyle: TextStyle(
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : Colors.grey.shade600,
-                                    ),
-                                    prefixIcon: Icon(
-                                      Icons.alternate_email_outlined,
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : const Color(0xFF00B14F),
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF00B14F),
-                                        width: 2,
-                                      ),
-                                    ),
-                                    filled: true,
-                                    fillColor: isDark
-                                        ? Colors.grey.shade800
-                                        : Colors.grey.shade50,
-                                  ),
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black,
-                                  ),
-                                  validator: (v) =>
-                                      (v == null || v.trim().isEmpty)
-                                          ? "Nom d'utilisateur requis"
-                                          : null,
-                                  textInputAction: TextInputAction.next,
-                                  onFieldSubmitted: (_) =>
-                                      _phoneFocusNode.requestFocus(),
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                // Phone Field
-                                TextFormField(
-                                  controller: _phoneController,
-                                  focusNode: _phoneFocusNode,
-                                  keyboardType: TextInputType.phone,
-                                  decoration: InputDecoration(
-                                    labelText: "Téléphone",
-                                    labelStyle: TextStyle(
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : Colors.grey.shade600,
-                                    ),
-                                    prefixIcon: Icon(
-                                      Icons.phone_outlined,
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : const Color(0xFF00B14F),
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF00B14F),
-                                        width: 2,
-                                      ),
-                                    ),
-                                    filled: true,
-                                    fillColor: isDark
-                                        ? Colors.grey.shade800
-                                        : Colors.grey.shade50,
-                                  ),
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black,
-                                  ),
-                                  validator: (v) =>
-                                      (v == null || v.trim().isEmpty)
-                                          ? "Numéro de téléphone requis"
-                                          : null,
-                                  textInputAction: TextInputAction.next,
-                                  onFieldSubmitted: (_) =>
-                                      _passwordFocusNode.requestFocus(),
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                // Password Field
-                                TextFormField(
-                                  controller: _passwordController,
-                                  focusNode: _passwordFocusNode,
-                                  decoration: InputDecoration(
-                                    labelText: 'Mot de passe',
-                                    labelStyle: TextStyle(
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : Colors.grey.shade600,
-                                    ),
-                                    prefixIcon: Icon(
-                                      Icons.lock_outline,
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : const Color(0xFF00B14F),
-                                    ),
-                                    suffixIcon: IconButton(
-                                      icon: Icon(
-                                        _obscurePassword
-                                            ? Icons.visibility_outlined
-                                            : Icons.visibility_off_outlined,
-                                        color: isDark
-                                            ? Colors.grey.shade400
-                                            : Colors.grey.shade600,
-                                      ),
-                                      onPressed: () => setState(() =>
-                                          _obscurePassword = !_obscurePassword),
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF00B14F),
-                                        width: 2,
-                                      ),
-                                    ),
-                                    filled: true,
-                                    fillColor: isDark
-                                        ? Colors.grey.shade800
-                                        : Colors.grey.shade50,
-                                  ),
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black,
-                                  ),
-                                  obscureText: _obscurePassword,
-                                  validator: _validatePassword,
-                                  textInputAction: TextInputAction.next,
-                                  onFieldSubmitted: (_) =>
-                                      _confirmPasswordFocusNode.requestFocus(),
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                // Confirm Password Field
-                                TextFormField(
-                                  controller: _confirmPasswordController,
-                                  focusNode: _confirmPasswordFocusNode,
-                                  decoration: InputDecoration(
-                                    labelText: 'Confirmer le mot de passe',
-                                    labelStyle: TextStyle(
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : Colors.grey.shade600,
-                                    ),
-                                    prefixIcon: Icon(
-                                      Icons.lock_outline,
-                                      color: isDark
-                                          ? Colors.grey.shade400
-                                          : const Color(0xFF00B14F),
-                                    ),
-                                    suffixIcon: IconButton(
-                                      icon: Icon(
-                                        _obscureConfirmPassword
-                                            ? Icons.visibility_outlined
-                                            : Icons.visibility_off_outlined,
-                                        color: isDark
-                                            ? Colors.grey.shade400
-                                            : Colors.grey.shade600,
-                                      ),
-                                      onPressed: () => setState(() =>
-                                          _obscureConfirmPassword =
-                                              !_obscureConfirmPassword),
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide(
-                                        color: isDark
-                                            ? Colors.grey.shade600
-                                            : Colors.grey.shade300,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF00B14F),
-                                        width: 2,
-                                      ),
-                                    ),
-                                    filled: true,
-                                    fillColor: isDark
-                                        ? Colors.grey.shade800
-                                        : Colors.grey.shade50,
-                                  ),
-                                  style: TextStyle(
-                                    color: isDark ? Colors.white : Colors.black,
-                                  ),
-                                  obscureText: _obscureConfirmPassword,
-                                  validator: _validateConfirmPassword,
-                                  onFieldSubmitted: (_) => _register(),
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                // Terms and Conditions
-                                Row(
-                                  children: [
-                                    Checkbox(
-                                      value: _acceptTerms,
-                                      onChanged: (value) => setState(() {
-                                        _acceptTerms = value ?? false;
-                                      }),
-                                      activeColor: const Color(0xFF00B14F),
-                                    ),
-                                    Expanded(
-                                      child: Wrap(
-                                        children: [
-                                          Text(
-                                            'J\'accepte les ',
-                                            style: TextStyle(
-                                              color: isDark
-                                                  ? Colors.grey.shade400
-                                                  : Colors.grey.shade600,
-                                            ),
-                                          ),
-                                          GestureDetector(
-                                            onTap: () {
-                                              // Naviguer vers les CGU
-                                            },
-                                            child: Text(
-                                              'conditions d\'utilisation',
-                                              style: const TextStyle(
-                                                color: Color(0xFF00B14F),
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),
-                                          Text(
-                                            ' et la ',
-                                            style: TextStyle(
-                                              color: isDark
-                                                  ? Colors.grey.shade400
-                                                  : Colors.grey.shade600,
-                                            ),
-                                          ),
-                                          GestureDetector(
-                                            onTap: () {
-                                              // Naviguer vers la politique de confidentialité
-                                            },
-                                            child: Text(
-                                              'politique de confidentialité',
-                                              style: const TextStyle(
-                                                color: Color(0xFF00B14F),
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-
-                                const SizedBox(height: 24),
-
-                                // Register Button
-                                SizedBox(
-                                  width: double.infinity,
-                                  height: 54,
-                                  child: ElevatedButton(
-                                    onPressed: _isLoading ? null : _register,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF00B14F),
-                                      foregroundColor: Colors.white,
-                                      elevation: 5,
-                                      shadowColor: const Color(0xFF00B14F)
-                                          .withOpacity(0.4),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                          vertical: 16),
-                                    ),
-                                    child: _isLoading
-                                        ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              valueColor:
-                                                  AlwaysStoppedAnimation(
-                                                      Colors.white),
-                                            ),
-                                          )
-                                        : const Text(
-                                            'Créer mon compte',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                  ),
-                                ),
-
-                                const SizedBox(height: 24),
-
-                                // Login Link
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Déjà un compte ? ',
-                                      style: TextStyle(
-                                        color: isDark
-                                            ? Colors.grey.shade400
-                                            : Colors.grey.shade600,
-                                      ),
-                                    ),
-                                    GestureDetector(
-                                      onTap: () => Navigator.pop(context),
-                                      child: const Text(
-                                        'Se connecter',
-                                        style: TextStyle(
-                                          color: Color(0xFF00B14F),
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 40),
-
-                    // Footer
-                    Text(
-                      '© 2024 Tratra Pro. Tous droits réservés.',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
+              AuthNotice(
+                title: 'Erreur d’inscription',
+                message: _error,
+                onDismiss: () => setState(() => _error = null),
               ),
-            ),
-          ],
+              const SizedBox(height: TtSpace.s6),
+              TratraButton(
+                label: _isLoading ? 'Création du compte…' : 'Créer mon compte',
+                size: TratraButtonSize.lg,
+                block: true,
+                loading: _isLoading,
+                trailing: const Icon(Icons.arrow_forward_rounded),
+                onPressed: _register,
+              ),
+            ],
+          ),
         ),
       ),
     );
