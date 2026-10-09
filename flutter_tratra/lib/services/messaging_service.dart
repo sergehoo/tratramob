@@ -1,6 +1,5 @@
 // lib/services/messaging_service.dart
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/models/conversation.dart';
 import 'package:flutter_tratra/models/message.dart';

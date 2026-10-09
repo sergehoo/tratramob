@@ -1,18 +1,16 @@
 // lib/screens/all_urgent_services_screen.dart
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
+import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/service.dart';
 import 'package:flutter_tratra/routes.dart';
-import 'package:flutter_tratra/widgets/error_widget.dart';
-import 'package:flutter_tratra/widgets/loading_widget.dart';
-import 'package:flutter_tratra/widgets/empty_state_widget.dart';
+import 'package:flutter_tratra/screens/service_list/service_list_kit.dart';
 
 class AllUrgentServicesScreen extends StatefulWidget {
   const AllUrgentServicesScreen({super.key});
@@ -23,11 +21,6 @@ class AllUrgentServicesScreen extends StatefulWidget {
 }
 
 class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
-  // Design constants
-  static const _colors = _UrgentServicesColors();
-  static const _dimens = _UrgentServicesDimens();
-  static const _strings = _UrgentServicesStrings();
-
   late final BaseApi _api;
 
   // États
@@ -146,7 +139,6 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
       final response = await _getPublic(uri);
       if (response.statusCode != 200) {
         _api.handleError(response);
-        return;
       }
 
       final decoded = _api.decodeBody(response);
@@ -258,16 +250,17 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
     return (data['category_name'] ?? '').toString();
   }
 
-  /// TLS-safe : on n'utilise que `image_url` ; si absent/invalide → placeholder.
+  /// TLS-safe : on n'utilise que `image_url` ; si absent/invalide → chaîne vide
+  /// (l'interface affiche une vignette de repli de la marque, jamais d'image factice).
   String _extractImageUrlTLSafe(Map<String, dynamic> data) {
     final raw = (data['image_url'] ?? '').toString().trim();
-    if (raw.isEmpty) return _strings.placeholderImageUrl;
+    if (raw.isEmpty) return '';
 
     final uri = Uri.tryParse(raw);
     if (uri == null ||
         !uri.hasScheme ||
         !(uri.isScheme('http') || uri.isScheme('https'))) {
-      return _strings.placeholderImageUrl;
+      return '';
     }
     return raw;
   }
@@ -286,7 +279,7 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Le prix minimum doit être inférieur au prix maximum'),
-          backgroundColor: Colors.red,
+          backgroundColor: TtColors.danger,
         ),
       );
     }
@@ -306,31 +299,22 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
   }
 
   void _showFilterDialog() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _FilterBottomSheet(
-        minPriceController: _minPriceController,
-        maxPriceController: _maxPriceController,
-        selectedCategory: _selectedCategory,
-        categories: _categories,
-        ordering: _ordering,
-        onApply: () {
-          _applyPriceFilter();
-          Navigator.pop(context);
-        },
-        onClear: () {
-          _clearFilters();
-          Navigator.pop(context);
-        },
-        onCategoryChanged: (category) {
-          setState(() => _selectedCategory = category);
-        },
-        onOrderingChanged: (ordering) {
-          setState(() => _ordering = ordering);
-        },
-      ),
+    showServiceFilterSheet(
+      context,
+      minPriceController: _minPriceController,
+      maxPriceController: _maxPriceController,
+      selectedCategory: _selectedCategory,
+      categories: _categories,
+      ordering: _ordering,
+      onApply: (category, ordering) {
+        // Tri et catégorie choisis dans la feuille, puis prix + rechargement (inchangé).
+        setState(() {
+          _selectedCategory = category;
+          _ordering = ordering;
+        });
+        _applyPriceFilter();
+      },
+      onClear: _clearFilters,
     );
   }
 
@@ -349,23 +333,33 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _UrgentServicesColors.background,
+      backgroundColor: TtColors.canvas,
       appBar: _buildAppBar(),
       body: _buildBody(),
-      floatingActionButton: _buildFilterFAB(),
     );
   }
 
-  AppBar _buildAppBar() {
-    return AppBar(
-      title: const Text('Services urgents'),
-      backgroundColor: _UrgentServicesColors.card,
-      elevation: 1,
+  PreferredSizeWidget _buildAppBar() {
+    return TratraAppBar(
+      titleWidget: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _UrgentMark(),
+          const SizedBox(width: TtSpace.s3),
+          Flexible(
+            child: Text(
+              'Services urgents',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TratraTheme.style(TtType.h3),
+            ),
+          ),
+        ],
+      ),
       actions: [
         if (_hasActiveFilters)
           IconButton(
-            icon: const Icon(Icons.filter_alt),
-            color: _UrgentServicesColors.accent,
+            icon: const Icon(Icons.filter_alt_off_outlined),
             tooltip: 'Supprimer les filtres',
             onPressed: _clearFilters,
           ),
@@ -381,23 +375,26 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
         _ordering != '-created_at';
   }
 
-  Widget _buildFilterFAB() {
-    return FloatingActionButton(
-      onPressed: _showFilterDialog,
-      backgroundColor: _UrgentServicesColors.accent,
-      foregroundColor: Colors.white,
-      child: const Icon(Icons.filter_list),
-    );
-  }
-
   Widget _buildBody() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildSearchBar(),
-        _buildActiveFiltersChips(),
+        ServiceListHeader(
+          controller: _searchController,
+          searchHint: 'Rechercher un service urgent…',
+          onSearchChanged: _onSearchChanged,
+          onSearchClear: () {
+            _searchController.clear();
+            _loadInitialData();
+          },
+          onOpenFilters: _showFilterDialog,
+          activeFilterCount: _activeFilterCount,
+          activeFilters: _activeFilters(),
+        ),
         Expanded(
           child: RefreshIndicator(
-            color: _UrgentServicesColors.accent,
+            color: TtColors.primary,
+            backgroundColor: TtColors.surface,
             onRefresh: _onRefresh,
             child: _buildContent(),
           ),
@@ -406,130 +403,124 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
     );
   }
 
-  Widget _buildSearchBar() {
-    return Padding(
-      padding: EdgeInsets.all(_dimens.screenPadding),
-      child: TextField(
-        controller: _searchController,
-        onChanged: _onSearchChanged,
-        decoration: InputDecoration(
-          hintText: _strings.searchHint,
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: _searchController.text.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    _searchController.clear();
-                    _loadInitialData();
-                  },
-                )
-              : null,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(_dimens.borderRadius),
-            borderSide: BorderSide.none,
-          ),
-          filled: true,
-          fillColor: _UrgentServicesColors.searchBackground,
-          isDense: true,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12),
-        ),
-      ),
-    );
+  /// Réglages de la feuille « Filtres et tri » actuellement actifs (prix, catégorie, tri).
+  int get _activeFilterCount =>
+      ((_minPrice > 0 || _maxPrice < 100000) ? 1 : 0) +
+      (_selectedCategory != null ? 1 : 0) +
+      (_ordering != '-created_at' ? 1 : 0);
+
+  String get _priceFilterLabel {
+    if (_minPrice > 0 && _maxPrice < 100000) {
+      return 'Prix : ${formatFcfaAmount(_minPrice)} – ${formatFcfaAmount(_maxPrice)} FCFA';
+    }
+    if (_minPrice > 0) return 'Prix : dès ${formatFcfaAmount(_minPrice)} FCFA';
+    return 'Prix : jusqu’à ${formatFcfaAmount(_maxPrice)} FCFA';
   }
 
-  Widget _buildActiveFiltersChips() {
-    if (!_hasActiveFilters) return const SizedBox.shrink();
+  List<ServiceActiveFilter> _activeFilters() {
+    if (!_hasActiveFilters) return const [];
 
-    final chips = <Widget>[];
+    final filters = <ServiceActiveFilter>[];
 
     if (_searchController.text.isNotEmpty) {
-      chips.add(
-        Chip(
-          label: Text('Recherche: ${_searchController.text}'),
-          onDeleted: () {
-            _searchController.clear();
-            _loadInitialData();
-          },
-        ),
+      filters.add(
+        ServiceActiveFilter('Recherche : ${_searchController.text}', () {
+          _searchController.clear();
+          _loadInitialData();
+        }),
       );
     }
 
     if (_minPrice > 0 || _maxPrice < 100000) {
-      chips.add(
-        Chip(
-          label: Text('Prix: ${_minPrice.toInt()}-${_maxPrice.toInt()} FCFA'),
-          onDeleted: () {
-            _minPriceController.clear();
-            _maxPriceController.clear();
-            setState(() {
-              _minPrice = 0;
-              _maxPrice = 100000;
-            });
-            _loadInitialData();
-          },
-        ),
+      filters.add(
+        ServiceActiveFilter(_priceFilterLabel, () {
+          _minPriceController.clear();
+          _maxPriceController.clear();
+          setState(() {
+            _minPrice = 0;
+            _maxPrice = 100000;
+          });
+          _loadInitialData();
+        }),
       );
     }
 
     if (_selectedCategory != null) {
-      chips.add(
-        Chip(
-          label: Text('Catégorie: $_selectedCategory'),
-          onDeleted: () {
-            setState(() => _selectedCategory = null);
-            _loadInitialData();
-          },
-        ),
+      filters.add(
+        ServiceActiveFilter('Catégorie : $_selectedCategory', () {
+          setState(() => _selectedCategory = null);
+          _loadInitialData();
+        }),
       );
     }
 
     if (_ordering != '-created_at') {
-      final orderText = {
-            'price': 'Prix croissant',
-            '-price': 'Prix décroissant',
-            '-rating': 'Meilleures notes',
-          }[_ordering] ??
-          _ordering;
-
-      chips.add(
-        Chip(
-          label: Text('Tri: $orderText'),
-          onDeleted: () {
-            setState(() => _ordering = '-created_at');
-            _loadInitialData();
-          },
-        ),
+      filters.add(
+        ServiceActiveFilter('Tri : ${serviceOrderingLabel(_ordering)}', () {
+          setState(() => _ordering = '-created_at');
+          _loadInitialData();
+        }),
       );
     }
 
-    if (chips.isEmpty) return const SizedBox.shrink();
+    return filters;
+  }
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12.0),
-      child: Row(children: chips),
+  Widget _buildEmpty() {
+    if (_hasActiveFilters) {
+      return TratraEmptyState(
+        icon: Icons.search_off_rounded,
+        title: 'Aucun service urgent ne correspond',
+        description:
+            'Aucun résultat pour ces critères. Modifiez ou retirez vos filtres pour élargir la recherche.',
+        actions: [
+          TratraButton(
+            label: 'Effacer les filtres',
+            leading: const Icon(Icons.filter_alt_off_outlined),
+            onPressed: _clearFilters,
+          ),
+        ],
+      );
+    }
+    return TratraEmptyState(
+      icon: Icons.bolt_rounded,
+      title: 'Aucun service urgent pour le moment',
+      description:
+          'Les services signalés comme urgents apparaîtront ici. Actualisez ou consultez tous les services.',
+      actions: [
+        TratraButton(
+          label: 'Voir tous les services',
+          onPressed: () => Navigator.pushNamed(context, RouteNames.allServices),
+        ),
+        TratraButton(
+          label: 'Actualiser',
+          variant: TratraButtonVariant.outline,
+          leading: const Icon(Icons.refresh_rounded),
+          onPressed: _loadInitialData,
+        ),
+      ],
     );
   }
 
   Widget _buildContent() {
     if (_loading && _items.isEmpty) {
-      return const LoadingWidget();
+      return const ServiceRowSkeleton();
     }
 
     if (_error != null) {
-      return CustomErrorWidget(
-        error: _error!,
-        onRetry: _loadInitialData,
+      return ServiceListCenteredScroll(
+        child: ServiceListErrorState(
+          message: _error!,
+          onRetry: _loadInitialData,
+        ),
       );
     }
 
     if (_items.isEmpty) {
-      return EmptyStateWidget(
-        message: _strings.noServicesFound,
-        onRetry: _loadInitialData,
-      );
+      return ServiceListCenteredScroll(child: _buildEmpty());
     }
+
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return NotificationListener<ScrollNotification>(
       onNotification: (scrollNotification) {
@@ -542,18 +533,25 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
         }
         return false;
       },
-      child: ListView.builder(
-        padding: EdgeInsets.all(_dimens.screenPadding),
-        itemCount: _items.length + (_hasMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index == _items.length && _hasMore) {
-            return const _LoadingMoreItem();
-          }
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final gutter = serviceListGutter(constraints.maxWidth);
+          return ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+                gutter, TtSpace.s4, gutter, TtSpace.s6 + bottomInset),
+            itemCount: _items.length + (_hasMore ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index == _items.length && _hasMore) {
+                return const ServiceRowLoadingCell();
+              }
 
-          final service = _items[index];
-          return _UrgentRowCard(
-            service: service,
-            onTap: () => _onServiceTap(service),
+              final service = _items[index];
+              return ServiceRowCard(
+                service: service,
+                onTap: () => _onServiceTap(service),
+              );
+            },
           );
         },
       ),
@@ -561,411 +559,22 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
   }
 }
 
-class _FilterBottomSheet extends StatefulWidget {
-  const _FilterBottomSheet({
-    required this.minPriceController,
-    required this.maxPriceController,
-    required this.selectedCategory,
-    required this.categories,
-    required this.ordering,
-    required this.onApply,
-    required this.onClear,
-    required this.onCategoryChanged,
-    required this.onOrderingChanged,
-  });
-
-  final TextEditingController minPriceController;
-  final TextEditingController maxPriceController;
-  final String? selectedCategory;
-  final List<String> categories;
-  final String ordering;
-  final VoidCallback onApply;
-  final VoidCallback onClear;
-  final ValueChanged<String?> onCategoryChanged;
-  final ValueChanged<String> onOrderingChanged;
-
-  @override
-  State<_FilterBottomSheet> createState() => _FilterBottomSheetState();
-}
-
-class _FilterBottomSheetState extends State<_FilterBottomSheet> {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.8,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                const Text(
-                  'Filtres et tri',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: widget.onClear,
-                  child: const Text('Tout effacer'),
-                ),
-              ],
-            ),
-          ),
-
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                _buildSectionHeader('Trier par'),
-                ..._buildOrderingOptions(),
-                const SizedBox(height: 20),
-                _buildSectionHeader('Catégorie'),
-                _buildCategoryDropdown(),
-                const SizedBox(height: 20),
-                _buildSectionHeader('Prix (FCFA)'),
-                _buildPriceFilter(),
-                const SizedBox(height: 40),
-              ],
-            ),
-          ),
-
-          // Actions
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Annuler'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: widget.onApply,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _UrgentServicesColors.accent,
-                    ),
-                    child: const Text('Appliquer',
-                        style: TextStyle(color: Colors.white)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(title,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-      );
-
-  List<Widget> _buildOrderingOptions() {
-    const options = [
-      {'value': '-created_at', 'label': 'Plus récents'},
-      {'value': 'price', 'label': 'Prix croissant'},
-      {'value': '-price', 'label': 'Prix décroissant'},
-      {'value': '-rating', 'label': 'Meilleures notes'},
-    ];
-
-    return options
-        .map((option) => RadioListTile<String>(
-              title: Text(option['label']!),
-              value: option['value']!,
-              groupValue: widget.ordering,
-              onChanged: (value) {
-                if (value != null) widget.onOrderingChanged(value);
-              },
-              contentPadding: EdgeInsets.zero,
-            ))
-        .toList();
-  }
-
-  /// IMPORTANT : accepte `null` (toutes catégories)
-  Widget _buildCategoryDropdown() {
-    return DropdownButtonFormField<String?>(
-      initialValue: widget.selectedCategory,
-      decoration: const InputDecoration(
-        border: OutlineInputBorder(),
-        isDense: true,
-        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-      ),
-      items: <DropdownMenuItem<String?>>[
-        const DropdownMenuItem<String?>(
-          value: null,
-          child: Text('Toutes les catégories'),
-        ),
-        ...widget.categories.map(
-          (category) => DropdownMenuItem<String?>(
-            value: category,
-            child: Text(category),
-          ),
-        ),
-      ],
-      onChanged: widget.onCategoryChanged,
-    );
-  }
-
-  Widget _buildPriceFilter() {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: widget.minPriceController,
-            decoration: const InputDecoration(
-              labelText: 'Min',
-              border: OutlineInputBorder(),
-              prefixText: '₣ ',
-            ),
-            keyboardType: TextInputType.number,
-          ),
-        ),
-        const SizedBox(width: 12),
-        const Text('-'),
-        const SizedBox(width: 12),
-        Expanded(
-          child: TextField(
-            controller: widget.maxPriceController,
-            decoration: const InputDecoration(
-              labelText: 'Max',
-              border: OutlineInputBorder(),
-              prefixText: '₣ ',
-            ),
-            keyboardType: TextInputType.number,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _UrgentRowCard extends StatelessWidget {
-  const _UrgentRowCard({
-    required this.service,
-    required this.onTap,
-  });
-
-  final Service service;
-  final VoidCallback onTap;
+/// Pastille éclair jaune de la barre d'application (identité « urgence »).
+class _UrgentMark extends StatelessWidget {
+  const _UrgentMark();
 
   @override
   Widget build(BuildContext context) {
-    const dimens = _UrgentServicesDimens();
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(dimens.cardRadius),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        clipBehavior: Clip.hardEdge,
-        decoration: BoxDecoration(
-          color: _UrgentServicesColors.card,
-          borderRadius: BorderRadius.circular(dimens.cardRadius),
-          border: Border.all(color: _UrgentServicesColors.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            _buildImage(),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.all(dimens.contentPadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Titre + badge URGENT
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            service.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: _UrgentServicesColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                              height: 1.2,
-                            ),
-                          ),
-                        ),
-                        if (service.isUrgent == true) // garde anti-null
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _UrgentServicesColors.urgentBadge,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text(
-                              'URGENT',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    // Catégorie
-                    Text(
-                      service.categoryName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: _UrgentServicesColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    // Prix & note
-                    _buildFooter(),
-                  ],
-                ),
-              ),
-            ),
-          ],
+    return const ExcludeSemantics(
+      child: DecoratedBox(
+        decoration:
+            BoxDecoration(color: TtColors.accent, shape: BoxShape.circle),
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: Icon(Icons.bolt_rounded, size: 20, color: TtColors.ink),
         ),
       ),
     );
   }
-
-  Widget _buildImage() {
-    const dimens = _UrgentServicesDimens();
-    final imageUrl = service.imageUrl.isNotEmpty
-        ? service.imageUrl
-        : _UrgentServicesStrings().placeholderImageUrl;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.only(
-        topLeft: Radius.circular(dimens.cardRadius),
-        bottomLeft: Radius.circular(dimens.cardRadius),
-      ),
-      child: CachedNetworkImage(
-        imageUrl: imageUrl,
-        width: 120,
-        height: 100,
-        fit: BoxFit.cover,
-        placeholder: (_, __) => Container(
-          width: 120,
-          height: 100,
-          color: Colors.grey[200],
-          child: const Center(child: CircularProgressIndicator()),
-        ),
-        errorWidget: (_, __, ___) => Container(
-          width: 120,
-          height: 100,
-          color: Colors.grey[200],
-          child: const Icon(Icons.error_outline, color: Colors.grey),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFooter() {
-    final priceText = '${(service.price ?? 0).toStringAsFixed(0)} FCFA';
-    final double rating = service.rating ?? 0;
-
-    return Row(
-      children: [
-        Text(
-          priceText,
-          style: const TextStyle(
-            color: _UrgentServicesColors.accent,
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-          ),
-        ),
-        const Spacer(),
-        if (rating > 0) ...[
-          const Icon(Icons.star, color: Colors.amber, size: 14),
-          const SizedBox(width: 2),
-          Text(
-            rating.toStringAsFixed(1),
-            style: const TextStyle(
-              color: _UrgentServicesColors.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(width: 4),
-        ],
-        const Icon(Icons.chevron_right,
-            color: _UrgentServicesColors.textSecondary, size: 16),
-      ],
-    );
-  }
-}
-
-class _LoadingMoreItem extends StatelessWidget {
-  const _LoadingMoreItem();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 16),
-      child: Center(child: CircularProgressIndicator()),
-    );
-  }
-}
-
-// Design constants
-class _UrgentServicesColors {
-  const _UrgentServicesColors();
-
-  static const Color background = Color(0xFFF8F9FA);
-  static const Color card = Color(0xFFFFFFFF);
-  static const Color border = Color(0xFFE5E5E5);
-  static const Color textPrimary = Color(0xFF1E272E);
-  static const Color textSecondary = Color(0xFF636E72);
-  static const Color accent = Color(0xFF00B14F);
-  static const Color urgentBadge = Color(0xFFFF5252);
-  static const Color searchBackground = Color(0xFFF1F2F6);
-}
-
-class _UrgentServicesDimens {
-  const _UrgentServicesDimens();
-
-  final double screenPadding = 12.0;
-  final double contentPadding = 10.0;
-  final double cardRadius = 14.0;
-  final double borderRadius = 12.0;
-}
-
-class _UrgentServicesStrings {
-  const _UrgentServicesStrings();
-
-  final String searchHint = 'Rechercher un service urgent…';
-  final String noServicesFound = 'Aucun service urgent trouvé';
-  final String placeholderImageUrl =
-      'https://via.placeholder.com/600x400?text=Service+Urgent';
 }

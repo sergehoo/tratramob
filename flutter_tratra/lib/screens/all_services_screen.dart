@@ -1,15 +1,16 @@
 // lib/screens/all_services_screen.dart
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
+import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/service.dart';
 import 'package:flutter_tratra/routes.dart';
+import 'package:flutter_tratra/screens/service_list/service_list_kit.dart';
 
 class AllServicesScreen extends StatefulWidget {
   const AllServicesScreen({super.key});
@@ -19,18 +20,6 @@ class AllServicesScreen extends StatefulWidget {
 }
 
 class _AllServicesScreenState extends State<AllServicesScreen> {
-  // Couleurs/constantes visuelles locales
-  static const _bg = Color(0xFFF8F9FA);
-  static const _card = Color(0xFFFFFFFF);
-  static const _border = Color(0xFFE5E5E5);
-  static const _textPrimary = Color(0xFF1E272E);
-  static const _textSecondary = Color(0xFF636E72);
-  static const _accent = Color(0xFF00B14F);
-  static const _searchBg = Color(0xFFF1F2F6);
-
-  static const _placeholder =
-      'https://via.placeholder.com/600x400?text=Service';
-
   late final BaseApi _api;
 
   // État chargement / pagination
@@ -139,7 +128,6 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
       final r = await _getPublic(uri);
       if (r.statusCode != 200) {
         _api.handleError(r);
-        return;
       }
 
       final decoded = _api.decodeBody(r);
@@ -234,15 +222,16 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
     );
   }
 
-  /// Utilise seulement `image_url`. Si vide/invalide → placeholder.
+  /// Utilise seulement `image_url`. Si vide/invalide → chaîne vide : l'interface affiche
+  /// une vignette de repli aux couleurs de la marque (jamais d'image factice).
   String _pickSafeImageUrl(Map<String, dynamic> m) {
     final raw = (m['image_url'] ?? '').toString().trim();
-    if (raw.isEmpty) return _placeholder;
+    if (raw.isEmpty) return '';
     final uri = Uri.tryParse(raw);
     if (uri == null ||
         !uri.hasScheme ||
         !(uri.isScheme('http') || uri.isScheme('https'))) {
-      return _placeholder;
+      return '';
     }
     return raw;
   }
@@ -277,7 +266,7 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Le prix minimum doit être inférieur au prix maximum'),
-          backgroundColor: Colors.red,
+          backgroundColor: TtColors.danger,
         ),
       );
     }
@@ -297,112 +286,70 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
   }
 
   void _showFilterDialog() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _FilterBottomSheet(
-        minPriceController: _minPriceController,
-        maxPriceController: _maxPriceController,
-        selectedCategory: _selectedCategory,
-        categories: _categories,
-        ordering: _ordering,
-        onApply: () {
-          _applyPriceFilter();
-          Navigator.pop(context);
-        },
-        onClear: () {
-          _clearFilters();
-          Navigator.pop(context);
-        },
-        onCategoryChanged: (category) {
-          setState(() => _selectedCategory = category);
-        },
-        onOrderingChanged: (ordering) {
-          setState(() => _ordering = ordering);
-        },
-      ),
+    showServiceFilterSheet(
+      context,
+      minPriceController: _minPriceController,
+      maxPriceController: _maxPriceController,
+      selectedCategory: _selectedCategory,
+      categories: _categories,
+      ordering: _ordering,
+      onApply: (category, ordering) {
+        // Tri et catégorie choisis dans la feuille, puis prix + rechargement (inchangé).
+        setState(() {
+          _selectedCategory = category;
+          _ordering = ordering;
+        });
+        _applyPriceFilter();
+      },
+      onClear: _clearFilters,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        title: const Text('Tous les services'),
-        backgroundColor: _card,
+      backgroundColor: TtColors.canvas,
+      appBar: TratraAppBar(
+        title: 'Tous les services',
         actions: [
           // bouton clear si filtres actifs
           if (_hasActiveFilters)
             IconButton(
-              icon: const Icon(Icons.filter_alt),
-              color: _accent,
+              icon: const Icon(Icons.filter_alt_off_outlined),
               tooltip: 'Supprimer les filtres',
               onPressed: _clearFilters,
             ),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _ordering,
-              items: const [
-                DropdownMenuItem(
-                    value: '-created_at', child: Text('Plus récents')),
-                DropdownMenuItem(value: 'price', child: Text('Prix ↑')),
-                DropdownMenuItem(value: '-price', child: Text('Prix ↓')),
-                DropdownMenuItem(
-                    value: '-rating', child: Text('Meilleures notes')),
-              ],
-              onChanged: (v) {
-                setState(() => _ordering = v ?? '-created_at');
-                _loadInitial();
-              },
-            ),
+          ServiceSortMenuButton(
+            ordering: _ordering,
+            onSelected: (v) {
+              setState(() => _ordering = v);
+              _loadInitial();
+            },
           ),
-          const SizedBox(width: 8),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showFilterDialog,
-        backgroundColor: _accent,
-        foregroundColor: Colors.white,
-        child: const Icon(Icons.filter_list),
-      ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Barre de recherche (debounce)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-            child: TextField(
-              controller: _search,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                hintText: 'Rechercher un service…',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _search.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _search.clear();
-                          _loadInitial();
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: _searchBg,
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                isDense: true,
-              ),
-            ),
+          // Barre de recherche (debounce), filtres, puces des filtres actifs
+          ServiceListHeader(
+            controller: _search,
+            searchHint: 'Rechercher un service…',
+            onSearchChanged: _onSearchChanged,
+            onSearchClear: () {
+              _search.clear();
+              _loadInitial();
+            },
+            onOpenFilters: _showFilterDialog,
+            activeFilterCount: _activeFilterCount,
+            activeFilters: _activeFilters(),
           ),
-
-          // Chips de filtres actifs
-          _buildActiveFiltersChips(),
 
           // Contenu
           Expanded(
             child: RefreshIndicator(
-              color: _accent,
+              color: TtColors.primary,
+              backgroundColor: TtColors.surface,
               onRefresh: _loadInitial,
               child: _buildContent(),
             ),
@@ -412,97 +359,115 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
     );
   }
 
-  Widget _buildActiveFiltersChips() {
-    if (!_hasActiveFilters) return const SizedBox.shrink();
+  /// Réglages de la feuille « Filtres et tri » actuellement actifs (prix, catégorie, tri).
+  int get _activeFilterCount =>
+      ((_minPrice > 0 || _maxPrice < 100000) ? 1 : 0) +
+      (_selectedCategory != null ? 1 : 0) +
+      (_ordering != '-created_at' ? 1 : 0);
 
-    final chips = <Widget>[];
+  String get _priceFilterLabel {
+    if (_minPrice > 0 && _maxPrice < 100000) {
+      return 'Prix : ${formatFcfaAmount(_minPrice)} – ${formatFcfaAmount(_maxPrice)} FCFA';
+    }
+    if (_minPrice > 0) return 'Prix : dès ${formatFcfaAmount(_minPrice)} FCFA';
+    return 'Prix : jusqu’à ${formatFcfaAmount(_maxPrice)} FCFA';
+  }
+
+  List<ServiceActiveFilter> _activeFilters() {
+    if (!_hasActiveFilters) return const [];
+
+    final filters = <ServiceActiveFilter>[];
 
     if (_search.text.isNotEmpty) {
-      chips.add(Chip(
-        label: Text('Recherche: ${_search.text}'),
-        onDeleted: () {
-          _search.clear();
-          _loadInitial();
-        },
-      ));
+      filters.add(ServiceActiveFilter('Recherche : ${_search.text}', () {
+        _search.clear();
+        _loadInitial();
+      }));
     }
 
     if (_minPrice > 0 || _maxPrice < 100000) {
-      chips.add(Chip(
-        label: Text('Prix: ${_minPrice.toInt()}-${_maxPrice.toInt()} FCFA'),
-        onDeleted: () {
-          _minPriceController.clear();
-          _maxPriceController.clear();
-          setState(() {
-            _minPrice = 0;
-            _maxPrice = 100000;
-          });
-          _loadInitial();
-        },
-      ));
+      filters.add(ServiceActiveFilter(_priceFilterLabel, () {
+        _minPriceController.clear();
+        _maxPriceController.clear();
+        setState(() {
+          _minPrice = 0;
+          _maxPrice = 100000;
+        });
+        _loadInitial();
+      }));
     }
 
     if (_selectedCategory != null) {
-      chips.add(Chip(
-        label: Text('Catégorie: $_selectedCategory'),
-        onDeleted: () {
-          setState(() => _selectedCategory = null);
-          _loadInitial();
-        },
-      ));
+      filters.add(ServiceActiveFilter('Catégorie : $_selectedCategory', () {
+        setState(() => _selectedCategory = null);
+        _loadInitial();
+      }));
     }
 
     if (_ordering != '-created_at') {
-      final txt = {
-            'price': 'Prix croissant',
-            '-price': 'Prix décroissant',
-            '-rating': 'Meilleures notes',
-          }[_ordering] ??
-          _ordering;
-      chips.add(Chip(
-        label: Text('Tri: $txt'),
-        onDeleted: () {
-          setState(() => _ordering = '-created_at');
-          _loadInitial();
-        },
-      ));
+      filters.add(
+          ServiceActiveFilter('Tri : ${serviceOrderingLabel(_ordering)}', () {
+        setState(() => _ordering = '-created_at');
+        _loadInitial();
+      }));
     }
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Row(
-          children: chips
-              .map((c) => Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: c,
-                  ))
-              .toList()),
+    return filters;
+  }
+
+  Widget _buildEmpty() {
+    if (_hasActiveFilters) {
+      return TratraEmptyState(
+        icon: Icons.search_off_rounded,
+        title: 'Aucun service ne correspond',
+        description:
+            'Aucun résultat pour ces critères. Modifiez ou retirez vos filtres pour élargir la recherche.',
+        actions: [
+          TratraButton(
+            label: 'Effacer les filtres',
+            leading: const Icon(Icons.filter_alt_off_outlined),
+            onPressed: _clearFilters,
+          ),
+        ],
+      );
+    }
+    return TratraEmptyState(
+      icon: Icons.handyman_outlined,
+      title: 'Aucun service disponible pour le moment',
+      description:
+          'Les services publiés par les artisans apparaîtront ici. Actualisez ou parcourez les catégories.',
+      actions: [
+        TratraButton(
+          label: 'Actualiser',
+          leading: const Icon(Icons.refresh_rounded),
+          onPressed: _loadInitial,
+        ),
+        TratraButton(
+          label: 'Parcourir les catégories',
+          variant: TratraButtonVariant.outline,
+          onPressed: () =>
+              Navigator.pushNamed(context, RouteNames.allCategories),
+        ),
+      ],
     );
   }
 
   Widget _buildContent() {
     if (_loading && _items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const ServiceGridSkeleton();
     }
 
     if (_error != null) {
-      return ListView(children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text('Erreur : $_error',
-              style: const TextStyle(color: Colors.red)),
-        )
-      ]);
+      return ServiceListCenteredScroll(
+        child: ServiceListErrorState(message: _error!, onRetry: _loadInitial),
+      );
     }
 
     if (_items.isEmpty) {
-      return ListView(children: const [
-        SizedBox(height: 120),
-        Center(child: Text('Aucun service')),
-        SizedBox(height: 120),
-      ]);
+      return ServiceListCenteredScroll(child: _buildEmpty());
     }
+
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return NotificationListener<ScrollNotification>(
       onNotification: (n) {
@@ -515,363 +480,44 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
         return false;
       },
       child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: .78,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  if (index == _items.length && _hasMore) {
-                    // Carte "loading plus"
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: _card,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: _border),
-                      ),
-                      child: const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(12.0),
-                          child: CircularProgressIndicator(),
+            padding: EdgeInsets.fromLTRB(
+                TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s6 + bottomInset),
+            sliver: SliverLayoutBuilder(
+              builder: (context, constraints) {
+                final grid =
+                    ServiceGridLayout.of(context, constraints.crossAxisExtent);
+                return SliverGrid(
+                  gridDelegate: grid.delegate,
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      if (index == _items.length && _hasMore) {
+                        // Cellule "chargement de la suite"
+                        return ServiceGridLoadingCell(
+                            imageHeight: grid.imageHeight);
+                      }
+                      if (index >= _items.length) return null;
+                      final s = _items[index];
+                      return ServiceGridCard(
+                        service: s,
+                        imageHeight: grid.imageHeight,
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          RouteNames.serviceDetail,
+                          arguments: ServiceDetailArgs(s),
                         ),
-                      ),
-                    );
-                  }
-                  if (index >= _items.length) return null;
-                  final s = _items[index];
-                  return _ServiceGridCard(
-                    title: s.title,
-                    category: s.categoryName,
-                    priceText: '${(s.price ?? 0).toStringAsFixed(0)} FCFA',
-                    imageUrl: s.imageUrl.isNotEmpty ? s.imageUrl : _placeholder,
-                    onTap: () => Navigator.pushNamed(
-                      context,
-                      RouteNames.serviceDetail,
-                      arguments: ServiceDetailArgs(s),
-                    ),
-                  );
-                },
-                childCount: _items.length + (_hasMore ? 1 : 0),
-              ),
-            ),
-          ),
-          if (_loadingMore)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.only(bottom: 16),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ServiceGridCard extends StatelessWidget {
-  const _ServiceGridCard({
-    required this.title,
-    required this.category,
-    required this.priceText,
-    required this.imageUrl,
-    required this.onTap,
-  });
-
-  final String title;
-  final String category;
-  final String priceText;
-  final String imageUrl;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    const card = Color(0xFFFFFFFF);
-    const border = Color(0xFFE5E5E5);
-    const textPrimary = Color(0xFF1E272E);
-    const textSecondary = Color(0xFF636E72);
-    const accent = Color(0xFF00B14F);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        decoration: BoxDecoration(
-          color: card,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: border),
-        ),
-        child: Column(
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(14),
-                topRight: Radius.circular(14),
-              ),
-              child: CachedNetworkImage(
-                imageUrl: imageUrl,
-                height: 120,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                placeholder: (_, __) =>
-                    Container(height: 120, color: Colors.black12),
-                errorWidget: (_, __, ___) => Container(
-                  height: 120,
-                  color: Colors.black12,
-                  child: const Icon(Icons.broken_image_outlined,
-                      color: Colors.grey),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-              child: Text(
-                title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    color: textPrimary, fontWeight: FontWeight.w800),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 2, 10, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      category,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style:
-                          const TextStyle(color: textSecondary, fontSize: 12),
-                    ),
+                      );
+                    },
+                    childCount: _items.length + (_hasMore ? 1 : 0),
                   ),
-                ],
-              ),
-            ),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-              child: Row(
-                children: [
-                  Text(priceText,
-                      style: const TextStyle(
-                          color: accent,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13)),
-                  const Spacer(),
-                  const Icon(Icons.chevron_right, color: textSecondary),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FilterBottomSheet extends StatefulWidget {
-  const _FilterBottomSheet({
-    required this.minPriceController,
-    required this.maxPriceController,
-    required this.selectedCategory,
-    required this.categories,
-    required this.ordering,
-    required this.onApply,
-    required this.onClear,
-    required this.onCategoryChanged,
-    required this.onOrderingChanged,
-  });
-
-  final TextEditingController minPriceController;
-  final TextEditingController maxPriceController;
-  final String? selectedCategory;
-  final List<String> categories;
-  final String ordering;
-  final VoidCallback onApply;
-  final VoidCallback onClear;
-  final ValueChanged<String?> onCategoryChanged;
-  final ValueChanged<String> onOrderingChanged;
-
-  @override
-  State<_FilterBottomSheet> createState() => _FilterBottomSheetState();
-}
-
-class _FilterBottomSheetState extends State<_FilterBottomSheet> {
-  Color? get _accent => null;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.8,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                const Text(
-                  'Filtres et tri',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: widget.onClear,
-                  child: const Text('Tout effacer'),
-                ),
-              ],
-            ),
-          ),
-
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                _buildSectionHeader('Trier par'),
-                ..._buildOrderingOptions(),
-                const SizedBox(height: 20),
-                _buildSectionHeader('Catégorie'),
-                _buildCategoryDropdown(),
-                const SizedBox(height: 20),
-                _buildSectionHeader('Prix (FCFA)'),
-                _buildPriceFilter(),
-                const SizedBox(height: 40),
-              ],
-            ),
-          ),
-
-          // Actions
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Annuler'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: widget.onApply,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _accent,
-                    ),
-                    child: const Text('Appliquer',
-                        style: TextStyle(color: Colors.white)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(title,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-      );
-
-  List<Widget> _buildOrderingOptions() {
-    const options = [
-      {'value': '-created_at', 'label': 'Plus récents'},
-      {'value': 'price', 'label': 'Prix croissant'},
-      {'value': '-price', 'label': 'Prix décroissant'},
-      {'value': '-rating', 'label': 'Meilleures notes'},
-    ];
-
-    return options
-        .map((option) => RadioListTile<String>(
-              title: Text(option['label']!),
-              value: option['value']!,
-              groupValue: widget.ordering,
-              onChanged: (value) {
-                if (value != null) widget.onOrderingChanged(value);
+                );
               },
-              contentPadding: EdgeInsets.zero,
-            ))
-        .toList();
-  }
-
-  /// IMPORTANT : accepte `null` (toutes les catégories)
-  Widget _buildCategoryDropdown() {
-    return DropdownButtonFormField<String?>(
-      initialValue: widget.selectedCategory,
-      decoration: const InputDecoration(
-        border: OutlineInputBorder(),
-        isDense: true,
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+          ),
+        ],
       ),
-      items: <DropdownMenuItem<String?>>[
-        const DropdownMenuItem<String?>(
-          value: null,
-          child: Text('Toutes les catégories'),
-        ),
-        ...widget.categories.map(
-          (category) => DropdownMenuItem<String?>(
-            value: category,
-            child: Text(category),
-          ),
-        ),
-      ],
-      onChanged: widget.onCategoryChanged,
-    );
-  }
-
-  Widget _buildPriceFilter() {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: widget.minPriceController,
-            decoration: const InputDecoration(
-              labelText: 'Min',
-              border: OutlineInputBorder(),
-              prefixText: '₣ ',
-            ),
-            keyboardType: TextInputType.number,
-          ),
-        ),
-        const SizedBox(width: 12),
-        const Text('-'),
-        const SizedBox(width: 12),
-        Expanded(
-          child: TextField(
-            controller: widget.maxPriceController,
-            decoration: const InputDecoration(
-              labelText: 'Max',
-              border: OutlineInputBorder(),
-              prefixText: '₣ ',
-            ),
-            keyboardType: TextInputType.number,
-          ),
-        ),
-      ],
     );
   }
 }

@@ -1,219 +1,165 @@
+// lib/screens/payment_screen.dart
+//
+// Paiement d'une réservation. Écran bâti sur le Design System Tratra (lib/design).
+//
+// Honnêteté : aucune création de paiement n'est branchée dans l'application mobile
+// (le bouton « Payer maintenant » n'avait pas de traitement, seulement un TODO), et les
+// moyens en ligne ne sont pas ouverts côté serveur. L'écran affiche donc le montant réel
+// et dirige vers une destination existante au lieu de simuler un paiement.
 import 'package:flutter/material.dart';
-import '../core/constants.dart';
-import '../widgets/custom_app_bar.dart';
-import '../widgets/animated_button.dart';
+import 'package:flutter_tratra/design/design.dart';
+import 'package:flutter_tratra/routes.dart';
 
-class PaymentScreen extends StatefulWidget {
+import 'booking_flow/booking_format.dart';
+import 'booking_flow/booking_widgets.dart';
+
+class PaymentScreen extends StatelessWidget {
   final double amount;
   final String serviceName;
+
+  /// Réservation concernée, quand la route la transmet (facultatif : aujourd'hui
+  /// `PaymentArgs` ne la conserve pas). Permet d'ouvrir directement son suivi.
+  final String? bookingId;
 
   const PaymentScreen({
     super.key,
     required this.amount,
     required this.serviceName,
+    this.bookingId,
   });
 
-  @override
-  State<PaymentScreen> createState() => _PaymentScreenState();
-}
+  bool get _hasBooking => bookingId != null && bookingId!.isNotEmpty;
 
-class _PaymentScreenState extends State<PaymentScreen> {
-  int _selectedPaymentMethod = 0;
-  final TextEditingController _cardNumberController = TextEditingController();
-  final TextEditingController _expiryController = TextEditingController();
-  final TextEditingController _cvvController = TextEditingController();
-  final TextEditingController _cardHolderController = TextEditingController();
+  void _openBookings(BuildContext context) {
+    // La liste « Mes réservations » (route existante) remplace le tunnel de réservation :
+    // on ne revient pas sur le formulaire déjà envoyé.
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      RouteNames.booking,
+      ModalRoute.withName(RouteNames.home),
+    );
+  }
 
-  final List<Map<String, dynamic>> _paymentMethods = const [
-    {'icon': Icons.credit_card, 'name': 'Carte bancaire', 'type': 'card'},
-    {'icon': Icons.mobile_friendly, 'name': 'Mobile Money', 'type': 'mobile'},
-    {'icon': Icons.money, 'name': 'Espèces', 'type': 'cash'},
-  ];
-
-  @override
-  void dispose() {
-    _cardNumberController.dispose();
-    _expiryController.dispose();
-    _cvvController.dispose();
-    _cardHolderController.dispose();
-    super.dispose();
+  void _openTracking(BuildContext context) {
+    Navigator.of(context).pushNamed(
+      RouteNames.tracking,
+      arguments: TrackingArgs(bookingId!),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppConstants.backgroundColor,
-      appBar: const CustomAppBar(
-        title: 'Paiement',
-        showBackButton: true,
-        leading: null,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      appBar: const TratraAppBar(title: 'Paiement'),
+      body: BookingContentWidth(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(
+              TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s8),
           children: [
-            // Récapitulatif
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    const Text('Récapitulatif de la commande',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        const Text('Service'),
-                        const Spacer(),
-                        Text(widget.serviceName),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // TODO: Inject real date/time from Booking
-                    const Row(
-                      children: [
-                        Text('Date'),
-                        Spacer(),
-                        Text('15 Nov 2023 - 14:00'),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Text('Total à payer',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                        const Spacer(),
-                        Text(
-                          '${widget.amount} €',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: AppConstants.primaryColor,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+            BookingReveal(
+              child: _TotalCard(amount: amount, serviceName: serviceName),
+            ),
+            const SizedBox(height: TtSpace.s4),
+            const BookingReveal(
+              index: 1,
+              child: TratraAlert(
+                tone: TratraAlertTone.info,
+                title: 'Paiement en ligne indisponible',
+                message:
+                    'Le règlement en ligne n’est pas encore proposé dans l’application. '
+                    'Retrouvez votre réservation et son état dans « Mes réservations ».',
               ),
-            ),
-            const SizedBox(height: 24),
-
-            // Méthodes de paiement
-            const Text('Méthode de paiement',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Column(
-              children: _paymentMethods.asMap().entries.map((entry) {
-                final index = entry.key;
-                final method = entry.value;
-                final isSelected = index == _selectedPaymentMethod;
-
-                return Card(
-                  color: isSelected
-                      ? AppConstants.primaryLight
-                      : AppConstants.cardColor,
-                  child: ListTile(
-                    leading: Icon(
-                      method['icon'] as IconData,
-                      color: isSelected
-                          ? AppConstants.primaryColor
-                          : AppConstants.textPrimary,
-                    ),
-                    title: Text(method['name'] as String),
-                    trailing: isSelected
-                        ? const Icon(Icons.check_circle,
-                            color: AppConstants.primaryColor)
-                        : null,
-                    onTap: () => setState(() => _selectedPaymentMethod = index),
-                  ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 24),
-
-            // Formulaire de carte (si sélectionné)
-            if (_selectedPaymentMethod == 0) _buildCardForm(),
-            const SizedBox(height: 24),
-
-            // Conditions
-            const Text(
-              'En procédant au paiement, vous acceptez nos conditions générales d\'utilisation.',
-              style: TextStyle(fontSize: 12, color: AppConstants.textSecondary),
-              textAlign: TextAlign.center,
             ),
           ],
         ),
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(16),
-        child: AnimatedButton(
-          onPressed: () {
-            // TODO: implémenter la création Payment côté API
-          },
-          child: const Text('Payer maintenant'),
-        ),
+      bottomNavigationBar: BookingStickyBar(
+        child: _hasBooking
+            ? TratraButton(
+                label: 'Suivre ma réservation',
+                size: TratraButtonSize.lg,
+                block: true,
+                trailing: const Icon(Icons.arrow_forward_rounded),
+                onPressed: () => _openTracking(context),
+              )
+            : TratraButton(
+                label: 'Voir mes réservations',
+                size: TratraButtonSize.lg,
+                block: true,
+                leading: const Icon(Icons.calendar_month_outlined),
+                onPressed: () => _openBookings(context),
+              ),
       ),
     );
   }
+}
 
-  Widget _buildCardForm() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Informations de la carte',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _cardNumberController,
-          decoration: const InputDecoration(
-            labelText: 'Numéro de carte',
-            hintText: '1234 5678 9012 3456',
-            prefixIcon: Icon(Icons.credit_card),
-          ),
-          keyboardType: TextInputType.number,
-        ),
-        const SizedBox(height: 16),
-        Row(
+/// Montant et service : carte sombre de la marque, soulignement jaune.
+class _TotalCard extends StatelessWidget {
+  const _TotalCard({required this.amount, required this.serviceName});
+  final double amount;
+  final String serviceName;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasAmount = amount > 0;
+    final total = hasAmount ? formatFcfa(amount) : 'Montant non défini';
+
+    return TratraCard(
+      variant: TratraCardVariant.night,
+      padding: const EdgeInsets.all(TtSpace.s6),
+      semanticLabel: 'Total à payer : $total, pour $serviceName',
+      child: ExcludeSemantics(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: TextField(
-                controller: _expiryController,
-                decoration: const InputDecoration(
-                  labelText: 'Expiration',
-                  hintText: 'MM/AA',
-                  prefixIcon: Icon(Icons.calendar_today),
+            const BookingEyebrow('Total à payer', onNight: true),
+            const SizedBox(height: TtSpace.s4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                total,
+                maxLines: 1,
+                style: TratraTheme.style(
+                  hasAmount ? TtType.displayLg : TtType.h1,
+                  color: Colors.white,
                 ),
               ),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: TextField(
-                controller: _cvvController,
-                decoration: const InputDecoration(
-                  labelText: 'CVV',
-                  hintText: '123',
-                  prefixIcon: Icon(Icons.lock),
-                ),
-                keyboardType: TextInputType.number,
-                obscureText: true,
+            const SizedBox(height: TtSpace.s3),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: TtColors.accent,
+                borderRadius: TtRadius.pillAll,
               ),
+              child: const SizedBox(width: TtSpace.s10, height: TtSpace.s1),
+            ),
+            const SizedBox(height: TtSpace.s5),
+            Divider(color: Colors.white.withValues(alpha: 0.12)),
+            const SizedBox(height: TtSpace.s3),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Icon(Icons.home_repair_service_outlined,
+                      size: 18, color: TtColors.accent),
+                ),
+                const SizedBox(width: TtSpace.s3),
+                Expanded(
+                  child: Text(
+                    serviceName,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TratraTheme.style(TtType.body,
+                        color: Colors.white70),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _cardHolderController,
-          decoration: const InputDecoration(
-            labelText: 'Titulaire de la carte',
-            hintText: 'John Doe',
-            prefixIcon: Icon(Icons.person),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

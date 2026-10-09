@@ -1,12 +1,19 @@
 // lib/widgets/empty_state_widget.dart
+// Adaptateur : préférer TratraEmptyState (lib/design) pour tout nouveau code.
 import 'package:flutter/material.dart';
+import 'package:flutter_tratra/design/design.dart';
 
+/// État vide générique. `onRetry` (si fourni) ajoute un bouton d'action réel,
+/// libellé `retryText` (« Réessayer » par défaut), icône `actionIcon`.
 class EmptyStateWidget extends StatelessWidget {
   final String message;
   final String? subtitle;
   final IconData? icon;
   final VoidCallback? onRetry;
   final String? retryText;
+
+  /// Icône du bouton d'action (rafraîchir par défaut).
+  final IconData? actionIcon;
 
   const EmptyStateWidget({
     super.key,
@@ -15,58 +22,28 @@ class EmptyStateWidget extends StatelessWidget {
     this.icon,
     this.onRetry,
     this.retryText,
+    this.actionIcon,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon ?? Icons.search_off,
-              size: 72,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Colors.grey[700],
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            if (subtitle != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                subtitle!,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
-              ),
-            ],
-            const SizedBox(height: 24),
-            if (onRetry != null)
-              ElevatedButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: Text(retryText ?? 'Réessayer'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00B14F),
-                  foregroundColor: Colors.white,
-                ),
-              ),
-          ],
-        ),
-      ),
+    return TratraEmptyState(
+      icon: icon ?? Icons.search_off_rounded,
+      title: message,
+      description: subtitle,
+      actions: [
+        if (onRetry != null)
+          TratraButton(
+            label: retryText ?? 'Réessayer',
+            leading: Icon(actionIcon ?? Icons.refresh_rounded),
+            onPressed: onRetry,
+          ),
+      ],
     );
   }
 }
 
+/// Aucun service à afficher ; `onExplore` (si fourni) mène vers la découverte des catégories.
 class EmptyServicesWidget extends StatelessWidget {
   final VoidCallback? onExplore;
   final String? message;
@@ -86,6 +63,7 @@ class EmptyServicesWidget extends StatelessWidget {
           'Essayez de modifier vos critères de recherche ou explorez nos catégories',
       onRetry: onExplore,
       retryText: 'Explorer les catégories',
+      actionIcon: Icons.explore_outlined,
     );
   }
 }

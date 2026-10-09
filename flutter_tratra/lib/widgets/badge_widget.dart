@@ -1,7 +1,13 @@
 // widgets/badge_widget.dart
+// Badges historiques posés sur le Design System. Préférer TratraBadge / TratraStatusBadge
+// (lib/design) pour tout nouveau code : StatusBadge, PromotionBadge, AvailabilityBadge
+// et CertificationBadge n'en sont plus que de fins adaptateurs. BadgeWidget, IconBadge et
+// RatingBadge gardent des couleurs libres fournies par l'appelant (non couvertes par les
+// tons du DS) mais utilisent ses jetons de forme, d'ombre et de typographie.
 import 'package:flutter/material.dart';
-import '../core/constants.dart';
+import 'package:flutter_tratra/design/design.dart';
 
+/// Pastille icône + libellé aux couleurs fournies par l'appelant.
 class BadgeWidget extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -20,37 +26,32 @@ class BadgeWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
+    final iconSize = size ?? 14;
+    final fontSize = size != null ? size! - 2 : 12.0;
+    return DecoratedBox(
+      decoration: ShapeDecoration(
         color: backgroundColor,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
+        shape: const StadiumBorder(),
+        shadows: TtShadows.hair,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            icon,
-            size: size ?? 14,
-            color: textColor,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: textColor,
-              fontSize: size != null ? size! - 2 : 12,
-              fontWeight: FontWeight.w600,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: iconSize, color: textColor),
+            const SizedBox(width: TtSpace.s1),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TratraTheme.style(TtType.caption, color: textColor)
+                    .copyWith(fontSize: fontSize, fontWeight: FontWeight.w600, height: 1.1),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -79,24 +80,14 @@ class IconBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: backgroundColor,
         shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: TtShadows.hair,
       ),
-      child: Icon(
-        icon,
-        size: size * 0.6,
-        color: iconColor,
-      ),
+      child: Icon(icon, size: size * 0.6, color: iconColor),
     );
   }
 }
 
-// Badge pour statuts
+// Badge pour statuts — adaptateur : préférer TratraBadge / TratraStatusBadge.
 class StatusBadge extends StatelessWidget {
   final String status;
   final StatusType type;
@@ -109,59 +100,14 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (backgroundColor, textColor, icon) = _getStatusColors(type);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 14, color: textColor),
-            const SizedBox(width: 4),
-          ],
-          Text(
-            status,
-            style: TextStyle(
-              color: textColor,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  (Color, Color, IconData?) _getStatusColors(StatusType type) {
-    switch (type) {
-      case StatusType.success:
-        return (
-          AppConstants.primaryLight,
-          AppConstants.primaryDark,
-          Icons.check_circle
-        );
-      case StatusType.warning:
-        return (
-          const Color(0xFFFFF2CC),
-          const Color(0xFFE6B800),
-          Icons.warning
-        );
-      case StatusType.error:
-        return (const Color(0xFFFFE6E6), const Color(0xFFD32F2F), Icons.error);
-      case StatusType.info:
-        return (const Color(0xFFE3F2FD), const Color(0xFF1976D2), Icons.info);
-      case StatusType.pending:
-        return (
-          const Color(0xFFFFF3E0),
-          const Color(0xFFF57C00),
-          Icons.schedule
-        );
-    }
+    final (tone, icon) = switch (type) {
+      StatusType.success => (TratraTone.success, Icons.check_circle_outline),
+      StatusType.warning => (TratraTone.warning, Icons.warning_amber_rounded),
+      StatusType.error => (TratraTone.danger, Icons.error_outline),
+      StatusType.info => (TratraTone.info, Icons.info_outline),
+      StatusType.pending => (TratraTone.accent, Icons.schedule),
+    };
+    return TratraBadge(status, tone: tone, icon: icon);
   }
 }
 
@@ -173,7 +119,8 @@ enum StatusType {
   pending,
 }
 
-// Badge pour promotions
+// Badge pour promotions — adaptateur : préférer TratraBadge.
+// Le pourcentage affiché vient du paramètre `discount` fourni par l'appelant.
 class PromotionBadge extends StatelessWidget {
   final double discount;
   final bool isUrgent;
@@ -186,33 +133,13 @@ class PromotionBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isUrgent ? AppConstants.urgentColor : AppConstants.promoColor,
-        borderRadius: BorderRadius.circular(6),
-        gradient: isUrgent
-            ? const LinearGradient(
-                colors: [Color(0xFFFF6B6B), Color(0xFFFF5252)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              )
-            : null,
-      ),
-      child: Text(
-        isUrgent ? 'URGENT' : '-${discount.round()}%',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
+    return isUrgent
+        ? const TratraBadge('Urgent', tone: TratraTone.danger, icon: Icons.bolt_rounded)
+        : TratraBadge('-${discount.round()}%', tone: TratraTone.accent);
   }
 }
 
-// Badge pour disponibilité
+// Badge pour disponibilité — adaptateur : préférer TratraBadge.
 class AvailabilityBadge extends StatelessWidget {
   final bool isAvailable;
   final String? customText;
@@ -225,21 +152,10 @@ class AvailabilityBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color:
-            isAvailable ? AppConstants.primaryColor : const Color(0xFFFFE0E0),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        customText ?? (isAvailable ? 'DISPONIBLE' : 'OCCUPÉ'),
-        style: TextStyle(
-          color: isAvailable ? Colors.white : const Color(0xFFD32F2F),
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
+    return TratraBadge(
+      customText ?? (isAvailable ? 'Disponible' : 'Occupé'),
+      tone: isAvailable ? TratraTone.success : TratraTone.gray,
+      dot: true,
     );
   }
 }
@@ -259,42 +175,33 @@ class RatingBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppConstants.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppConstants.borderColor),
+    final style = TratraTheme.style(TtType.caption, color: TtColors.ink)
+        .copyWith(fontWeight: FontWeight.w600, height: 1.1);
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        color: TtColors.surface,
+        shape: const StadiumBorder(side: BorderSide(color: TtColors.line)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.star, size: 14, color: AppConstants.ratingColor),
-          const SizedBox(width: 4),
-          Text(
-            rating.toStringAsFixed(1),
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (showReviews && reviews > 0) ...[
-            const SizedBox(width: 4),
-            Text(
-              '($reviews)',
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppConstants.textSecondary,
-              ),
-            ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.star_rounded, size: 14, color: TtColors.accent),
+            const SizedBox(width: TtSpace.s1),
+            Text(rating.toStringAsFixed(1).replaceAll('.', ','), style: style),
+            if (showReviews && reviews > 0) ...[
+              const SizedBox(width: TtSpace.s1),
+              Text('($reviews)', style: style.copyWith(color: TtColors.ash, fontWeight: FontWeight.w500)),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
-// Badge pour certification
+// Badge pour certification — adaptateur : préférer TratraBadge.
 class CertificationBadge extends StatelessWidget {
   final bool isCertified;
 
@@ -306,29 +213,6 @@ class CertificationBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!isCertified) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppConstants.primaryLight,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppConstants.primaryColor.withOpacity(0.3)),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.verified, size: 14, color: AppConstants.primaryColor),
-          SizedBox(width: 4),
-          Text(
-            'CERTIFIÉ',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: AppConstants.primaryColor,
-            ),
-          ),
-        ],
-      ),
-    );
+    return const TratraBadge('Certifié', tone: TratraTone.primary, icon: Icons.verified);
   }
 }

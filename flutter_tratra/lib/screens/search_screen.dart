@@ -1,12 +1,13 @@
 // screens/search_screen.dart
 import 'package:flutter/material.dart';
-import '../core/constants.dart';
-import '../widgets/custom_app_bar.dart';
-import '../widgets/artisan_card.dart';
-import '../widgets/service_card.dart';
-import '../models/artisan.dart';
-import '../models/service.dart';
 
+import 'package:flutter_tratra/design/design.dart';
+import 'package:flutter_tratra/routes.dart';
+
+/// Écran « Recherche ». Il ne lance aucune requête par lui-même : la recherche par
+/// mots-clés vit dans les listes du catalogue (catégories, services, services
+/// urgents). L'écran y mène par des raccourcis vers des routes existantes et ne
+/// présente aucun résultat ni aucune catégorie qu'il n'a pas réellement.
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -15,144 +16,157 @@ class SearchScreen extends StatefulWidget {
 }
 
 class _SearchScreenState extends State<SearchScreen> {
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
-  int _selectedCategory = 0;
-
-  final List<String> _categories = [
-    'Tous',
-    'Plomberie',
-    'Électricité',
-    'Peinture',
-    'Menuiserie',
-    'Nettoyage',
-  ];
-
-  final List<Artisan> _artisans = []; // Remplir avec des données réelles
-  final List<Service> _services = []; // Remplir avec des données réelles
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppConstants.backgroundColor,
-      appBar: CustomAppBar(
-        title: 'Recherche',
-        showBackButton: true,
-        leading: null,
-      ),
+      backgroundColor: TtColors.canvas,
+      appBar: const TratraAppBar(title: 'Recherche'),
       body: Column(
         children: [
           // Barre de recherche
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Rechercher un service ou un artisan...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() => _searchQuery = '');
-                  },
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              color: TtColors.surface,
+              border: Border(bottom: BorderSide(color: TtColors.lineSoft)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  TtSpace.s4, TtSpace.s3, TtSpace.s4, TtSpace.s4),
+              // La recherche réelle (texte, filtres, tri) vit dans le catalogue : le champ l'ouvre.
+              child: TratraInput(
+                hint: 'Rechercher un service ou un artisan…',
+                leadingIcon: Icons.search_rounded,
+                readOnly: true,
+                onTap: () => Navigator.pushNamed(context, RouteNames.allServices),
               ),
-              onChanged: (value) => setState(() => _searchQuery = value),
             ),
           ),
-          // Catégories
-          SizedBox(
-            height: 50,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _categories.length,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: ChoiceChip(
-                    label: Text(_categories[index]),
-                    selected: _selectedCategory == index,
-                    onSelected: (selected) =>
-                        setState(() => _selectedCategory = index),
-                    selectedColor: AppConstants.primaryColor,
-                    labelStyle: TextStyle(
-                      color: _selectedCategory == index
-                          ? Colors.white
-                          : AppConstants.textPrimary,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          // Résultats
+
+          // Raccourcis vers le catalogue
           Expanded(
-            child: _searchQuery.isEmpty
-                ? _buildRecentSearches()
-                : _buildSearchResults(),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                TtSpace.s4,
+                TtSpace.s2,
+                TtSpace.s4,
+                TtSpace.s6 + MediaQuery.paddingOf(context).bottom,
+              ),
+              children: [
+                TratraSectionHeader(
+                  title: 'Où chercher ?',
+                  subtitle: 'Choisissez une rubrique du catalogue.',
+                  padding: const EdgeInsets.fromLTRB(
+                      0, TtSpace.s6, 0, TtSpace.s3),
+                ),
+                for (final shortcut in _shortcuts) ...[
+                  _ShortcutCard(
+                    shortcut: shortcut,
+                    onTap: () => Navigator.pushNamed(context, shortcut.route),
+                  ),
+                  const SizedBox(height: TtSpace.s3),
+                ],
+              ],
+            ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildRecentSearches() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: const [
-        Text('Recherches récentes',
-            style: TextStyle(fontWeight: FontWeight.bold)),
-        // Ajouter les recherches récentes
-      ],
-    );
-  }
+// ===== Raccourcis =====
 
-  Widget _buildSearchResults() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        const Text('Artisans',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 200,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: _artisans.length,
-            itemBuilder: (context, index) => ArtisanCard(
-              artisan: _artisans[index],
-              isFavorite: false,
-              onFavoriteToggle: () {},
-              onTap: () {},
+class _Shortcut {
+  const _Shortcut({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.route,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final String route;
+}
+
+/// Chaque raccourci pointe vers une route enregistrée dans `main.dart`.
+const List<_Shortcut> _shortcuts = [
+  _Shortcut(
+    icon: Icons.category_outlined,
+    title: 'Toutes les catégories',
+    description: 'Parcourez les métiers et recherchez par nom.',
+    route: RouteNames.allCategories,
+  ),
+  _Shortcut(
+    icon: Icons.home_repair_service_outlined,
+    title: 'Tous les services',
+    description: 'Recherchez un service, filtrez par prix, catégorie et tri.',
+    route: RouteNames.allServices,
+  ),
+  _Shortcut(
+    icon: Icons.bolt_rounded,
+    title: 'Services urgents',
+    description: 'Les interventions proposées en urgence.',
+    route: RouteNames.allUrgentServices,
+  ),
+  _Shortcut(
+    icon: Icons.near_me_outlined,
+    title: 'Artisans à proximité',
+    description: 'Les services proposés autour de votre position.',
+    route: RouteNames.allNearbyArtisans,
+  ),
+];
+
+class _ShortcutCard extends StatelessWidget {
+  const _ShortcutCard({required this.shortcut, required this.onTap});
+
+  final _Shortcut shortcut;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return TratraCard(
+      radius: TtRadius.panel,
+      padding: const EdgeInsets.all(TtSpace.s4),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: TtColors.primarySoft,
+              borderRadius: TtRadius.controlAll,
+            ),
+            child: Icon(shortcut.icon, color: TtColors.primary),
+          ),
+          const SizedBox(width: TtSpace.s4),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  shortcut.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.h3)
+                      .copyWith(fontSize: 15, height: 1.25),
+                ),
+                const SizedBox(height: TtSpace.s1),
+                Text(
+                  shortcut.description,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.bodySm, color: TtColors.ash),
+                ),
+              ],
             ),
           ),
-        ),
-        const SizedBox(height: 24),
-        const Text('Services',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        const SizedBox(height: 16),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 0.8,
-          ),
-          itemCount: _services.length,
-          itemBuilder: (context, index) => ServiceCard(
-            service: _services[index],
-            isFavorite: false,
-            onFavoriteToggle: () {},
-            onTap: () {},
-          ),
-        ),
-      ],
+          const SizedBox(width: TtSpace.s2),
+          const Icon(Icons.chevron_right_rounded, color: TtColors.fog),
+        ],
+      ),
     );
   }
 }

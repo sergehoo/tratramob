@@ -1,15 +1,19 @@
-// lib/screens/booking/booking_screen.dart
+// lib/screens/booking_screen.dart
+//
+// Réservation : tunnel de création (BookingScreen.withService) et liste « Mes réservations »
+// (BookingScreen). Écran bâti sur le Design System Tratra (lib/design) ; la logique
+// (validation, BookingApi.create / listMine, arguments de navigation) est inchangée.
 import 'package:flutter/material.dart';
-import 'package:flutter_tratra/widgets/empty_bookings_widget.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_tratra/models/service.dart';
 import 'package:flutter_tratra/core/base_api.dart';
+import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/booking.dart';
-import 'package:flutter_tratra/services/booking_api.dart';
-import 'package:flutter_tratra/widgets/animated_button.dart';
-import 'package:flutter_tratra/widgets/loading_shimmer.dart';
-import 'package:flutter_tratra/widgets/error_retry_widget.dart';
+import 'package:flutter_tratra/models/service.dart';
 import 'package:flutter_tratra/routes.dart';
+import 'package:flutter_tratra/services/booking_api.dart';
+
+import 'booking_flow/booking_format.dart';
+import 'booking_flow/booking_widgets.dart';
 
 class BookingScreen extends StatefulWidget {
   const BookingScreen({super.key})
@@ -25,6 +29,29 @@ class BookingScreen extends StatefulWidget {
   @override
   State<BookingScreen> createState() => _BookingScreenState();
 }
+
+/// Montant transmis au paiement : tarif remisé s'il est inférieur au tarif, sinon le tarif.
+double _priceToPay(Service s) {
+  return (s.discountedPrice != null &&
+          s.discountedPrice! < (s.price ?? double.infinity))
+      ? s.discountedPrice!
+      : (s.price ?? 0.0);
+}
+
+/// Une remise n'est affichée que si les deux tarifs existent et que le remisé est inférieur.
+bool _showsDiscount(Service s) {
+  return s.discountedPrice != null &&
+      s.price != null &&
+      s.discountedPrice! < s.price!;
+}
+
+/// Le service a-t-il un tarif chiffré ? (sinon : « Sur devis » / « Prix non spécifié »).
+bool _hasAmount(Service s) => s.price != null || s.discountedPrice != null;
+
+/// `Service.fromJson` met une image « placeholder » quand l'API n'en fournit pas :
+/// on ne l'affiche pas, une icône sobre la remplace.
+bool _hasRealImage(String url) =>
+    url.isNotEmpty && !url.contains('placeholder');
 
 class _BookingScreenState extends State<BookingScreen> {
   late final BookingApi _bookingApi;
@@ -72,13 +99,18 @@ class _BookingScreenState extends State<BookingScreen> {
     }
 
     try {
-      final mine = await _bookingApi.listMine(pageSize: 100);
+      // Une actualisation manuelle doit réellement interroger l'API (le cache de
+      // BookingApi dure 5 min) ; le premier chargement garde le comportement normal.
+      final mine = await _bookingApi.listMine(
+        pageSize: 100,
+        forceRefresh: !showLoading,
+      );
       if (!mounted) return;
 
       setState(() => _bookings = mine);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _listError = e.toString());
+      setState(() => _listError = cleanError(e));
     } finally {
       if (mounted && showLoading) {
         setState(() => _loadingList = false);
@@ -86,16 +118,49 @@ class _BookingScreenState extends State<BookingScreen> {
     }
   }
 
+  /// Sélecteurs Material thémés avec les jetons de la marque.
+  Widget _pickerTheme(BuildContext context, Widget child) {
+    final base = Theme.of(context);
+    return Theme(
+      data: base.copyWith(
+        datePickerTheme: DatePickerThemeData(
+          backgroundColor: TtColors.surface,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: TtRadius.cardAll),
+        ),
+        timePickerTheme: TimePickerThemeData(
+          backgroundColor: TtColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: TtRadius.cardAll),
+          hourMinuteShape:
+              RoundedRectangleBorder(borderRadius: TtRadius.controlAll),
+          dialHandColor: TtColors.primaryDark,
+          dialBackgroundColor: TtColors.primarySoft,
+        ),
+      ),
+      child: child,
+    );
+  }
+
   Future<void> _selectDate(BuildContext context) async {
+    final now = DateTime.now();
+    // Les dimanches sont exclus : l'initialDate du sélecteur doit rester sélectionnable.
+    final initial = _selectedDate.weekday == DateTime.sunday
+        ? _selectedDate.add(const Duration(days: 1))
+        : _selectedDate;
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 60)),
+      initialDate: initial,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 60)),
       selectableDayPredicate: (DateTime day) {
         // Exclure les dimanches
         return day.weekday != DateTime.sunday;
       },
+      helpText: 'Choisir la date',
+      cancelText: 'Annuler',
+      confirmText: 'Valider',
+      builder: (ctx, child) => _pickerTheme(ctx, child!),
     );
 
     if (picked != null && picked != _selectedDate) {
@@ -107,14 +172,15 @@ class _BookingScreenState extends State<BookingScreen> {
     final picked = await showTimePicker(
       context: context,
       initialTime: _selectedTime,
-      builder: (BuildContext context, Widget? child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF00B14F),
-            ),
-          ),
-          child: child!,
+      helpText: 'Choisir l’heure',
+      cancelText: 'Annuler',
+      confirmText: 'Valider',
+      hourLabelText: 'Heure',
+      minuteLabelText: 'Minute',
+      builder: (BuildContext ctx, Widget? child) {
+        return MediaQuery(
+          data: MediaQuery.of(ctx).copyWith(alwaysUse24HourFormat: true),
+          child: _pickerTheme(ctx, child!),
         );
       },
     );
@@ -128,6 +194,41 @@ class _BookingScreenState extends State<BookingScreen> {
     return _addressController.text.trim().isNotEmpty &&
         _cityController.text.trim().isNotEmpty &&
         _postalController.text.trim().isNotEmpty;
+  }
+
+  /// Date et heure choisies, dans le même référentiel que la requête envoyée (UTC).
+  DateTime get _scheduledAt => DateTime.utc(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+        _selectedTime.hour,
+        _selectedTime.minute,
+      );
+
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded,
+                size: 20, color: TtColors.accent),
+            const SizedBox(width: TtSpace.s3),
+            Expanded(child: Text(message)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Appui sur le bouton principal : si un champ obligatoire manque, on affiche
+  /// les messages de validation ; sinon on lance la réservation.
+  Future<void> _onSubmitPressed() async {
+    if (_submitting) return;
+    if (!_isFormValid) {
+      _formKey.currentState?.validate();
+      return;
+    }
+    await _submitBooking();
   }
 
   Future<void> _submitBooking() async {
@@ -161,10 +262,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
       if (!mounted) return;
 
-      final priceToPay = (s.discountedPrice != null &&
-              s.discountedPrice! < (s.price ?? double.infinity))
-          ? s.discountedPrice!
-          : (s.price ?? 0.0);
+      final priceToPay = _priceToPay(s);
 
       await Navigator.pushNamed(
         context,
@@ -178,20 +276,15 @@ class _BookingScreenState extends State<BookingScreen> {
 
       // Afficher un message de succès au retour
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Réservation créée avec succès!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _showSuccess('Réservation créée avec succès !');
       }
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Échec de la réservation : ${e.toString()}'),
-          backgroundColor: Colors.red,
+          content: Text('Échec de la réservation : ${cleanError(e)}'),
+          backgroundColor: TtColors.dangerInk,
           action: SnackBarAction(
             label: 'Réessayer',
             textColor: Colors.white,
@@ -206,27 +299,55 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Widget _buildListScreen() {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Mes réservations'),
+      appBar: TratraAppBar(
+        title: 'Mes réservations',
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => _fetchMine(showLoading: false),
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _loadingList ? null : () => _fetchMine(showLoading: false),
             tooltip: 'Actualiser',
           ),
         ],
       ),
       body: RefreshIndicator(
+        color: TtColors.primaryDark,
         onRefresh: () => _fetchMine(showLoading: false),
         child: _loadingList
-            ? const BookingListShimmer()
+            ? const SingleChildScrollView(
+                physics: AlwaysScrollableScrollPhysics(),
+                child: TratraSkeletonList(count: 6),
+              )
             : _listError != null
-                ? ErrorRetryWidget(
-                    error: _listError!,
-                    onRetry: () => _fetchMine(),
+                ? _ScrollableCenter(
+                    child: TratraEmptyState(
+                      icon: Icons.error_outline_rounded,
+                      title: 'Une erreur est survenue',
+                      description: _listError,
+                      actions: [
+                        TratraButton(
+                          label: 'Réessayer',
+                          leading: const Icon(Icons.refresh_rounded),
+                          onPressed: () => _fetchMine(),
+                        ),
+                      ],
+                    ),
                   )
                 : _bookings.isEmpty
-                    ? const EmptyBookingsWidget()
+                    ? _ScrollableCenter(
+                        child: TratraEmptyState(
+                          icon: Icons.calendar_month_outlined,
+                          title: 'Aucune réservation',
+                          description: 'Vos réservations apparaîtront ici.',
+                          actions: [
+                            TratraButton(
+                              label: 'Découvrir les services',
+                              trailing: const Icon(Icons.arrow_forward_rounded),
+                              onPressed: () => Navigator.of(context)
+                                  .pushNamed(RouteNames.allServices),
+                            ),
+                          ],
+                        ),
+                      )
                     : BookingListView(
                         bookings: _bookings,
                         onRefresh: () => _fetchMine(showLoading: false),
@@ -237,67 +358,99 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Widget _buildBookingForm() {
     final s = widget.service!;
-    final imageUrl = s.imageUrl.isNotEmpty
-        ? s.imageUrl
-        : 'https://via.placeholder.com/600x400?text=Service';
+    final scheduledAt = _scheduledAt;
+    final isPast = !scheduledAt.isAfter(DateTime.now().toUtc());
+    // Clavier ouvert : la barre d'action basse libère la place aux champs.
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Réserver un service'),
-        elevation: 0,
-      ),
+      appBar: const TratraAppBar(title: 'Réserver un service'),
       body: Form(
         key: _formKey,
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _ServiceCard(service: s, imageUrl: imageUrl),
-                    const SizedBox(height: 24),
-
-                    // Section Date et Heure
-                    _DateTimeSection(
-                      selectedDate: _selectedDate,
-                      selectedTime: _selectedTime,
-                      onDateSelected: () => _selectDate(context),
-                      onTimeSelected: () => _selectTime(context),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Section Adresse
-                    _AddressSection(
-                      addressController: _addressController,
-                      cityController: _cityController,
-                      postalController: _postalController,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Section Notes
-                    _NotesSection(notesController: _notesController),
-                    const SizedBox(height: 80),
-                  ],
+        child: BookingContentWidth(
+          child: ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(
+                TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s8),
+            children: [
+              const BookingReveal(
+                child: _FormIntro(),
+              ),
+              const SizedBox(height: TtSpace.s4),
+              BookingReveal(
+                index: 1,
+                child: _ServiceCard(service: s),
+              ),
+              const SizedBox(height: TtSpace.s4),
+              BookingReveal(
+                index: 2,
+                child: _DateTimeSection(
+                  selectedDate: _selectedDate,
+                  selectedTime: _selectedTime,
+                  isPast: isPast,
+                  onDateSelected: () => _selectDate(context),
+                  onTimeSelected: () => _selectTime(context),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: TtSpace.s4),
+              BookingReveal(
+                index: 3,
+                child: _AddressSection(
+                  addressController: _addressController,
+                  cityController: _cityController,
+                  postalController: _postalController,
+                ),
+              ),
+              const SizedBox(height: TtSpace.s4),
+              BookingReveal(
+                index: 4,
+                child: _NotesSection(notesController: _notesController),
+              ),
+              const SizedBox(height: TtSpace.s4),
+              BookingReveal(
+                index: 5,
+                child: _RecapCard(
+                  service: s,
+                  scheduledAt: scheduledAt,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      bottomNavigationBar: _BookingBottomBar(
-        isSubmitting: _submitting,
-        isFormValid: _isFormValid,
-        service: s,
-        onSubmit: _submitBooking,
-      ),
+      bottomNavigationBar: keyboardOpen
+          ? null
+          : _BookingBottomBar(
+              isSubmitting: _submitting,
+              service: s,
+              onSubmit: _onSubmitPressed,
+            ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return widget.isDirect ? _buildBookingForm() : _buildListScreen();
+  }
+}
+
+/// Centre un état (vide / erreur) dans une zone défilante : le tirer pour actualiser
+/// reste possible.
+class _ScrollableCenter extends StatelessWidget {
+  const _ScrollableCenter({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(child: child),
+        ),
+      ),
+    );
   }
 }
 
@@ -316,135 +469,278 @@ class BookingListView extends StatelessWidget {
     // Ici, le RefreshIndicator parent gère déjà le pull-to-refresh.
     // On ne met qu'une ListView.
     return ListView.separated(
-      padding: const EdgeInsets.all(12),
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(TtSpace.s4),
       itemCount: bookings.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, __) => const SizedBox(height: TtSpace.s3),
       itemBuilder: (context, index) {
         final b = bookings[index];
-        return Card(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(12),
-            title: Text(
-              'Réservation #${b.id}',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 4),
-                if (b.serviceTitle != null && b.serviceTitle!.isNotEmpty)
-                  Text(b.serviceTitle!),
-                if (b.status != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      'Statut : ${b.status}',
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                  ),
-                if (b.bookingDate != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      'Le ${b.bookingDate}',
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                  ),
-              ],
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              // TODO: Naviguer vers le détail d'une réservation si tu as un écran dédié.
-            },
-          ),
+        return _BookingTile(
+          booking: b,
+          onTap: () async {
+            // Détail d'une réservation : écran de suivi existant.
+            await Navigator.pushNamed(
+              context,
+              RouteNames.tracking,
+              arguments: TrackingArgs(b.id),
+            );
+            // Au retour, l'état a pu changer (annulation…) : on actualise la liste.
+            if (context.mounted) await onRefresh();
+          },
         );
       },
     );
   }
 }
 
-// Widgets décomposés pour meilleure lisibilité
-class _ServiceCard extends StatelessWidget {
-  final Service service;
-  final String imageUrl;
-
-  const _ServiceCard({required this.service, required this.imageUrl});
+/// Ligne de la liste « Mes réservations » (données réelles uniquement).
+class _BookingTile extends StatelessWidget {
+  const _BookingTile({required this.booking, required this.onTap});
+  final Booking booking;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.network(
-              imageUrl,
-              width: 80,
-              height: 80,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                width: 80,
-                height: 80,
-                color: Colors.grey[300],
-                child:
-                    const Icon(Icons.home_repair_service, color: Colors.grey),
-              ),
-              loadingBuilder: (_, child, progress) {
-                if (progress == null) return child;
-                return Container(
-                  width: 80,
-                  height: 80,
-                  color: Colors.grey[300],
-                  child: const CircularProgressIndicator(),
-                );
-              },
+    final b = booking;
+    final title = (b.serviceTitle != null && b.serviceTitle!.isNotEmpty)
+        ? b.serviceTitle!
+        : 'Réservation #${b.id}';
+    final when = b.bookingDate == null ? null : formatDateTimeShort(b.bookingDate!);
+    final hasAmount = b.amount != null && b.amount! > 0;
+
+    return TratraCard(
+      padding: TratraCard.compact,
+      onTap: onTap,
+      child: Row(
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: TtColors.primarySoft,
+              borderRadius: TtRadius.panelAll,
+            ),
+            child: const SizedBox(
+              width: TtSpace.s12,
+              height: TtSpace.s12,
+              child: Icon(Icons.home_repair_service_outlined,
+                  color: TtColors.primaryDark),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: TtSpace.s3),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  service.title,
+                  title,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                  style: TratraTheme.style(TtType.title),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: TtSpace.s1),
                 Text(
-                  service.duration != null
-                      ? service.durationDisplay
-                      : 'Durée non spécifiée',
-                  style: const TextStyle(color: Colors.grey),
+                  'Réservation #${b.id}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.caption, color: TtColors.ash),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  (service.discountedPrice != null &&
-                          service.price != null &&
-                          service.discountedPrice! < service.price!)
-                      ? '${service.discountedPrice!.toStringAsFixed(0)} FCFA'
-                      : service.price != null
-                          ? '${service.price!.toStringAsFixed(0)} FCFA'
-                          : service.priceDisplay,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF00B14F),
+                const SizedBox(height: TtSpace.s2),
+                TratraStatusBadge(TratraStatus.booking, b.status),
+                if (when != null) ...[
+                  const SizedBox(height: TtSpace.s2),
+                  Row(
+                    children: [
+                      const Icon(Icons.event_outlined,
+                          size: 16, color: TtColors.fog),
+                      const SizedBox(width: TtSpace.s1 + 2),
+                      Expanded(
+                        child: Text(
+                          when,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TratraTheme.style(TtType.bodySm,
+                              color: TtColors.inkSoft),
+                        ),
+                      ),
+                    ],
                   ),
+                ],
+                if (hasAmount) ...[
+                  const SizedBox(height: TtSpace.s1),
+                  Text(
+                    formatFcfa(b.amount!),
+                    style: TratraTheme.style(TtType.bodySm,
+                            color: TtColors.primaryDark)
+                        .copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: TtSpace.s2),
+          const Icon(Icons.chevron_right_rounded, color: TtColors.fog),
+        ],
+      ),
+    );
+  }
+}
+
+// Widgets décomposés pour meilleure lisibilité
+
+/// En-tête de la page : sur-titre en pastille + titre + consigne.
+class _FormIntro extends StatelessWidget {
+  const _FormIntro();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const BookingEyebrow('Réservation'),
+        const SizedBox(height: TtSpace.s3),
+        Semantics(
+          header: true,
+          child: Text(
+            'Planifiez votre intervention',
+            style: TratraTheme.style(TtType.h1),
+          ),
+        ),
+        const SizedBox(height: TtSpace.s2),
+        Text(
+          'Indiquez la date, l’heure et l’adresse de l’intervention.',
+          style: TratraTheme.style(TtType.body, color: TtColors.ash),
+        ),
+      ],
+    );
+  }
+}
+
+class _ServiceCard extends StatelessWidget {
+  final Service service;
+
+  const _ServiceCard({required this.service});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = service;
+    final discounted = _showsDiscount(s);
+    final priceText = discounted
+        ? formatFcfa(s.discountedPrice!)
+        : s.price != null
+            ? formatFcfa(s.price!)
+            : s.priceDisplay;
+
+    return TratraCard(
+      padding: TratraCard.compact,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ServiceImage(url: s.imageUrl),
+          const SizedBox(width: TtSpace.s4),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (s.categoryName.isNotEmpty) ...[
+                  BookingEyebrow(s.categoryName),
+                  const SizedBox(height: TtSpace.s2),
+                ],
+                Text(
+                  s.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.h3),
+                ),
+                const SizedBox(height: TtSpace.s1 + 2),
+                Row(
+                  children: [
+                    const Icon(Icons.schedule_rounded,
+                        size: 16, color: TtColors.fog),
+                    const SizedBox(width: TtSpace.s1 + 2),
+                    Expanded(
+                      child: Text(
+                        s.duration != null
+                            ? s.durationDisplay
+                            : 'Durée non spécifiée',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TratraTheme.style(TtType.bodySm,
+                            color: TtColors.ash),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: TtSpace.s2),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.end,
+                  spacing: TtSpace.s2,
+                  children: [
+                    Text(
+                      priceText,
+                      style: TratraTheme.style(TtType.h3,
+                          color: TtColors.primaryDark),
+                    ),
+                    if (discounted)
+                      Text(
+                        formatFcfa(s.price!),
+                        style: TratraTheme.style(TtType.bodySm,
+                                color: TtColors.fog)
+                            .copyWith(
+                          decoration: TextDecoration.lineThrough,
+                          decorationColor: TtColors.fog,
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),
           ),
-        ]),
+        ],
+      ),
+    );
+  }
+}
+
+/// Photo réelle du service ; sinon (ou si elle ne charge pas) une icône sobre.
+class _ServiceImage extends StatelessWidget {
+  const _ServiceImage({required this.url});
+  final String url;
+
+  static const double _size = 88;
+
+  Widget _fallback() => DecoratedBox(
+        decoration: BoxDecoration(
+          color: TtColors.primarySoft,
+          borderRadius: TtRadius.panelAll,
+        ),
+        child: const SizedBox(
+          width: _size,
+          height: _size,
+          child: Icon(Icons.home_repair_service_outlined,
+              size: 32, color: TtColors.primaryDark),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_hasRealImage(url)) return ExcludeSemantics(child: _fallback());
+    return ExcludeSemantics(
+      child: ClipRRect(
+        borderRadius: TtRadius.panelAll,
+        child: Image.network(
+          url,
+          width: _size,
+          height: _size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _fallback(),
+          loadingBuilder: (_, child, progress) {
+            if (progress == null) return child;
+            return const TratraSkeleton(
+              width: _size,
+              height: _size,
+              radius: TtRadius.panel,
+            );
+          },
+        ),
       ),
     );
   }
@@ -453,51 +749,76 @@ class _ServiceCard extends StatelessWidget {
 class _DateTimeSection extends StatelessWidget {
   final DateTime selectedDate;
   final TimeOfDay selectedTime;
+  final bool isPast;
   final VoidCallback onDateSelected;
   final VoidCallback onTimeSelected;
 
   const _DateTimeSection({
     required this.selectedDate,
     required this.selectedTime,
+    required this.isPast,
     required this.onDateSelected,
     required this.onTimeSelected,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Date et heure',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _SelectorCard(
-                label: 'Date',
-                value: '${selectedDate.day.toString().padLeft(2, '0')}/'
-                    '${selectedDate.month.toString().padLeft(2, '0')}/'
-                    '${selectedDate.year}',
-                icon: Icons.calendar_today,
-                onTap: onDateSelected,
+    return BookingStepCard(
+      step: 1,
+      title: 'Date et heure',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _SelectorCard(
+                  label: 'Date',
+                  value: formatDateNumeric(selectedDate),
+                  icon: Icons.calendar_today_outlined,
+                  onTap: onDateSelected,
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _SelectorCard(
-                label: 'Heure',
-                value: '${selectedTime.hour.toString().padLeft(2, '0')}:'
-                    '${selectedTime.minute.toString().padLeft(2, '0')}',
-                icon: Icons.access_time,
-                onTap: onTimeSelected,
+              const SizedBox(width: TtSpace.s3),
+              Expanded(
+                child: _SelectorCard(
+                  label: 'Heure',
+                  value: formatTime(selectedTime.hour, selectedTime.minute),
+                  icon: Icons.schedule_rounded,
+                  onTap: onTimeSelected,
+                ),
               ),
+            ],
+          ),
+          const SizedBox(height: TtSpace.s3),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 1),
+                child: Icon(Icons.info_outline_rounded,
+                    size: 16, color: TtColors.fog),
+              ),
+              const SizedBox(width: TtSpace.s2),
+              Expanded(
+                child: Text(
+                  'Les dimanches ne sont pas disponibles.',
+                  style: TratraTheme.style(TtType.caption,
+                      color: TtColors.ash),
+                ),
+              ),
+            ],
+          ),
+          if (isPast) ...[
+            const SizedBox(height: TtSpace.s3),
+            const TratraAlert(
+              tone: TratraAlertTone.warning,
+              message: 'Veuillez choisir une date et une heure futures.',
             ),
           ],
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -515,68 +836,66 @@ class _AddressSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Adresse',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: addressController,
-          textInputAction: TextInputAction.next,
-          decoration: const InputDecoration(
-            hintText: 'Entrez votre adresse complète',
-            prefixIcon: Icon(Icons.location_on),
-            border: OutlineInputBorder(),
+    return BookingStepCard(
+      step: 2,
+      title: 'Adresse',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TratraInput(
+            controller: addressController,
+            label: 'Adresse complète',
+            hint: 'Entrez votre adresse complète',
+            leadingIcon: Icons.location_on_outlined,
+            required: true,
+            textInputAction: TextInputAction.next,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Veuillez renseigner votre adresse';
+              }
+              return null;
+            },
           ),
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return 'Veuillez renseigner votre adresse';
-            }
-            return null;
-          },
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: cityController,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  hintText: 'Ville',
-                  border: OutlineInputBorder(),
+          const SizedBox(height: TtSpace.s4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TratraInput(
+                  controller: cityController,
+                  label: 'Ville',
+                  required: true,
+                  textInputAction: TextInputAction.next,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Veuillez renseigner votre ville';
+                    }
+                    return null;
+                  },
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Veuillez renseigner votre ville';
-                  }
-                  return null;
-                },
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextFormField(
-                controller: postalController,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  hintText: 'Code postal',
-                  border: OutlineInputBorder(),
+              const SizedBox(width: TtSpace.s3),
+              Expanded(
+                child: TratraInput(
+                  controller: postalController,
+                  label: 'Code postal',
+                  required: true,
+                  textInputAction: TextInputAction.next,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Veuillez renseigner votre code postal';
+                    }
+                    return null;
+                  },
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Veuillez renseigner votre code postal';
-                  }
-                  return null;
-                },
               ),
-            ),
-          ],
-        ),
-      ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -588,106 +907,122 @@ class _NotesSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Notes (optionnel)',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: notesController,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: 'Informations supplémentaires pour l\'artisan...',
-            border: OutlineInputBorder(),
-            alignLabelWithHint: true,
+    return BookingStepCard(
+      step: 3,
+      title: 'Notes (optionnel)',
+      child: TratraInput(
+        controller: notesController,
+        maxLines: 3,
+        hint: 'Informations supplémentaires pour l’artisan…',
+      ),
+    );
+  }
+}
+
+/// Récapitulatif : uniquement des données réelles (service, créneau choisi, tarifs du service).
+class _RecapCard extends StatelessWidget {
+  const _RecapCard({required this.service, required this.scheduledAt});
+  final Service service;
+  final DateTime scheduledAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = service;
+    final discounted = _showsDiscount(s);
+
+    return BookingStepCard(
+      icon: Icons.receipt_long_outlined,
+      title: 'Récapitulatif',
+      child: Column(
+        children: [
+          BookingInfoRow(label: 'Service', value: s.title),
+          const SizedBox(height: TtSpace.s3),
+          BookingInfoRow(
+            label: 'Date et heure',
+            value: formatDateTimeLong(scheduledAt),
           ),
-        ),
-      ],
+          if (_hasAmount(s)) ...[
+            if (discounted) ...[
+              const SizedBox(height: TtSpace.s3),
+              BookingInfoRow(
+                label: 'Tarif',
+                value: formatFcfa(s.price!),
+                strike: true,
+              ),
+              const SizedBox(height: TtSpace.s3),
+              BookingInfoRow(
+                label: 'Remise',
+                value: '−${formatFcfa(s.price! - s.discountedPrice!)}',
+                valueColor: TtColors.successInk,
+              ),
+            ],
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: TtSpace.s4),
+              child: Divider(),
+            ),
+            BookingInfoRow(
+              label: 'Total à payer',
+              value: formatFcfa(_priceToPay(s)),
+              strong: true,
+            ),
+          ] else ...[
+            const SizedBox(height: TtSpace.s3),
+            BookingInfoRow(label: 'Tarif', value: s.priceDisplay),
+          ],
+        ],
+      ),
     );
   }
 }
 
 class _BookingBottomBar extends StatelessWidget {
   final bool isSubmitting;
-  final bool isFormValid;
   final Service service;
   final Future<void> Function() onSubmit;
 
   const _BookingBottomBar({
     required this.isSubmitting,
-    required this.isFormValid,
     required this.service,
     required this.onSubmit,
   });
 
   @override
   Widget build(BuildContext context) {
-    final priceToPay = (service.discountedPrice != null &&
-            service.discountedPrice! < (service.price ?? double.infinity))
-        ? service.discountedPrice!
-        : (service.price ?? 0.0);
+    final hasAmount = _hasAmount(service);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
-          ),
-        ],
-      ),
+    return BookingStickyBar(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Total à payer',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
               Text(
-                '${priceToPay.toStringAsFixed(0)} FCFA',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF00B14F),
+                hasAmount ? 'Total à payer' : 'Tarif',
+                style: TratraTheme.style(TtType.title),
+              ),
+              const SizedBox(width: TtSpace.s3),
+              Flexible(
+                child: Text(
+                  hasAmount
+                      ? formatFcfa(_priceToPay(service))
+                      : service.priceDisplay,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.h3,
+                      color: TtColors.primaryDark),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          AnimatedButton(
-            onPressed: () async {
-              if (isFormValid && !isSubmitting) {
-                await onSubmit();
-              }
-            },
-            child: isSubmitting
-                ? const SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation(Colors.white),
-                    ),
-                  )
-                : const Text(
-                    'Continuer vers le paiement',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+          const SizedBox(height: TtSpace.s3),
+          TratraButton(
+            label: 'Confirmer la réservation',
+            size: TratraButtonSize.lg,
+            block: true,
+            loading: isSubmitting,
+            trailing: const Icon(Icons.arrow_forward_rounded),
+            onPressed: () => onSubmit(),
           ),
         ],
       ),
@@ -695,6 +1030,7 @@ class _BookingBottomBar extends StatelessWidget {
   }
 }
 
+/// Champ de sélection (date / heure) au style des champs de saisie du Design System.
 class _SelectorCard extends StatelessWidget {
   final String label;
   final String value;
@@ -715,30 +1051,49 @@ class _SelectorCard extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 14,
-            color: Colors.grey,
-          ),
+          style: TratraTheme.style(TtType.bodySm)
+              .copyWith(fontWeight: FontWeight.w600, fontSize: 14),
         ),
-        const SizedBox(height: 4),
-        GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade300),
+        const SizedBox(height: TtSpace.s1 + 2),
+        Semantics(
+          button: true,
+          label: '$label : $value. Modifier',
+          excludeSemantics: true,
+          child: Material(
+            color: TtColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: TtRadius.controlAll,
+              side: const BorderSide(color: TtColors.line),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  value,
-                  style: const TextStyle(fontSize: 16),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              child: ConstrainedBox(
+                constraints:
+                    const BoxConstraints(minHeight: TtLayout.controlHeight + 4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: TtSpace.s3, vertical: TtSpace.s3),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            value,
+                            maxLines: 1,
+                            style: TratraTheme.style(TtType.body)
+                                .copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: TtSpace.s2),
+                      Icon(icon, size: 18, color: TtColors.primaryDark),
+                    ],
+                  ),
                 ),
-                Icon(icon, color: Colors.grey),
-              ],
+              ),
             ),
           ),
         ),

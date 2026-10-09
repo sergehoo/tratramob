@@ -1,5 +1,4 @@
 // lib/services/category_service.dart
-import 'package:http/http.dart' as http;
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/models/category.dart';
 

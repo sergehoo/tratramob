@@ -1,14 +1,16 @@
 // lib/screens/artisan_profile_screen.dart
-import 'dart:async';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
+import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/artisan.dart';
 import 'package:flutter_tratra/models/service.dart';
+import 'package:flutter_tratra/routes.dart';
+import 'package:flutter_tratra/screens/detail_shared/detail_helpers.dart';
+import 'package:flutter_tratra/screens/detail_shared/service_mini_card.dart';
 import 'package:flutter_tratra/screens/service_detail_screen.dart';
 
 class ArtisanProfileScreen extends StatefulWidget {
@@ -29,16 +31,6 @@ class ArtisanProfileScreen extends StatefulWidget {
 }
 
 class _ArtisanProfileScreenState extends State<ArtisanProfileScreen> {
-  // UI
-  static const _bg = Color(0xFFF8F9FA);
-  static const _card = Color(0xFFFFFFFF);
-  static const _border = Color(0xFFE5E5E5);
-  static const _textPrimary = Color(0xFF1E272E);
-  static const _textSecondary = Color(0xFF636E72);
-  static const _accent = Color(0xFF00B14F);
-
-  static const _phAvatar = 'https://via.placeholder.com/300x300?text=Artisan';
-
   late final BaseApi _api;
 
   String?
@@ -53,6 +45,8 @@ class _ArtisanProfileScreenState extends State<ArtisanProfileScreen> {
   bool _loadingServices = true;
   String? _errorServices;
   List<Service> _services = [];
+
+  bool get _missingId => _artisanId == null || _artisanId!.isEmpty;
 
   @override
   void initState() {
@@ -82,18 +76,6 @@ class _ArtisanProfileScreenState extends State<ArtisanProfileScreen> {
   }
 
   // ---------- helpers ----------
-  String _safeUrl(String raw, String fallback) {
-    final u = raw.trim();
-    if (u.isEmpty) return fallback;
-    final p = Uri.tryParse(u);
-    if (p == null ||
-        !p.hasScheme ||
-        !(p.isScheme('http') || p.isScheme('https'))) {
-      return fallback;
-    }
-    return u;
-  }
-
   Future<http.Response> _getPublic(Uri uri) async {
     final c = _api.client;
     var r = await c.get(uri, headers: await _api.getHeaders(withAuth: true));
@@ -103,25 +85,52 @@ class _ArtisanProfileScreenState extends State<ArtisanProfileScreen> {
     return r;
   }
 
+  double _toDouble(dynamic v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v.replaceAll(',', '.')) ?? 0;
+    return 0;
+  }
+
+  int _toInt(dynamic v) {
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v) ?? 0;
+    return 0;
+  }
+
   Artisan _artisanFromBackend(Map<String, dynamic> j) {
-    // Mapping tolérant
+    // Mapping tolérant : accepte les clés historiques de l'écran ET celles de la
+    // carte publique du backend (display_name, photo, online, is_verified, skills…).
+    final rawSpecialties = j['specialties'] ?? j['skills'];
     return Artisan(
       id: (j['id'] ?? '').toString(),
-      name: (j['name'] ?? j['full_name'] ?? '').toString(),
+      name: (j['name'] ?? j['full_name'] ?? j['display_name'] ?? '').toString(),
       profession: (j['profession'] ?? j['specialty'] ?? '').toString(),
-      rating: (j['rating'] ?? j['rating_avg'] ?? 0).toDouble(),
-      reviews: (j['reviews'] ?? j['review_count'] ?? 0) as int,
-      imageUrl:
-          (j['imageUrl'] ?? j['image_url'] ?? j['avatar'] ?? '').toString(),
-      distance: (j['distance'] ?? 0).toDouble(),
-      isAvailable: (j['isAvailable'] ?? j['is_available'] ?? false) == true,
-      hourlyRate: (j['hourlyRate'] ?? j['hourly_rate'] ?? 0).toDouble(),
-      isCertified: (j['isCertified'] ?? j['is_certified'] ?? false) == true,
+      rating: _toDouble(j['rating'] ?? j['rating_avg']),
+      reviews: _toInt(j['reviews'] ?? j['review_count']),
+      imageUrl: (j['imageUrl'] ??
+              j['image_url'] ??
+              j['avatar'] ??
+              j['photo'] ??
+              '')
+          .toString(),
+      distance: _toDouble(j['distance']),
+      isAvailable:
+          (j['isAvailable'] ?? j['is_available'] ?? j['online'] ?? false) ==
+              true,
+      hourlyRate: _toDouble(j['hourlyRate'] ?? j['hourly_rate']),
+      isCertified: (j['isCertified'] ??
+              j['is_certified'] ??
+              j['is_verified'] ??
+              false) ==
+          true,
       responseTime: (j['responseTime'] ?? j['response_time'])?.toString(),
-      yearsExperience:
-          (j['yearsExperience'] ?? j['years_experience'] ?? 0) as int,
-      specialties: (j['specialties'] is List)
-          ? List<String>.from(j['specialties'])
+      yearsExperience: _toInt(
+          j['yearsExperience'] ?? j['years_experience'] ?? j['experience_years']),
+      specialties: (rawSpecialties is List)
+          ? rawSpecialties
+              .map((e) => e is Map ? (e['name'] ?? '').toString() : '$e')
+              .where((s) => s.isNotEmpty)
+              .toList()
           : <String>[],
       description: (j['description'] ?? j['bio'] ?? '').toString(),
     );
@@ -153,7 +162,7 @@ class _ArtisanProfileScreenState extends State<ArtisanProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorInfo = e.toString();
+        _errorInfo = friendlyError(e);
         _loadingInfo = false;
       });
     }
@@ -194,385 +203,417 @@ class _ArtisanProfileScreenState extends State<ArtisanProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorServices = e.toString();
+        _errorServices = friendlyError(e);
         _loadingServices = false;
       });
     }
+  }
+
+  // ---------- navigation ----------
+  void _contact(Artisan a, String name) {
+    Navigator.pushNamed(
+      context,
+      RouteNames.messaging,
+      arguments: MessagingArgs(artisanName: name, artisanImage: a.imageUrl),
+    );
+  }
+
+  void _openService(Service s) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ServiceDetailScreen(service: s),
+      ),
+    );
+  }
+
+  void _browseServices() {
+    Navigator.pushNamed(context, RouteNames.allServices);
   }
 
   // ---------- UI ----------
   @override
   Widget build(BuildContext context) {
     final a = _artisan;
-
     final name = (a?.name ?? '').isNotEmpty ? a!.name : 'Artisan';
-    final avatar = _safeUrl(a?.imageUrl ?? '', _phAvatar);
-    final ratingVal = a?.rating ?? 0;
-    final reviews = a?.reviews ?? 0;
 
     return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        title: const Text('Profil artisan'),
-        backgroundColor: _card,
-      ),
+      backgroundColor: TtColors.canvas,
+      appBar: const TratraAppBar(title: 'Profil artisan'),
       body: RefreshIndicator(
         onRefresh: _loadAll,
-        color: _accent,
+        color: TtColors.primary,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s8),
           children: [
-            // Si aucun ID disponible : info
-            if (_artisanId == null || _artisanId!.isEmpty) ...[
-              const SizedBox(height: 24),
-              const Center(
-                child: Text(
-                  "Impossible d’afficher le profil : identifiant manquant.",
-                  style: TextStyle(color: Colors.red),
-                ),
+            // Profil déjà affiché mais non actualisable : on le dit clairement.
+            if (a != null && (_missingId || _errorInfo != null)) ...[
+              TratraAlert(
+                tone: TratraAlertTone.danger,
+                title: _missingId ? 'Profil non actualisable' : 'Profil non actualisé',
+                message: _missingId
+                    ? 'Identifiant artisan manquant : ce profil ne peut pas être mis à jour.'
+                    : _errorInfo!,
+                action: _missingId
+                    ? null
+                    : TratraButton(
+                        label: 'Réessayer',
+                        size: TratraButtonSize.sm,
+                        variant: TratraButtonVariant.outline,
+                        onPressed: _loadInfo,
+                      ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: TtSpace.s4),
             ],
 
-            // Header
-            Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(60),
-                  child: CachedNetworkImage(
-                    imageUrl: avatar,
-                    width: 72,
-                    height: 72,
-                    fit: BoxFit.cover,
-                    placeholder: (_, __) =>
-                        Container(width: 72, height: 72, color: Colors.black12),
-                    errorWidget: (_, __, ___) => Container(
-                      width: 72,
-                      height: 72,
-                      color: Colors.black12,
-                      child:
-                          const Icon(Icons.person_outline, color: Colors.grey),
+            // En-tête
+            if (a != null)
+              _ProfileHeader(
+                artisan: a,
+                name: name,
+                onContact: () => _contact(a, name),
+              )
+            else if (_loadingInfo)
+              const _HeaderSkeleton()
+            else
+              TratraCard(
+                variant: TratraCardVariant.flat,
+                padding: EdgeInsets.zero,
+                child: TratraEmptyState(
+                  compact: true,
+                  icon: Icons.person_off_outlined,
+                  title: 'Profil indisponible',
+                  description: _missingId
+                      ? 'Identifiant artisan manquant : impossible d’afficher ce profil.'
+                      : (_errorInfo ?? 'Les informations de cet artisan n’ont pas pu être chargées.'),
+                  actions: [
+                    if (!_missingId)
+                      TratraButton(
+                        label: 'Réessayer',
+                        variant: TratraButtonVariant.soft,
+                        onPressed: _loadInfo,
+                      ),
+                    TratraButton(
+                      label: 'Parcourir les services',
+                      variant: TratraButtonVariant.outline,
+                      onPressed: _browseServices,
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: (_loadingInfo && a == null)
-                      ? const LinearProgressIndicator(minHeight: 10)
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              name,
-                              style: const TextStyle(
-                                color: _textPrimary,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                if (ratingVal > 0) ...[
-                                  const Icon(Icons.star,
-                                      color: Colors.amber, size: 16),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    ratingVal.toStringAsFixed(1),
-                                    style: const TextStyle(
-                                        color: _textSecondary,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                  if (reviews > 0) ...[
-                                    const SizedBox(width: 6),
-                                    Text('($reviews)',
-                                        style: const TextStyle(
-                                            color: _textSecondary)),
-                                  ],
-                                  const SizedBox(width: 8),
-                                ],
-                                if ((a?.profession ?? '').isNotEmpty)
-                                  Text(
-                                    a!.profession,
-                                    style:
-                                        const TextStyle(color: _textSecondary),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 6,
-                              children: [
-                                if (a?.isAvailable == true)
-                                  const _ChipInfo(
-                                    icon: Icons.check_circle_outline,
-                                    label: 'Disponible',
-                                  ),
-                                if (a?.isCertified == true)
-                                  const _ChipInfo(
-                                    icon: Icons.verified_outlined,
-                                    label: 'Certifié',
-                                  ),
-                                if ((a?.hourlyRate ?? 0) > 0)
-                                  _ChipInfo(
-                                    icon: Icons.attach_money,
-                                    label:
-                                        '${a!.hourlyRate.toStringAsFixed(0)} FCFA/h',
-                                  ),
-                                if ((a?.yearsExperience ?? 0) > 0)
-                                  _ChipInfo(
-                                    icon: Icons.badge_outlined,
-                                    label:
-                                        '${a!.yearsExperience} an${(a.yearsExperience) > 1 ? "s" : ""} exp.',
-                                  ),
-                                if ((a?.responseTime ?? '').isNotEmpty)
-                                  _ChipInfo(
-                                    icon: Icons.schedule_outlined,
-                                    label: 'Réponse: ${a!.responseTime}',
-                                  ),
-                                if ((a?.distance ?? 0) > 0)
-                                  _ChipInfo(
-                                    icon: Icons.place_outlined,
-                                    label:
-                                        '${a!.distance.toStringAsFixed(1)} km',
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                ),
-                IconButton(
-                  onPressed: () {
-                    // Flow message éventuel
-                  },
-                  icon: const Icon(Icons.chat_bubble_outline),
-                  tooltip: 'Contacter',
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            // Spécialités
-            if ((a?.specialties ?? []).isNotEmpty) ...[
-              const Text('Spécialités',
-                  style: TextStyle(
-                      color: _textPrimary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: (a?.specialties ?? [])
-                    .map((s) => Chip(
-                          label: Text(s),
-                          backgroundColor: Colors.white,
-                          side: const BorderSide(color: _border),
-                        ))
-                    .toList(),
               ),
-              const SizedBox(height: 16),
-            ],
 
-            // À propos
-            if ((a?.description ?? '').isNotEmpty) ...[
-              const Text('À propos',
-                  style: TextStyle(
-                      color: _textPrimary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16)),
-              const SizedBox(height: 8),
-              Text(
-                a?.description ?? '',
-                style: const TextStyle(color: _textPrimary, height: 1.35),
-              ),
-              const SizedBox(height: 16),
-            ],
+            if (a != null) ..._buildDetails(a),
 
             // Services proposés
-            Row(
-              children: const [
-                Text('Services proposés',
-                    style: TextStyle(
-                        color: _textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16)),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            if (_loadingServices)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_errorServices != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'Erreur: $_errorServices',
-                  style: const TextStyle(color: Colors.red),
-                ),
-              )
-            else if (_services.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Center(child: Text('Aucun service pour le moment')),
-              )
-            else
-              GridView.builder(
-                itemCount: _services.length,
-                padding: const EdgeInsets.only(top: 6),
-                physics: const NeverScrollableScrollPhysics(),
-                shrinkWrap: true,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: .78,
-                ),
-                itemBuilder: (_, i) {
-                  final s = _services[i];
-                  return _ServiceCardMini(
-                    service: s,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ServiceDetailScreen(service: s),
-                        ),
-                      );
-                    },
-                  );
-                },
+            if (!_missingId) ...[
+              const TratraSectionHeader(
+                title: 'Services proposés',
+                padding: EdgeInsets.fromLTRB(0, TtSpace.s8, 0, TtSpace.s3),
               ),
+              _buildServices(context),
+            ],
           ],
         ),
       ),
     );
   }
-}
 
-class _ChipInfo extends StatelessWidget {
-  const _ChipInfo({required this.icon, required this.label});
-  final IconData icon;
-  final String label;
+  List<Widget> _buildDetails(Artisan a) {
+    final facts = <({IconData icon, String label, String value})>[
+      if (a.hourlyRate > 0)
+        (
+          icon: Icons.payments_outlined,
+          label: 'Tarif horaire',
+          value: '${groupDigits(a.hourlyRate.toStringAsFixed(0))} FCFA/h',
+        ),
+      if (a.yearsExperience > 0)
+        (
+          icon: Icons.workspace_premium_outlined,
+          label: 'Expérience',
+          value: '${a.yearsExperience} an${a.yearsExperience > 1 ? "s" : ""}',
+        ),
+      if ((a.responseTime ?? '').isNotEmpty)
+        (
+          icon: Icons.schedule_outlined,
+          label: 'Temps de réponse',
+          value: a.responseTime!,
+        ),
+      if (a.distance > 0)
+        (
+          icon: Icons.place_outlined,
+          label: 'Distance',
+          value: '${a.distance.toStringAsFixed(1).replaceAll('.', ',')} km',
+        ),
+    ];
 
-  @override
-  Widget build(BuildContext context) {
-    const border = Color(0xFFE5E5E5);
-    return Chip(
-      avatar: Icon(icon, size: 16),
-      label: Text(label),
-      side: const BorderSide(color: border),
-      backgroundColor: Colors.white,
+    return [
+      if (facts.isNotEmpty) ...[
+        const SizedBox(height: TtSpace.s4),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final w = (constraints.maxWidth - TtSpace.s3) / 2;
+            return Wrap(
+              spacing: TtSpace.s3,
+              runSpacing: TtSpace.s3,
+              children: [
+                for (final f in facts)
+                  SizedBox(
+                    width: w,
+                    child: _FactTile(icon: f.icon, label: f.label, value: f.value),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
+
+      // Spécialités
+      if (a.specialties.isNotEmpty) ...[
+        const TratraSectionHeader(
+          title: 'Spécialités',
+          padding: EdgeInsets.fromLTRB(0, TtSpace.s8, 0, TtSpace.s3),
+        ),
+        Wrap(
+          spacing: TtSpace.s2,
+          runSpacing: TtSpace.s2,
+          children: [
+            for (final s in a.specialties) TratraBadge(s, tone: TratraTone.primary),
+          ],
+        ),
+      ],
+
+      // À propos
+      if (a.description.isNotEmpty) ...[
+        const TratraSectionHeader(
+          title: 'À propos',
+          padding: EdgeInsets.fromLTRB(0, TtSpace.s8, 0, TtSpace.s3),
+        ),
+        TratraCard(
+          padding: const EdgeInsets.all(TtSpace.s5),
+          child: Text(
+            a.description,
+            style: TratraTheme.style(TtType.body, color: TtColors.inkSoft),
+          ),
+        ),
+      ],
+    ];
+  }
+
+  Widget _buildServices(BuildContext context) {
+    if (_loadingServices) {
+      return const TratraSkeletonList(count: 2, padding: EdgeInsets.zero);
+    }
+
+    if (_errorServices != null) {
+      return TratraAlert(
+        tone: TratraAlertTone.danger,
+        title: 'Services indisponibles',
+        message: _errorServices!,
+        action: TratraButton(
+          label: 'Réessayer',
+          size: TratraButtonSize.sm,
+          variant: TratraButtonVariant.outline,
+          onPressed: _loadServices,
+        ),
+      );
+    }
+
+    if (_services.isEmpty) {
+      return TratraCard(
+        variant: TratraCardVariant.flat,
+        padding: EdgeInsets.zero,
+        child: TratraEmptyState(
+          compact: true,
+          icon: Icons.handyman_outlined,
+          title: 'Aucun service pour le moment',
+          description: 'Cet artisan n’a pas de service actif actuellement.',
+          actions: [
+            TratraButton(
+              label: 'Parcourir les services',
+              variant: TratraButtonVariant.soft,
+              onPressed: _browseServices,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GridView.builder(
+      itemCount: _services.length,
+      padding: EdgeInsets.zero,
+      physics: const NeverScrollableScrollPhysics(),
+      shrinkWrap: true,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: TtSpace.s3,
+        crossAxisSpacing: TtSpace.s3,
+        mainAxisExtent: ServiceMiniCard.extentFor(context),
+      ),
+      itemBuilder: (_, i) {
+        final s = _services[i];
+        return ServiceMiniCard(service: s, onTap: () => _openService(s));
+      },
     );
   }
 }
 
-class _ServiceCardMini extends StatelessWidget {
-  const _ServiceCardMini({required this.service, required this.onTap});
-  final Service service;
-  final VoidCallback onTap;
+/// Carte d'identité sur fond night : photo réelle ou initiales, note si elle existe,
+/// pastilles « Vérifié » / « Disponible » uniquement quand le modèle les indique.
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({required this.artisan, required this.name, required this.onContact});
 
-  static const _card = Color(0xFFFFFFFF);
-  static const _border = Color(0xFFE5E5E5);
-  static const _textPrimary = Color(0xFF1E272E);
-  static const _textSecondary = Color(0xFF636E72);
-  static const _accent = Color(0xFF00B14F);
-  static const _phService = 'https://via.placeholder.com/600x400?text=Service';
-
-  String _safe(String raw) {
-    final u = raw.trim();
-    if (u.isEmpty) return _phService;
-    final p = Uri.tryParse(u);
-    if (p == null ||
-        !p.hasScheme ||
-        !(p.isScheme('http') || p.isScheme('https'))) {
-      return _phService;
-    }
-    return u;
-  }
+  final Artisan artisan;
+  final String name;
+  final VoidCallback onContact;
 
   @override
   Widget build(BuildContext context) {
-    final image = _safe(service.imageUrl);
+    final a = artisan;
+    final hasBadges = a.isCertified || a.isAvailable;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        decoration: BoxDecoration(
-          color: _card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _border),
-        ),
-        child: Column(
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12), topRight: Radius.circular(12)),
-              child: CachedNetworkImage(
-                imageUrl: image,
-                height: 110,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                placeholder: (_, __) =>
-                    Container(height: 110, color: Colors.black12),
-                errorWidget: (_, __, ___) => Container(
-                  height: 110,
-                  color: Colors.black12,
-                  child: const Icon(Icons.broken_image_outlined,
-                      color: Colors.grey),
+    return TratraCard(
+      variant: TratraCardVariant.night,
+      padding: const EdgeInsets.all(TtSpace.s5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              TratraAvatar(name: name, photoUrl: realImageUrl(a.imageUrl), size: 76),
+              const SizedBox(width: TtSpace.s4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Semantics(
+                      header: true,
+                      child: Text(
+                        name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TratraTheme.style(TtType.h2, color: Colors.white),
+                      ),
+                    ),
+                    if (a.profession.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          a.profession,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TratraTheme.style(TtType.bodySm, color: Colors.white70),
+                        ),
+                      ),
+                    if (a.rating > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: TtSpace.s2),
+                        child: RatingStars(rating: a.rating, reviewCount: a.reviews, onDark: true),
+                      ),
+                  ],
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-              child: Text(
-                service.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    color: _textPrimary, fontWeight: FontWeight.w700),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 2, 10, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      service.categoryName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style:
-                          const TextStyle(color: _textSecondary, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-              child: Row(
-                children: [
-                  Text(
-                    service.priceDisplay.replaceAll('F', 'FCFA'),
-                    style: const TextStyle(
-                        color: _accent,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 13),
-                  ),
-                  const Spacer(),
-                  const Icon(Icons.chevron_right, color: _textSecondary),
-                ],
-              ),
+            ],
+          ),
+          if (hasBadges) ...[
+            const SizedBox(height: TtSpace.s4),
+            Wrap(
+              spacing: TtSpace.s2,
+              runSpacing: TtSpace.s2,
+              children: [
+                if (a.isCertified)
+                  const TratraBadge('Vérifié', tone: TratraTone.success, icon: Icons.verified_rounded),
+                if (a.isAvailable)
+                  const TratraBadge('Disponible', tone: TratraTone.primary, dot: true),
+              ],
             ),
           ],
+          const SizedBox(height: TtSpace.s5),
+          TratraButton(
+            label: 'Contacter',
+            variant: TratraButtonVariant.accent,
+            block: true,
+            leading: const Icon(Icons.chat_bubble_outline_rounded),
+            onPressed: onContact,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tuile d'information (libellé + valeur).
+class _FactTile extends StatelessWidget {
+  const _FactTile({required this.icon, required this.label, required this.value});
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return TratraCard(
+      variant: TratraCardVariant.flat,
+      radius: TtRadius.panel,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: TtColors.primary),
+          const SizedBox(height: TtSpace.s2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TratraTheme.style(TtType.caption, color: TtColors.ash),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TratraTheme.style(TtType.title).copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Chargement de l'en-tête (une seule animation partagée).
+class _HeaderSkeleton extends StatelessWidget {
+  const _HeaderSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Chargement du profil',
+      liveRegion: true,
+      child: ExcludeSemantics(
+        child: TratraCard(
+          variant: TratraCardVariant.flat,
+          padding: const EdgeInsets.all(TtSpace.s5),
+          child: TratraShimmer(
+            child: Row(
+              children: [
+                const TratraSkeletonBox(height: 76, circle: true),
+                const SizedBox(width: TtSpace.s4),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TratraSkeletonBox(height: 18),
+                      SizedBox(height: 10),
+                      TratraSkeletonBox(width: 120, height: 14),
+                      SizedBox(height: 10),
+                      TratraSkeletonBox(width: 90, height: 14),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

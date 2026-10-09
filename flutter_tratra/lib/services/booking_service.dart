@@ -1,6 +1,5 @@
 // lib/services/booking_service.dart
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/models/booking.dart';

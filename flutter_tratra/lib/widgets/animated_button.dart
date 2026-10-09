@@ -1,18 +1,38 @@
 // lib/widgets/animated_button.dart
+// Adaptateur : préférer TratraButton (lib/design) pour tout nouveau code.
+//
+// AnimatedButton reçoit un `child` Widget arbitraire (texte stylé, spinner…) alors que
+// TratraButton n'accepte qu'un libellé : il ne peut donc pas lui déléguer sans changer
+// l'API. Il reprend donc le rendu de TratraButton (pilule, halo de marque, appui à 0,98,
+// cible >= 48) à partir des mêmes jetons, en gardant son contrat : appel asynchrone
+// protégé contre le double appui, chargement interne, `enabled`, couleur de fond optionnelle.
 import 'dart:async';
+
 import 'package:flutter/material.dart';
-import '../core/constants.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_tratra/design/design.dart';
 
 class AnimatedButton extends StatefulWidget {
   final FutureOr<void> Function() onPressed;
   final Widget child;
   final bool isLoading;
   final bool enabled;
+
+  /// Couleur de fond. Par défaut : vert de marque foncé (texte blanc, contraste AA).
+  /// Le texte/icône s'adapte automatiquement (blanc sur fond sombre, encre sur fond clair).
   final Color? backgroundColor;
-  final EdgeInsetsGeometry padding;
-  final double radius;
+
+  /// Marges internes. Par défaut : celles du Design System (24 horizontal, 12 vertical).
+  final EdgeInsetsGeometry? padding;
+
+  /// Rayon des coins. Par défaut (null) : pilule, comme TratraButton.
+  final double? radius;
+
+  /// Conservé pour compatibilité d'API : l'ombre vient des jetons du DS (TtShadows).
   final double elevation;
   final String? semanticsLabel;
+
+  /// Retour haptique léger à l'appui.
   final bool hapticFeedback;
 
   const AnimatedButton({
@@ -22,8 +42,8 @@ class AnimatedButton extends StatefulWidget {
     this.isLoading = false,
     this.enabled = true,
     this.backgroundColor,
-    this.padding = const EdgeInsets.symmetric(vertical: 16),
-    this.radius = 12,
+    this.padding,
+    this.radius,
     this.elevation = 0,
     this.semanticsLabel,
     this.hapticFeedback = false,
@@ -33,41 +53,20 @@ class AnimatedButton extends StatefulWidget {
   State<AnimatedButton> createState() => _AnimatedButtonState();
 }
 
-class _AnimatedButtonState extends State<AnimatedButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scale;
+class _AnimatedButtonState extends State<AnimatedButton> {
   bool _internalLoading = false;
+  bool _pressed = false;
+  bool _focused = false;
 
   bool get _effectiveLoading => widget.isLoading || _internalLoading;
   bool get _interactive => widget.enabled && !_effectiveLoading;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: AppConstants.animationDuration,
-      value: 0.0,
-    );
-    _scale = Tween<double>(begin: 1.0, end: 0.96).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
 
   Future<void> _handlePress() async {
     if (!_interactive) return;
     setState(() => _internalLoading = true);
     try {
       if (widget.hapticFeedback) {
-        // Haptique légère sur press (optionnel)
-        // Feedback.forTap(context); // décommente si tu utilises Haptic lib
+        unawaited(HapticFeedback.selectionClick());
       }
       final result = widget.onPressed();
       if (result is Future) await result;
@@ -78,10 +77,39 @@ class _AnimatedButtonState extends State<AnimatedButton>
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final bg = widget.backgroundColor ?? AppConstants.primaryColor;
-    final radius = BorderRadius.circular(widget.radius);
-    final shadowColor = bg.withOpacity(0.3);
+    final interactive = _interactive;
+    final bg = widget.backgroundColor ?? TtColors.primaryDark;
+    final onDark = ThemeData.estimateBrightnessForColor(bg) == Brightness.dark;
+    final fg = onDark ? Colors.white : TtColors.ink;
+    final disableMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+    final customRadius = widget.radius;
+    final borderRadius = customRadius == null ? TtRadius.pillAll : BorderRadius.circular(customRadius);
+    final focusSide = _focused
+        ? BorderSide(color: onDark ? TtColors.accent : TtColors.ink, width: 2)
+        : BorderSide.none;
+    final ShapeBorder shape = customRadius == null
+        ? StadiumBorder(side: focusSide)
+        : RoundedRectangleBorder(borderRadius: borderRadius, side: focusSide);
+    final shadow = !interactive
+        ? const <BoxShadow>[]
+        : (widget.backgroundColor == null ? TtShadows.glow : TtShadows.soft);
+    final padding = widget.padding ?? const EdgeInsets.symmetric(horizontal: TtSpace.s6, vertical: TtSpace.s3);
+
+    final content = _effectiveLoading
+        ? SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2.4, color: fg),
+          )
+        : IconTheme.merge(
+            data: IconThemeData(color: fg, size: 18),
+            child: DefaultTextStyle.merge(
+              style: TratraTheme.style(TtType.button, color: fg),
+              textAlign: TextAlign.center,
+              child: widget.child,
+            ),
+          );
 
     return Semantics(
       button: true,
@@ -89,7 +117,8 @@ class _AnimatedButtonState extends State<AnimatedButton>
       enabled: widget.enabled,
       child: FocusableActionDetector(
         enabled: widget.enabled,
-        onShowFocusHighlight: (_) {},
+        mouseCursor: interactive ? SystemMouseCursors.click : MouseCursor.defer,
+        onShowFocusHighlight: (focused) => setState(() => _focused = focused),
         actions: <Type, Action<Intent>>{
           ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
             _handlePress();
@@ -97,50 +126,30 @@ class _AnimatedButtonState extends State<AnimatedButton>
           }),
         },
         child: IgnorePointer(
-          ignoring: !_interactive,
-          child: ScaleTransition(
-            scale: _scale,
-            child: Material(
-              color: bg,
-              elevation: widget.elevation,
-              shadowColor: shadowColor,
-              borderRadius: radius,
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: _handlePress,
-                borderRadius: radius,
-                splashColor: scheme.onPrimary.withOpacity(0.08),
-                highlightColor: scheme.onPrimary.withOpacity(0.06),
-                onHighlightChanged: (down) {
-                  if (down) {
-                    _controller.forward();
-                  } else {
-                    _controller.reverse();
-                  }
-                },
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 48),
-                  child: Padding(
-                    padding: widget.padding,
-                    child: Center(
-                      child: _effectiveLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : DefaultTextStyle.merge(
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              child: widget.child,
-                            ),
+          ignoring: !interactive,
+          child: AnimatedScale(
+            scale: _pressed && interactive && !disableMotion ? 0.98 : 1,
+            duration: TtMotion.fast,
+            curve: TtMotion.emphasized,
+            child: AnimatedOpacity(
+              opacity: widget.enabled ? 1 : 0.6,
+              duration: TtMotion.fast,
+              child: DecoratedBox(
+                decoration: BoxDecoration(borderRadius: borderRadius, boxShadow: shadow),
+                child: Material(
+                  color: bg,
+                  shape: shape,
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: _handlePress,
+                    canRequestFocus: false,
+                    onHighlightChanged: (down) => setState(() => _pressed = down),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: TtLayout.controlHeight),
+                      child: Padding(
+                        padding: padding,
+                        child: Center(child: content),
+                      ),
                     ),
                   ),
                 ),
@@ -152,83 +161,3 @@ class _AnimatedButtonState extends State<AnimatedButton>
     );
   }
 }
-// // widgets/animated_button.dart
-// import 'package:flutter/material.dart';
-
-// class AnimatedButton extends StatefulWidget {
-//   final VoidCallback onPressed;
-//   final Widget child;
-
-//   const AnimatedButton(
-//       {super.key, required this.onPressed, required this.child});
-
-//   @override
-//   State<AnimatedButton> createState() => _AnimatedButtonState();
-// }
-
-// class _AnimatedButtonState extends State<AnimatedButton>
-//     with SingleTickerProviderStateMixin {
-//   late AnimationController _controller;
-//   late Animation<double> _scaleAnimation;
-
-//   @override
-//   void initState() {
-//     super.initState();
-//     _controller = AnimationController(
-//       vsync: this,
-//       duration: const Duration(milliseconds: 100),
-//     );
-//     _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-//       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-//     );
-//   }
-
-//   @override
-//   void dispose() {
-//     _controller.dispose();
-//     super.dispose();
-//   }
-
-//   void _onTapDown(TapDownDetails details) {
-//     _controller.forward();
-//   }
-
-//   void _onTapUp(TapUpDetails details) {
-//     _controller.reverse();
-//     widget.onPressed();
-//   }
-
-//   void _onTapCancel() {
-//     _controller.reverse();
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return GestureDetector(
-//       onTapDown: _onTapDown,
-//       onTapUp: _onTapUp,
-//       onTapCancel: _onTapCancel,
-//       child: ScaleTransition(
-//         scale: _scaleAnimation,
-//         child: Container(
-//           width: double.infinity,
-//           padding: const EdgeInsets.symmetric(vertical: 16),
-//           decoration: BoxDecoration(
-//             color: const Color(0xFF00B14F),
-//             borderRadius: BorderRadius.circular(12),
-//           ),
-//           child: Center(
-//             child: DefaultTextStyle.merge(
-//               style: const TextStyle(
-//                 color: Colors.white,
-//                 fontSize: 16,
-//                 fontWeight: FontWeight.w600,
-//               ),
-//               child: widget.child,
-//             ),
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }

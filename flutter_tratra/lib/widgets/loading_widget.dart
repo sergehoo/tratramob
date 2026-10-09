@@ -1,6 +1,9 @@
 // lib/widgets/loading_widget.dart
+// Adaptateur : préférer TratraSkeleton* (lib/design) pour tout nouveau code.
 import 'package:flutter/material.dart';
+import 'package:flutter_tratra/design/design.dart';
 
+/// Indicateur de chargement centré, avec message optionnel (annoncé aux lecteurs d'écran).
 class LoadingWidget extends StatelessWidget {
   final String? message;
 
@@ -8,28 +11,37 @@ class LoadingWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00B14F)),
-          ),
-          if (message != null) ...[
-            const SizedBox(height: 16),
-            Text(
-              message!,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[600],
+    final text = message;
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      label: text ?? 'Chargement en cours',
+      child: ExcludeSemantics(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(TtSpace.s6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(color: TtColors.primary),
+                if (text != null) ...[
+                  const SizedBox(height: TtSpace.s4),
+                  Text(
+                    text,
+                    textAlign: TextAlign.center,
+                    style: TratraTheme.style(TtType.body, color: TtColors.ash),
                   ),
+                ],
+              ],
             ),
-          ],
-        ],
+          ),
+        ),
       ),
     );
   }
 }
 
+/// Squelette de liste de cartes (`itemCount` cartes), défilable comme l'ancienne ListView.
 class ShimmerLoadingWidget extends StatelessWidget {
   final int itemCount;
 
@@ -37,72 +49,8 @@ class ShimmerLoadingWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: itemCount,
-      itemBuilder: (context, index) {
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: 120,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: 80,
-                      height: 14,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+    return SingleChildScrollView(
+      child: TratraSkeletonList(count: itemCount),
     );
   }
 }

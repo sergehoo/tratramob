@@ -1,14 +1,16 @@
 // lib/screens/all_nearby_artisans_screen.dart
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
+import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/service.dart';
 import 'package:flutter_tratra/routes.dart';
+import 'package:flutter_tratra/screens/browse/browse_parts.dart';
 import 'package:flutter_tratra/services/location_service.dart';
-import 'package:http/http.dart' as http;
 
 class AllNearbyArtisansScreen extends StatefulWidget {
   const AllNearbyArtisansScreen({super.key});
@@ -19,13 +21,9 @@ class AllNearbyArtisansScreen extends StatefulWidget {
 }
 
 class _AllNearbyArtisansScreenState extends State<AllNearbyArtisansScreen> {
-  // UI
-  static const _card = Color(0xFFFFFFFF);
-  static const _bg = Color(0xFFF8F9FA);
-  static const _border = Color(0xFFE5E5E5);
-  static const _textPrimary = Color(0xFF1E272E);
-  static const _textSecondary = Color(0xFF636E72);
-  static const _accent = Color(0xFF00B14F);
+  /// Valeur historique transmise telle quelle à la fiche service quand l'API ne
+  /// fournit pas d'image (arguments de navigation inchangés). Jamais affichée :
+  /// `BrowseImage` la traite comme « pas d'image » et montre le repli de marque.
   static const _placeholder =
       'https://via.placeholder.com/300x200?text=Service';
 
@@ -33,6 +31,7 @@ class _AllNearbyArtisansScreenState extends State<AllNearbyArtisansScreen> {
   final LocationService _location = LocationService();
 
   bool _loading = true;
+  bool _locating = true; // affichage seul : bouton « Réessayer » en cours
   String? _error;
   List<Service> _items = [];
   Position? _pos;
@@ -47,6 +46,7 @@ class _AllNearbyArtisansScreenState extends State<AllNearbyArtisansScreen> {
   }
 
   Future<void> _init() async {
+    if (!_locating) setState(() => _locating = true);
     try {
       _pos = await _location
           .getCurrentLocation()
@@ -54,6 +54,8 @@ class _AllNearbyArtisansScreenState extends State<AllNearbyArtisansScreen> {
     } catch (_) {
       _pos = null;
     }
+    if (!mounted) return;
+    _locating = false;
     await _load();
   }
 
@@ -106,7 +108,7 @@ class _AllNearbyArtisansScreenState extends State<AllNearbyArtisansScreen> {
         ((m['category_detail'] as Map?)?['name'] ?? m['category_name'] ?? '')
             .toString();
 
-    // 🔒 Image: on ne prend QUE image_url ; si vide/invalide → placeholder.
+    // Image : on ne prend QUE image_url ; si vide/invalide → valeur historique.
     final imageUrl = _pickSafeImageUrl(m);
 
     final price = double.tryParse('${m['price'] ?? '0'}') ?? 0.0;
@@ -136,7 +138,7 @@ class _AllNearbyArtisansScreenState extends State<AllNearbyArtisansScreen> {
     );
   }
 
-  /// Utilise uniquement `image_url`. Si vide/invalide → placeholder.
+  /// Utilise uniquement `image_url`. Si vide/invalide → valeur historique.
   String _pickSafeImageUrl(Map<String, dynamic> m) {
     final raw = (m['image_url'] ?? '').toString().trim();
     if (raw.isEmpty) return _placeholder;
@@ -149,59 +151,121 @@ class _AllNearbyArtisansScreenState extends State<AllNearbyArtisansScreen> {
     return raw;
   }
 
+  /// Libellé de prix fidèle au type de tarification renvoyé par l'API.
+  String _priceText(Service s) {
+    if (s.priceType == 'quote') return 'Sur devis';
+    final amount = s.price ?? 0;
+    if (amount <= 0) return 'Prix à confirmer';
+    final digits = amount.toStringAsFixed(0);
+    final grouped = digits.replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (_) => ' ',
+    );
+    return s.priceType == 'hourly'
+        ? '$grouped FCFA/h'
+        : '$grouped FCFA';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bg,
-      appBar: AppBar(
-        title: const Text('Artisans à proximité'),
-        backgroundColor: _card,
+      backgroundColor: TtColors.canvas,
+      appBar: TratraAppBar(
+        title: 'Artisans à proximité',
+        subtitle: _pos != null
+            ? 'Dans un rayon de ${_radiusKm.toStringAsFixed(0)} km'
+            : null,
       ),
       body: RefreshIndicator(
-        color: _accent,
+        color: TtColors.primaryDark,
+        backgroundColor: TtColors.surface,
         onRefresh: _load,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : (_error != null)
-                ? ListView(children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text('Erreur : $_error',
-                          style: const TextStyle(color: Colors.red)),
-                    )
-                  ])
-                : (_items.isEmpty)
-                    ? ListView(children: const [
-                        SizedBox(height: 120),
-                        Center(child: Text('Aucun artisan trouvé')),
-                        SizedBox(height: 120),
-                      ])
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: _items.length,
-                        itemBuilder: (_, i) {
-                          final s = _items[i];
-                          return _ArtisanRowCard(
-                            title:
-                                s.title.isNotEmpty ? s.title : 'Service proche',
-                            subtitle: s.categoryName.isNotEmpty
-                                ? s.categoryName
-                                : 'Proximité',
-                            priceText:
-                                '${(s.price ?? 0).toStringAsFixed(0)} FCFA/h',
-                            imageUrl: s.imageUrl.isNotEmpty
-                                ? s.imageUrl
-                                : _placeholder,
-                            onTap: () => Navigator.pushNamed(
-                              context,
-                              RouteNames.serviceDetail,
-                              arguments: ServiceDetailArgs(s),
-                            ),
-                          );
-                        },
-                      ),
+        child: _buildBody(),
       ),
-      bottomNavigationBar: _pos == null ? _LocationHint(onRetry: _init) : null,
+      bottomNavigationBar: _pos == null
+          ? _LocationHint(onRetry: _init, loading: _locating)
+          : null,
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) return const _NearbySkeleton();
+
+    if (_error != null) {
+      return BrowseCenteredScroll(
+        key: const ValueKey('nearby-error'),
+        child: TratraEmptyState(
+          icon: Icons.cloud_off_rounded,
+          title: 'Chargement impossible',
+          description: browseErrorMessage(_error),
+          actions: [
+            TratraButton(
+              label: 'Réessayer',
+              leading: const Icon(Icons.refresh_rounded),
+              // Sans position, on relance aussi la localisation (pas seulement la requête).
+              onPressed: _pos == null ? _init : _load,
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_items.isEmpty) {
+      final located = _pos != null;
+      return BrowseCenteredScroll(
+        key: const ValueKey('nearby-empty'),
+        child: TratraEmptyState(
+          icon: located ? Icons.near_me_outlined : Icons.location_off_outlined,
+          title: 'Aucun artisan trouvé',
+          description: located
+              ? 'Aucun service n’est proposé dans un rayon de ${_radiusKm.toStringAsFixed(0)} km autour de vous pour le moment.'
+              : 'Nous n’avons pas pu vous localiser. Activez la localisation, ou parcourez le catalogue sans limite de zone.',
+          actions: [
+            TratraButton(
+              label: 'Parcourir les catégories',
+              leading: const Icon(Icons.category_outlined),
+              onPressed: () =>
+                  Navigator.pushNamed(context, RouteNames.allCategories),
+            ),
+            TratraButton(
+              label: 'Voir tous les services',
+              variant: TratraButtonVariant.outline,
+              onPressed: () =>
+                  Navigator.pushNamed(context, RouteNames.allServices),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return BrowseFadeIn(
+      key: const ValueKey('nearby-list'),
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(
+          TtSpace.s4,
+          TtSpace.s4,
+          TtSpace.s4,
+          TtSpace.s6 + MediaQuery.paddingOf(context).bottom,
+        ),
+        itemCount: _items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: TtSpace.s3),
+        itemBuilder: (_, i) {
+          final s = _items[i];
+          return _ArtisanRowCard(
+            title: s.title.isNotEmpty ? s.title : 'Service proche',
+            subtitle: s.categoryName.isNotEmpty ? s.categoryName : 'Proximité',
+            priceText: _priceText(s),
+            imageUrl: s.imageUrl,
+            isUrgent: s.isUrgent,
+            onTap: () => Navigator.pushNamed(
+              context,
+              RouteNames.serviceDetail,
+              arguments: ServiceDetailArgs(s),
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -212,6 +276,7 @@ class _ArtisanRowCard extends StatelessWidget {
     required this.subtitle,
     required this.priceText,
     required this.imageUrl,
+    required this.isUrgent,
     required this.onTap,
   });
 
@@ -219,72 +284,129 @@ class _ArtisanRowCard extends StatelessWidget {
   final String subtitle;
   final String priceText;
   final String imageUrl;
+  final bool isUrgent;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    const border = Color(0xFFE5E5E5);
-    const card = Color(0xFFFFFFFF);
-    const textPrimary = Color(0xFF1E272E);
-    const textSecondary = Color(0xFF636E72);
-    const accent = Color(0xFF00B14F);
-
-    return InkWell(
+    return TratraCard(
+      radius: TtRadius.panel,
+      padding: const EdgeInsets.all(TtSpace.s3),
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: card,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: border),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: TtRadius.controlAll,
+            child: BrowseImage(
+              url: imageUrl,
+              fallbackIcon: Icons.home_repair_service_outlined,
+              width: 88,
+              height: 88,
+            ),
+          ),
+          const SizedBox(width: TtSpace.s3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Wrap(
+                  spacing: TtSpace.s2,
+                  runSpacing: TtSpace.s1,
+                  children: [
+                    TratraBadge(subtitle),
+                    if (isUrgent)
+                      const TratraBadge(
+                        'Urgent',
+                        tone: TratraTone.accent,
+                        icon: Icons.bolt_rounded,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: TtSpace.s2),
+                Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.h3)
+                      .copyWith(fontSize: 15, height: 1.25),
+                ),
+                const SizedBox(height: TtSpace.s1),
+                Text(
+                  priceText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.title,
+                          color: TtColors.primaryDark)
+                      .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: TtSpace.s2),
+          const Icon(Icons.chevron_right_rounded, color: TtColors.fog),
+        ],
+      ),
+    );
+  }
+}
+
+// ===== Squelettes =====
+
+class _NearbySkeleton extends StatelessWidget {
+  const _NearbySkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Chargement des services à proximité',
+      liveRegion: true,
+      child: ExcludeSemantics(
+        child: TratraShimmer(
+          child: ListView.separated(
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(TtSpace.s4),
+            itemCount: 5,
+            separatorBuilder: (_, __) => const SizedBox(height: TtSpace.s3),
+            itemBuilder: (_, __) => const _NearbyRowSkeleton(),
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _NearbyRowSkeleton extends StatelessWidget {
+  const _NearbyRowSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: TtColors.surface,
+        borderRadius: TtRadius.panelAll,
+        border: Border.all(color: TtColors.lineSoft),
+        boxShadow: TtShadows.soft,
+      ),
+      child: const Padding(
+        padding: EdgeInsets.all(TtSpace.s3),
         child: Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: CachedNetworkImage(
-                imageUrl: imageUrl,
-                width: 90,
-                height: 90,
-                fit: BoxFit.cover,
-                placeholder: (_, __) =>
-                    Container(width: 90, height: 90, color: Colors.black12),
-                errorWidget: (_, __, ___) => Container(
-                  width: 90,
-                  height: 90,
-                  color: Colors.black12,
-                  child: const Icon(Icons.broken_image_outlined,
-                      color: Colors.grey),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
+            TratraSkeletonBox(width: 88, height: 88),
+            SizedBox(width: TtSpace.s3),
             Expanded(
               child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: textPrimary,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 14)),
-                    const SizedBox(height: 4),
-                    Text(subtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: textSecondary, fontSize: 12)),
-                    const SizedBox(height: 8),
-                    Text(priceText,
-                        style: const TextStyle(
-                            color: accent,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13)),
-                  ]),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TratraSkeletonBox(width: 72, height: 18, radius: TtRadius.pill),
+                  SizedBox(height: TtSpace.s3),
+                  TratraSkeletonBox(height: 14),
+                  SizedBox(height: TtSpace.s2),
+                  TratraSkeletonBox(width: 120, height: 14),
+                  SizedBox(height: TtSpace.s3),
+                  TratraSkeletonBox(width: 90, height: 14),
+                ],
+              ),
             ),
           ],
         ),
@@ -293,29 +415,43 @@ class _ArtisanRowCard extends StatelessWidget {
   }
 }
 
+// ===== Bandeau de localisation =====
+
 class _LocationHint extends StatelessWidget {
-  const _LocationHint({required this.onRetry});
+  const _LocationHint({required this.onRetry, required this.loading});
+
   final VoidCallback onRetry;
+
+  /// Recherche de position en cours : le bouton affiche un spinner et ignore les appuis.
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFFFFF3CD),
-      padding: const EdgeInsets.all(12),
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: TtColors.surface,
+        border: Border(top: BorderSide(color: TtColors.lineSoft)),
+      ),
       child: SafeArea(
         top: false,
-        child: Row(
-          children: [
-            const Icon(Icons.info_outline, color: Color(0xFF856404)),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Text(
-                'Activez la localisation pour de meilleurs résultats.',
-                style: TextStyle(color: Color(0xFF856404)),
+        child: Padding(
+          padding: const EdgeInsets.all(TtSpace.s3),
+          child: TratraAlert(
+            tone: TratraAlertTone.warning,
+            icon: Icons.location_off_outlined,
+            title: 'Position indisponible',
+            message: 'Activez la localisation pour de meilleurs résultats.',
+            action: Align(
+              alignment: Alignment.centerLeft,
+              child: TratraButton(
+                label: 'Réessayer',
+                variant: TratraButtonVariant.outline,
+                size: TratraButtonSize.sm,
+                loading: loading,
+                onPressed: onRetry,
               ),
             ),
-            TextButton(onPressed: onRetry, child: const Text('Réessayer')),
-          ],
+          ),
         ),
       ),
     );

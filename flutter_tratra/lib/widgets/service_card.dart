@@ -1,14 +1,21 @@
 // widgets/service_card.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_tratra/design/design.dart';
 import '../models/service.dart';
-import '../core/constants.dart';
-import 'badge_widget.dart';
+import 'card_parts.dart';
 
+/// Carte de service (photo, badges promo/urgent, titre, catégorie, note, prix).
+///
+/// `onTap` : rend la carte cliquable. `onFavoriteToggle` : affiche le bouton favori.
+/// Passer `null` pour l'un ou l'autre retire l'interaction correspondante (jamais de
+/// bouton sans action). La carte s'adapte à la hauteur disponible : la photo occupe la
+/// place restante (prévoir environ 150 dp de hauteur au minimum), ou 120 dp si la
+/// hauteur est libre.
 class ServiceCard extends StatelessWidget {
   final Service service;
   final bool isFavorite;
-  final VoidCallback onFavoriteToggle;
-  final VoidCallback onTap;
+  final VoidCallback? onFavoriteToggle;
+  final VoidCallback? onTap;
 
   const ServiceCard({
     super.key,
@@ -27,135 +34,135 @@ class ServiceCard extends StatelessWidget {
                 100)
             .round()
         : 0;
+    final categoryName = service.categoryName.trim();
+    final rating = CardFormat.rating(service.rating);
+    final reviewCount = service.reviewCount ?? 0;
+    final toggle = onFavoriteToggle;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 180,
-        margin: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: AppConstants.cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppConstants.borderColor),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Image et badges
-            Stack(
+    // Prix : réel ou « Sur devis » (jamais « null »).
+    final unit = service.isHourly ? ' / h' : '';
+    final currentPrice = CardFormat.fcfa(hasDiscount ? service.discountedPrice : service.price);
+    final priceText = (service.isQuoteBased || currentPrice == null) ? 'Sur devis' : '$currentPrice$unit';
+    final oldPrice = hasDiscount ? CardFormat.fcfa(service.price) : null;
+
+    final fallback = DecoratedBox(
+      decoration: const BoxDecoration(gradient: TtGradients.wash),
+      child: Center(
+        child: Icon(Icons.handyman_outlined, size: 40, color: TtColors.primary.withValues(alpha: 0.7)),
+      ),
+    );
+
+    Widget photo(bool bounded) {
+      final stack = Stack(
+        fit: StackFit.expand,
+        children: [
+          CardPhoto(url: service.imageUrl, fallback: fallback),
+          Positioned(
+            top: TtSpace.s2,
+            left: TtSpace.s2,
+            right: TtSpace.s2,
+            child: Wrap(
+              spacing: TtSpace.s1,
+              runSpacing: TtSpace.s1,
               children: [
-                ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(16)),
-                  child: Image.network(
-                    service.imageUrl,
-                    height: 120,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                if (hasDiscount)
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: BadgeWidget(
-                      icon: Icons.local_offer,
-                      label: '-$discountPercent%',
-                      backgroundColor: AppConstants.promoColor,
-                      textColor: Colors.white,
-                    ),
-                  ),
+                if (hasDiscount && discountPercent > 0)
+                  TratraBadge('-$discountPercent%', tone: TratraTone.accent, icon: Icons.local_offer_outlined),
                 if (service.isUrgent)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: BadgeWidget(
-                      icon: Icons.warning,
-                      label: 'Urgent',
-                      backgroundColor: AppConstants.urgentColor,
-                      textColor: Colors.white,
-                    ),
-                  ),
-                Positioned(
-                  bottom: 8,
-                  right: 8,
-                  child: IconButton(
-                    icon: Icon(
-                      isFavorite ? Icons.favorite : Icons.favorite_border,
-                      color:
-                          isFavorite ? AppConstants.promoColor : Colors.white,
-                    ),
-                    onPressed: onFavoriteToggle,
-                  ),
-                ),
+                  const TratraBadge('Urgent', tone: TratraTone.danger, icon: Icons.bolt_rounded),
               ],
             ),
-            // Informations
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    service.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    service.categoryId,
-                    style: const TextStyle(
-                      color: AppConstants.textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
+          ),
+          if (toggle != null)
+            Positioned(
+              bottom: TtSpace.s1,
+              right: TtSpace.s1,
+              child: FavoriteToggleButton(isFavorite: isFavorite, onPressed: toggle),
+            ),
+        ],
+      );
+      return bounded ? Expanded(child: stack) : SizedBox(height: 120, child: stack);
+    }
+
+    return SizedBox(
+      width: 196,
+      child: TratraCard(
+        margin: const EdgeInsets.all(TtSpace.s2),
+        padding: EdgeInsets.zero,
+        onTap: onTap,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final bounded = constraints.hasBoundedHeight;
+            return Column(
+              mainAxisSize: bounded ? MainAxisSize.max : MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                photo(bounded),
+                Padding(
+                  padding: const EdgeInsets.all(TtSpace.s3),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.star,
-                          size: 14, color: AppConstants.ratingColor),
-                      const SizedBox(width: 4),
                       Text(
-                        service.rating.toString(),
-                        style: const TextStyle(fontSize: 12),
+                        service.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TratraTheme.style(TtType.h3).copyWith(fontSize: 14, height: 1.25),
                       ),
-                      const Spacer(),
-                      if (hasDiscount)
-                        Text(
-                          '${service.price}€',
-                          style: const TextStyle(
-                            decoration: TextDecoration.lineThrough,
-                            color: AppConstants.textSecondary,
-                            fontSize: 12,
-                          ),
+                      if (categoryName.isNotEmpty || rating != null) ...[
+                        const SizedBox(height: TtSpace.s1),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                categoryName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TratraTheme.style(TtType.caption, color: TtColors.ash),
+                              ),
+                            ),
+                            if (rating != null) ...[
+                              const SizedBox(width: TtSpace.s2),
+                              const Icon(Icons.star_rounded, size: 14, color: TtColors.accent),
+                              const SizedBox(width: 2),
+                              Text(
+                                reviewCount > 0 ? '$rating ($reviewCount)' : rating,
+                                style: TratraTheme.style(TtType.caption, color: TtColors.ink)
+                                    .copyWith(fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ],
                         ),
-                      if (hasDiscount) const SizedBox(width: 4),
-                      Text(
-                        hasDiscount
-                            ? '${service.discountedPrice}€'
-                            : '${service.price}€',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: AppConstants.primaryColor,
+                      ],
+                      const SizedBox(height: TtSpace.s2),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (oldPrice != null) ...[
+                              Text(
+                                oldPrice,
+                                style: TratraTheme.style(TtType.caption, color: TtColors.ash)
+                                    .copyWith(decoration: TextDecoration.lineThrough),
+                              ),
+                              const SizedBox(width: TtSpace.s1),
+                            ],
+                            Text(
+                              priceText,
+                              style: TratraTheme.style(TtType.title, color: TtColors.primaryDark)
+                                  .copyWith(fontSize: 14, fontWeight: FontWeight.w700),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-          ],
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

@@ -1,6 +1,5 @@
 // lib/services/review_service.dart
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/models/review.dart';
 

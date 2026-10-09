@@ -1,9 +1,12 @@
 // lib/main.dart
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/theme.dart';
+import 'package:flutter_tratra/design/design.dart';
+import 'package:flutter_tratra/design/gallery.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/routes.dart';
@@ -44,6 +47,10 @@ import 'package:flutter_tratra/screens/all_urgent_services_screen.dart';
 import 'package:flutter_tratra/screens/worker/worker_home_screen.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
+/// Ouvre le guide de style au lancement (debug uniquement) :
+/// `flutter run --dart-define=TRATRA_GALLERY=true`.
+const bool _openGallery = bool.fromEnvironment('TRATRA_GALLERY');
 
 void main() {
   runZonedGuarded(() async {
@@ -122,11 +129,13 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     // Hydrate la session (utilisateur + rôle) depuis le stockage chiffré.
-    _bootFuture =
-        context.read<Session>().loadFromStorage().timeout(
-              const Duration(seconds: 8),
-              onTimeout: () {},
-            );
+    _bootFuture = Future.wait<void>([
+      context.read<Session>().loadFromStorage().timeout(
+            const Duration(seconds: 8),
+            onTimeout: () {},
+          ),
+      TratraTheme.preloadFonts(),
+    ]);
   }
 
   Route<dynamic> _generateRoute(RouteSettings settings) {
@@ -209,6 +218,11 @@ class _MyAppState extends State<MyApp> {
         }
         return _errorRoute('PaymentScreen requiert PaymentArgs');
 
+      case TratraGalleryScreen.route:
+        // Guide de style : disponible en debug uniquement.
+        if (kDebugMode) return MaterialPageRoute(builder: (_) => const TratraGalleryScreen());
+        return _errorRoute('Route inconnue: ${settings.name}');
+
       case '/login':
         return MaterialPageRoute(builder: (_) => const LoginScreen());
       case '/register':
@@ -224,7 +238,12 @@ class _MyAppState extends State<MyApp> {
   MaterialPageRoute _errorRoute(String message) {
     return MaterialPageRoute(
       builder: (_) => Scaffold(
-        body: Center(child: Text(message, textAlign: TextAlign.center)),
+        appBar: const TratraAppBar(title: 'Tratra'),
+        body: TratraEmptyState(
+          icon: Icons.explore_off_outlined,
+          title: 'Page introuvable',
+          description: message,
+        ),
       ),
     );
   }
@@ -239,13 +258,28 @@ class _MyAppState extends State<MyApp> {
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
             home: const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
+              body: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TratraBrandMark(size: 72),
+                    SizedBox(height: 24),
+                    SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(strokeWidth: 3),
+                    ),
+                  ],
+                ),
+              ),
             ),
           );
         }
 
         final session = context.watch<Session>();
-        final String initialRoute = !session.isAuthenticated
+        final String initialRoute = (kDebugMode && _openGallery)
+            ? TratraGalleryScreen.route
+            : !session.isAuthenticated
             ? '/login'
             : (session.isHandyman ? '/worker' : RouteNames.home);
 

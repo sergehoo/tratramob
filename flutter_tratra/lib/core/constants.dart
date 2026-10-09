@@ -1,26 +1,30 @@
 // core/constants.dart
 import 'dart:ui';
 
+import 'package:flutter_tratra/design/tokens.dart';
+
 class AppConstants {
   // ----- Couleurs marque -----
-  static const Color primaryColor = Color(0xFF00B14F);
-  static const Color primaryLight = Color(0xFFE8F5E9);
-  static const Color primaryDark = Color(0xFF008E40);
+  // Alias des jetons du Design System (lib/design/tokens.dart, généré depuis la landing) :
+  // une seule source de vérité. Les nouveaux écrans utilisent directement `TtColors`.
+  static const Color primaryColor = TtColors.primary;
+  static const Color primaryLight = TtColors.primarySoft;
+  static const Color primaryDark = TtColors.primaryDark;
   // Accent jaune (identité Tratra, cohérent avec le web)
-  static const Color accentColor = Color(0xFFF6C90E);
-  static const Color accentDark = Color(0xFFE0B400);
-  static const Color accentSoft = Color(0xFFFFF4D1);
+  static const Color accentColor = TtColors.accent;
+  static const Color accentDark = TtColors.accentDark;
+  static const Color accentSoft = TtColors.accentSoft;
 
-  static const Color backgroundColor = Color(0xFFF8F9FA);
-  static const Color cardColor = Color(0xFFFFFFFF);
-  static const Color textPrimary = Color(0xFF2D3436);
-  static const Color textSecondary = Color(0xFF636E72);
-  static const Color borderColor = Color(0xFFE5E5E5);
-  static const Color promoColor = Color(0xFFFF5252);
-  static const Color ratingColor = Color(0xFFFFA000);
-  static const Color urgentColor = Color(0xFFFF6B6B);
-  static const Color successColor = Color(0xFF00B14F);
-  static const Color dangerColor = Color(0xFFE53935);
+  static const Color backgroundColor = TtColors.canvas;
+  static const Color cardColor = TtColors.surface;
+  static const Color textPrimary = TtColors.ink;
+  static const Color textSecondary = TtColors.ash;
+  static const Color borderColor = TtColors.line;
+  static const Color promoColor = TtColors.danger;
+  static const Color ratingColor = TtColors.accent;
+  static const Color urgentColor = TtColors.danger;
+  static const Color successColor = TtColors.success;
+  static const Color dangerColor = TtColors.danger;
   static const Duration animationDuration = Duration(milliseconds: 160);
 
   // Base API — surchargée au build via --dart-define=TRATRA_API_BASE=...

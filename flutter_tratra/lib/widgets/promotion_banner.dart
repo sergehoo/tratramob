@@ -1,105 +1,134 @@
 // widgets/promotion_banner.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_tratra/design/design.dart';
 
-class PromotionBanner extends StatefulWidget {
-  const PromotionBanner({super.key});
+/// Bandeau d'offre. Tout le contenu est fourni par l'appelant (offre réelle issue de
+/// l'API) : sans `title` ni `message`, rien n'est affiché, et le bouton n'apparaît que si
+/// `actionLabel` ET `onAction` (destination réelle) sont fournis.
+class PromotionBanner extends StatelessWidget {
+  const PromotionBanner({
+    super.key,
+    this.eyebrow,
+    this.title,
+    this.message,
+    this.actionLabel,
+    this.onAction,
+    this.icon = Icons.local_offer_outlined,
+  });
 
-  @override
-  State<PromotionBanner> createState() => _PromotionBannerState();
-}
+  /// Sur-titre en pastille (ex. nom de l'opération), optionnel.
+  final String? eyebrow;
+  final String? title;
+  final String? message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final IconData icon;
 
-class _PromotionBannerState extends State<PromotionBanner>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<Offset> _slideAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.5),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-    ));
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  static bool _has(String? s) => s != null && s.trim().isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
-    return SlideTransition(
-      position: _slideAnimation,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF00B14F), Color(0xFF00D25F)],
-          ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Première commande',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '-20% sur votre première intervention',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF00B14F),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                    child: const Text(
-                      'Profiter maintenant',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
+    if (!_has(title) && !_has(message)) return const SizedBox.shrink();
+
+    final disableMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final showAction = _has(actionLabel) && onAction != null;
+
+    final banner = TratraCard(
+      variant: TratraCardVariant.night,
+      padding: EdgeInsets.zero,
+      child: Stack(
+        children: [
+          Positioned(
+            right: -28,
+            top: -28,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: TtColors.accent.withValues(alpha: 0.1),
               ),
             ),
-            const SizedBox(width: 16),
-            const Icon(
-              Icons.local_offer_outlined,
-              color: Colors.white,
-              size: 48,
+          ),
+          Padding(
+            padding: const EdgeInsets.all(TtSpace.s5),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_has(eyebrow)) ...[
+                        DecoratedBox(
+                          decoration: ShapeDecoration(
+                            color: TtColors.accent.withValues(alpha: 0.16),
+                            shape: const StadiumBorder(),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            child: Text(
+                              eyebrow!.toUpperCase(),
+                              style: TratraTheme.style(TtType.eyebrow, color: TtColors.accent),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: TtSpace.s3),
+                      ],
+                      if (_has(title))
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            title!,
+                            style: TratraTheme.style(TtType.h3, color: Colors.white),
+                          ),
+                        ),
+                      if (_has(title) && _has(message)) const SizedBox(height: TtSpace.s2),
+                      if (_has(message))
+                        Text(
+                          message!,
+                          style: TratraTheme.style(TtType.bodySm, color: Colors.white70).copyWith(fontSize: 14),
+                        ),
+                      if (showAction) ...[
+                        const SizedBox(height: TtSpace.s4),
+                        TratraButton(
+                          label: actionLabel!,
+                          variant: TratraButtonVariant.accent,
+                          size: TratraButtonSize.sm,
+                          trailing: const Icon(Icons.arrow_forward_rounded),
+                          onPressed: onAction,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: TtSpace.s4),
+                ExcludeSemantics(
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: TtColors.accent,
+                      borderRadius: TtRadius.panelAll,
+                    ),
+                    child: Icon(icon, color: TtColors.ink, size: 28),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
+    );
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: disableMotion ? Duration.zero : TtMotion.slow,
+      curve: TtMotion.emphasized,
+      child: banner,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(offset: Offset(0, (1 - t) * 16), child: child),
       ),
     );
   }

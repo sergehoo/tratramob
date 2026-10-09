@@ -2,16 +2,35 @@
 //
 // Tableau de bord ARTISAN : présence, missions, gains, compte. Branché sur
 // l'API découplée (BookingService / HandymanService / Session).
+// Interface : Design System Tratra (TratraBottomNav, cartes, badges, états vides/squelettes).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/core/session.dart';
+import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/booking.dart';
+import 'package:flutter_tratra/screens/worker/dashboard/worker_ui.dart';
+import 'package:flutter_tratra/screens/worker/kyc_screen.dart';
+import 'package:flutter_tratra/screens/worker/mission_detail_screen.dart';
 import 'package:flutter_tratra/services/booking_service.dart';
 import 'package:flutter_tratra/services/handyman_service.dart';
-import 'package:flutter_tratra/screens/worker/mission_detail_screen.dart';
-import 'package:flutter_tratra/screens/worker/kyc_screen.dart';
+
+/// Marges communes des pages défilantes de l'espace artisan.
+const _pagePadding = EdgeInsets.fromLTRB(
+  TtLayout.gutterMobile,
+  TtSpace.s5,
+  TtLayout.gutterMobile,
+  TtSpace.s8,
+);
+
+/// Opérateurs de versement : code envoyé à l'API -> libellé affiché.
+const _providerLabels = <String, String>{
+  'om': 'Orange Money',
+  'mtn': 'MTN MoMo',
+  'moov': 'Moov Money',
+  'wave': 'Wave',
+  'bank': 'Compte bancaire',
+};
 
 class WorkerHomeScreen extends StatefulWidget {
   const WorkerHomeScreen({super.key});
@@ -23,6 +42,18 @@ class WorkerHomeScreen extends StatefulWidget {
 class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   int _index = 0;
 
+  static const _navItems = <TratraNavItem>[
+    TratraNavItem(
+        icon: Icons.work_outline, activeIcon: Icons.work, label: 'Missions'),
+    TratraNavItem(
+      icon: Icons.account_balance_wallet_outlined,
+      activeIcon: Icons.account_balance_wallet,
+      label: 'Gains',
+    ),
+    TratraNavItem(
+        icon: Icons.person_outline, activeIcon: Icons.person, label: 'Compte'),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final tabs = <Widget>[
@@ -31,27 +62,18 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
       const _AccountTab(),
     ];
     return Scaffold(
-      backgroundColor: AppConstants.backgroundColor,
-      body: SafeArea(child: tabs[_index]),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        backgroundColor: Colors.white,
-        indicatorColor: AppConstants.primaryLight,
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.work_outline),
-              selectedIcon: Icon(Icons.work),
-              label: 'Missions'),
-          NavigationDestination(
-              icon: Icon(Icons.account_balance_wallet_outlined),
-              selectedIcon: Icon(Icons.account_balance_wallet),
-              label: 'Gains'),
-          NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person),
-              label: 'Compte'),
-        ],
+      backgroundColor: TtColors.canvas,
+      body: SafeArea(
+        child: AnimatedSwitcher(
+          duration: workerMotion(context, TtMotion.fast),
+          switchInCurve: TtMotion.emphasized,
+          child: KeyedSubtree(key: ValueKey<int>(_index), child: tabs[_index]),
+        ),
+      ),
+      bottomNavigationBar: TratraBottomNav(
+        items: _navItems,
+        currentIndex: _index,
+        onTap: (i) => setState(() => _index = i),
       ),
     );
   }
@@ -77,7 +99,9 @@ class _MissionsTabState extends State<_MissionsTab> {
   }
 
   Future<void> _reload() async {
-    setState(() => _future = context.read<BookingService>().list());
+    setState(() {
+      _future = context.read<BookingService>().list();
+    });
     await _future;
   }
 
@@ -89,50 +113,127 @@ class _MissionsTabState extends State<_MissionsTab> {
       setState(() => _online = now);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Présence impossible : profil non vérifié ? ($e)'),
-        backgroundColor: AppConstants.dangerColor,
-      ));
+      showWorkerToast(
+        context,
+        'Présence impossible : profil non vérifié ? ($e)',
+        tone: WorkerToastTone.danger,
+      );
     } finally {
       if (mounted) setState(() => _presenceBusy = false);
     }
   }
 
+  Widget _section({String? subtitle, required Widget child}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TratraSectionHeader(
+          title: 'Vos missions',
+          subtitle: subtitle,
+          padding: const EdgeInsets.fromLTRB(0, TtSpace.s6, 0, TtSpace.s3),
+        ),
+        child,
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final firstName = (context.watch<Session>().user?.firstName ?? '').trim();
     return RefreshIndicator(
       onRefresh: _reload,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: _pagePadding,
         children: [
-          const Text('Mes missions',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          _PresenceCard(
-              online: _online, busy: _presenceBusy, onChanged: _togglePresence),
-          const SizedBox(height: 16),
+          WorkerReveal(
+            child: WorkerPageHeader(
+              eyebrow: 'Espace artisan',
+              title: 'Mes missions',
+              subtitle: firstName.isEmpty
+                  ? 'Vos demandes et interventions.'
+                  : 'Bonjour $firstName, voici vos demandes et interventions.',
+            ),
+          ),
+          const SizedBox(height: TtSpace.s5),
+          WorkerReveal(
+            index: 1,
+            child: _PresenceCard(
+                online: _online,
+                busy: _presenceBusy,
+                onChanged: _togglePresence),
+          ),
           FutureBuilder<List<Booking>>(
             future: _future,
             builder: (context, snap) {
-              if (snap.connectionState == ConnectionState.waiting) {
-                return const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Center(child: CircularProgressIndicator()),
+              final loading = snap.connectionState == ConnectionState.waiting &&
+                  !snap.hasData;
+              if (loading) {
+                return _section(
+                  child: const TratraSkeletonList(
+                      count: 3, padding: EdgeInsets.zero),
                 );
               }
               if (snap.hasError) {
-                return _InfoBox(
-                    icon: Icons.error_outline,
-                    text: 'Erreur de chargement.\n${snap.error}');
+                return _section(
+                  child: TratraAlert(
+                    tone: TratraAlertTone.danger,
+                    title: 'Erreur de chargement',
+                    message: '${snap.error}',
+                    action: TratraButton(
+                      label: 'Réessayer',
+                      size: TratraButtonSize.sm,
+                      variant: TratraButtonVariant.outline,
+                      leading: const Icon(Icons.refresh_rounded),
+                      onPressed: _reload,
+                    ),
+                  ),
+                );
               }
               final items = snap.data ?? const <Booking>[];
               if (items.isEmpty) {
-                return const _InfoBox(
+                return _section(
+                  child: TratraEmptyState(
                     icon: Icons.inbox_outlined,
-                    text: 'Aucune mission pour le moment.');
+                    title: 'Aucune mission pour le moment',
+                    description: _online == true
+                        ? 'Les nouvelles demandes de vos clients apparaîtront ici.'
+                        : 'Les demandes de vos clients apparaîtront ici. Activez votre présence pour recevoir des missions.',
+                    actions: [
+                      if (_online != true)
+                        TratraButton(
+                          label: 'Passer en ligne',
+                          leading: const Icon(Icons.power_settings_new_rounded),
+                          loading: _presenceBusy,
+                          onPressed: () => _togglePresence(true),
+                        ),
+                      TratraButton(
+                        label: 'Actualiser',
+                        variant: TratraButtonVariant.outline,
+                        leading: const Icon(Icons.refresh_rounded),
+                        onPressed: _reload,
+                      ),
+                    ],
+                  ),
+                );
               }
-              return Column(
-                children: items.map((b) => _MissionCard(booking: b, onChanged: _reload)).toList(),
+              return _section(
+                subtitle: items.length == 1
+                    ? '1 mission'
+                    : '${items.length} missions',
+                child: Column(
+                  children: [
+                    for (var i = 0; i < items.length; i++)
+                      WorkerReveal(
+                        index: i,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: TtSpace.s3),
+                          child: _MissionCard(
+                              booking: items[i], onChanged: _reload),
+                        ),
+                      ),
+                  ],
+                ),
               );
             },
           ),
@@ -152,49 +253,56 @@ class _PresenceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isOnline = online == true;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppConstants.borderColor),
-      ),
+    return TratraCard(
+      variant: isOnline ? TratraCardVariant.soft : TratraCardVariant.standard,
+      padding: const EdgeInsets.fromLTRB(
+          TtSpace.s5, TtSpace.s4, TtSpace.s4, TtSpace.s4),
       child: Row(
         children: [
-          Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isOnline ? AppConstants.successColor : Colors.grey,
-            ),
-          ),
-          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(isOnline ? 'En ligne' : 'Hors ligne',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                // La clé relance l'animation de pulsation quand la présence change.
+                TratraBadge(
+                  isOnline ? 'En ligne' : 'Hors ligne',
+                  key: ValueKey<bool>(isOnline),
+                  tone: isOnline ? TratraTone.success : TratraTone.gray,
+                  dot: true,
+                  pulse: isOnline,
+                ),
+                const SizedBox(height: TtSpace.s2),
                 Text(
                   isOnline
                       ? 'Vous recevez des missions'
                       : 'Activez pour recevoir des missions',
-                  style: const TextStyle(
-                      fontSize: 12, color: AppConstants.textSecondary),
+                  style:
+                      TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft),
                 ),
               ],
             ),
           ),
-          if (busy)
-            const SizedBox(
-                width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-          else
-            Switch(
-              value: isOnline,
-              activeThumbColor: AppConstants.primaryColor,
-              onChanged: onChanged,
+          const SizedBox(width: TtSpace.s3),
+          SizedBox(
+            width: 56,
+            height: TtLayout.controlHeight,
+            child: Center(
+              child: busy
+                  ? Semantics(
+                      label: 'Mise à jour de la présence en cours',
+                      liveRegion: true,
+                      child: const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2.4),
+                      ),
+                    )
+                  : Semantics(
+                      label: 'Présence en ligne',
+                      child: Switch(value: isOnline, onChanged: onChanged),
+                    ),
             ),
+          ),
         ],
       ),
     );
@@ -208,29 +316,69 @@ class _MissionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppConstants.borderColor),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        title: Text(booking.serviceTitle ?? 'Mission #${booking.id}',
-            style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(
-          [booking.city, booking.address].where((s) => (s ?? '').isNotEmpty).join(' · '),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: StatusChip(status: booking.status),
-        onTap: () async {
-          await Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => MissionDetailScreen(bookingId: booking.id),
-          ));
-          await onChanged();
-        },
+    final title = booking.serviceTitle ?? 'Mission #${booking.id}';
+    final place = [booking.city, booking.address]
+        .where((s) => (s ?? '').isNotEmpty)
+        .join(' · ');
+    final when = booking.bookingDate;
+    final amount = booking.amount;
+    return TratraCard(
+      padding: TratraCard.compact,
+      onTap: () async {
+        await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => MissionDetailScreen(bookingId: booking.id),
+        ));
+        await onChanged();
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              TratraStatusBadge(TratraStatus.booking, booking.status),
+              const SizedBox(width: TtSpace.s3),
+              Expanded(
+                child: amount == null
+                    ? const SizedBox.shrink()
+                    : Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          formatFcfa(amount),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TratraTheme.style(TtType.title,
+                              color: TtColors.primaryDark),
+                        ),
+                      ),
+              ),
+            ],
+          ),
+          const SizedBox(height: TtSpace.s3),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.h3),
+                ),
+              ),
+              const SizedBox(width: TtSpace.s2),
+              const ExcludeSemantics(
+                child: Icon(Icons.chevron_right_rounded, color: TtColors.fog),
+              ),
+            ],
+          ),
+          if (place.isNotEmpty) ...[
+            const SizedBox(height: TtSpace.s2),
+            WorkerMetaLine(icon: Icons.location_on_outlined, text: place),
+          ],
+          if (when != null) ...[
+            const SizedBox(height: TtSpace.s1 + 2),
+            WorkerMetaLine(icon: Icons.event_outlined, text: formatWhen(when)),
+          ],
+        ],
       ),
     );
   }
@@ -247,7 +395,9 @@ class _EarningsTab extends StatefulWidget {
 class _EarningsTabState extends State<_EarningsTab> {
   late Future<num> _available;
   Map<String, dynamic>? _account;
+  Object? _accountError;
   bool _loadingAccount = true;
+  bool _payoutBusy = false;
 
   @override
   void initState() {
@@ -259,7 +409,14 @@ class _EarningsTabState extends State<_EarningsTab> {
   Future<void> _loadAccount() async {
     try {
       final acc = await context.read<HandymanService>().getPayoutAccount();
-      if (mounted) setState(() => _account = acc);
+      if (mounted) {
+        setState(() {
+          _account = acc;
+          _accountError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _accountError = e);
     } finally {
       if (mounted) setState(() => _loadingAccount = false);
     }
@@ -269,55 +426,275 @@ class _EarningsTabState extends State<_EarningsTab> {
     setState(() {
       _available = context.read<HandymanService>().availableEarnings();
       _loadingAccount = true;
+      _accountError = null;
     });
     await _loadAccount();
   }
 
   Future<void> _requestPayout(num available) async {
     if (available <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Aucun gain disponible au retrait.')));
+      showWorkerToast(context, 'Aucun gain disponible au retrait.');
       return;
     }
     if (_account == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Configurez d\'abord un compte de versement.')));
+      showWorkerToast(context, 'Configurez d’abord un compte de versement.');
       return;
     }
+    setState(() => _payoutBusy = true);
     try {
       await context.read<HandymanService>().requestPayout(available);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Demande de versement envoyée.'),
-          backgroundColor: AppConstants.successColor));
+      showWorkerToast(context, 'Demande de versement envoyée.',
+          tone: WorkerToastTone.success);
       await _reload();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Échec : $e'),
-          backgroundColor: AppConstants.dangerColor));
+      showWorkerToast(context, 'Échec : $e', tone: WorkerToastTone.danger);
+    } finally {
+      if (mounted) setState(() => _payoutBusy = false);
     }
   }
 
   Future<void> _editAccount() async {
-    final result = await showModalBottomSheet<Map<String, String>>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => const _PayoutAccountSheet(),
+    final result = await showTratraSheet<Map<String, String>>(
+      context,
+      title: 'Compte de versement',
+      description:
+          'Choisissez l’opérateur et saisissez le numéro ou l’IBAN qui recevra vos versements.',
+      child: const _PayoutAccountForm(),
     );
-    if (result == null) return;
+    if (result == null || !mounted) return;
     try {
       final acc = await context.read<HandymanService>().upsertPayoutAccount(
             provider: result['provider']!,
             accountRef: result['account_ref']!,
           );
-      if (mounted) setState(() => _account = acc);
+      if (mounted) {
+        setState(() {
+          _account = acc;
+          _accountError = null;
+        });
+      }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Échec : $e'),
-          backgroundColor: AppConstants.dangerColor));
+      showWorkerToast(context, 'Échec : $e', tone: WorkerToastTone.danger);
     }
+  }
+
+  String _accountTitle(Map<String, dynamic> account) {
+    final provider = '${account['provider'] ?? ''}';
+    final parts = [
+      _providerLabels[provider] ?? provider,
+      '${account['account_ref'] ?? ''}'
+    ];
+    final title = parts.where((s) => s.isNotEmpty).join(' · ');
+    return title.isEmpty ? 'Compte enregistré' : title;
+  }
+
+  Widget _balanceCard(AsyncSnapshot<num> snap) {
+    final loading = snap.connectionState == ConnectionState.waiting;
+    final failed = !loading && snap.hasError;
+    final amount = snap.data ?? 0;
+
+    final Widget value;
+    if (loading) {
+      value = Semantics(
+        label: 'Chargement du montant disponible',
+        liveRegion: true,
+        child: ExcludeSemantics(
+          child: TratraShimmer(
+            child: Container(
+              width: 180,
+              height: 38,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                borderRadius: TtRadius.controlAll,
+              ),
+            ),
+          ),
+        ),
+      );
+    } else if (failed) {
+      value = Text('—',
+          style: TratraTheme.style(TtType.displayLg, color: Colors.white));
+    } else {
+      value = FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: formatAmount(amount),
+                style: TratraTheme.style(TtType.displayLg, color: Colors.white),
+              ),
+              TextSpan(
+                text: ' FCFA',
+                style: TratraTheme.style(TtType.h3, color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return TratraCard(
+      variant: TratraCardVariant.night,
+      padding: const EdgeInsets.all(TtSpace.s6),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Halo décoratif jaune dans l'angle (recadré par la carte).
+          Positioned(
+            right: -(TtSpace.s6 + TtSpace.s10),
+            top: -(TtSpace.s6 + TtSpace.s10),
+            child: ExcludeSemantics(
+              child: Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      TtColors.accent.withValues(alpha: 0.22),
+                      TtColors.accent.withValues(alpha: 0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.account_balance_wallet_outlined,
+                      size: 18, color: TtColors.accent),
+                  const SizedBox(width: TtSpace.s2),
+                  Flexible(
+                    child: Text(
+                      'DISPONIBLE AU RETRAIT',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TratraTheme.style(TtType.eyebrow,
+                          color: Colors.white70),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: TtSpace.s3),
+              value,
+              const SizedBox(height: TtSpace.s5),
+              TratraButton(
+                label: 'Demander un versement',
+                variant: TratraButtonVariant.accent,
+                size: TratraButtonSize.lg,
+                block: true,
+                loading: _payoutBusy,
+                leading: const Icon(Icons.payments_outlined),
+                onPressed: () => _requestPayout(amount),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _accountCard() {
+    if (_accountError != null && !_loadingAccount) {
+      return TratraAlert(
+        tone: TratraAlertTone.danger,
+        title: 'Compte de versement indisponible',
+        message:
+            'Impossible de charger votre compte de versement.\n$_accountError',
+        action: TratraButton(
+          label: 'Réessayer',
+          size: TratraButtonSize.sm,
+          variant: TratraButtonVariant.outline,
+          leading: const Icon(Icons.refresh_rounded),
+          onPressed: _reload,
+        ),
+      );
+    }
+
+    final account = _account;
+    final Widget details;
+    if (_loadingAccount) {
+      details = Semantics(
+        label: 'Chargement du compte de versement',
+        liveRegion: true,
+        child: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TratraSkeleton(width: 160, height: 14),
+            SizedBox(height: TtSpace.s2 + 2),
+            TratraSkeleton(width: 110, height: 12),
+          ],
+        ),
+      );
+    } else if (account == null) {
+      details = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Non configuré', style: TratraTheme.style(TtType.title)),
+          const SizedBox(height: TtSpace.s1),
+          Text(
+            'Mobile Money ou compte bancaire',
+            style: TratraTheme.style(TtType.bodySm, color: TtColors.ash),
+          ),
+        ],
+      );
+    } else {
+      final verified = account['verified'] == true;
+      details = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _accountTitle(account),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TratraTheme.style(TtType.title),
+          ),
+          const SizedBox(height: TtSpace.s2),
+          TratraBadge(
+            verified ? 'Vérifié' : 'En attente de vérification',
+            tone: verified ? TratraTone.success : TratraTone.accent,
+            dot: true,
+          ),
+        ],
+      );
+    }
+
+    return TratraCard(
+      padding: TratraCard.compact,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const WorkerIconTile(Icons.account_balance_wallet_outlined),
+              const SizedBox(width: TtSpace.s3),
+              Expanded(child: details),
+            ],
+          ),
+          if (!_loadingAccount) ...[
+            const SizedBox(height: TtSpace.s4),
+            TratraButton(
+              label: account == null ? 'Ajouter' : 'Modifier',
+              variant: account == null
+                  ? TratraButtonVariant.primary
+                  : TratraButtonVariant.soft,
+              block: true,
+              leading: Icon(
+                  account == null ? Icons.add_rounded : Icons.edit_outlined),
+              onPressed: _editAccount,
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -325,102 +702,70 @@ class _EarningsTabState extends State<_EarningsTab> {
     return RefreshIndicator(
       onRefresh: _reload,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: _pagePadding,
         children: [
-          const Text('Mes gains',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
+          const WorkerReveal(
+            child:
+                WorkerPageHeader(eyebrow: 'Espace artisan', title: 'Mes gains'),
+          ),
+          const SizedBox(height: TtSpace.s5),
           FutureBuilder<num>(
             future: _available,
             builder: (context, snap) {
-              final amount = snap.data ?? 0;
-              return Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [
-                    AppConstants.primaryColor,
-                    AppConstants.primaryDark
-                  ]),
-                  borderRadius: BorderRadius.circular(20),
-                ),
+              final failed = snap.connectionState != ConnectionState.waiting &&
+                  snap.hasError;
+              return WorkerReveal(
+                index: 1,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Disponible au retrait',
-                        style: TextStyle(color: Colors.white70)),
-                    const SizedBox(height: 6),
-                    Text(
-                      snap.connectionState == ConnectionState.waiting
-                          ? '…'
-                          : '${amount.toStringAsFixed(0)} FCFA',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 30,
-                          fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppConstants.accentColor,
-                          foregroundColor: AppConstants.textPrimary,
+                    _balanceCard(snap),
+                    if (failed) ...[
+                      const SizedBox(height: TtSpace.s3),
+                      TratraAlert(
+                        tone: TratraAlertTone.danger,
+                        title: 'Gains indisponibles',
+                        message:
+                            'Impossible de charger vos gains disponibles.\n${snap.error}',
+                        action: TratraButton(
+                          label: 'Réessayer',
+                          size: TratraButtonSize.sm,
+                          variant: TratraButtonVariant.outline,
+                          leading: const Icon(Icons.refresh_rounded),
+                          onPressed: _reload,
                         ),
-                        onPressed: () => _requestPayout(amount),
-                        icon: const Icon(Icons.payments_outlined),
-                        label: const Text('Demander un versement'),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               );
             },
           ),
-          const SizedBox(height: 20),
-          const Text('Compte de versement',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppConstants.borderColor),
-            ),
-            child: ListTile(
-              leading: const Icon(Icons.account_balance_wallet_outlined,
-                  color: AppConstants.primaryColor),
-              title: Text(_loadingAccount
-                  ? 'Chargement…'
-                  : (_account == null
-                      ? 'Non configuré'
-                      : '${_account!['provider'] ?? ''} · ${_account!['account_ref'] ?? ''}')),
-              subtitle: _account != null
-                  ? Text(_account!['verified'] == true
-                      ? 'Vérifié'
-                      : 'En attente de vérification')
-                  : const Text('Mobile Money ou compte bancaire'),
-              trailing: TextButton(
-                onPressed: _editAccount,
-                child: Text(_account == null ? 'Ajouter' : 'Modifier'),
-              ),
-            ),
+          TratraSectionHeader(
+            title: 'Compte de versement',
+            padding: const EdgeInsets.fromLTRB(0, TtSpace.s6, 0, TtSpace.s3),
           ),
+          WorkerReveal(index: 2, child: _accountCard()),
         ],
       ),
     );
   }
 }
 
-class _PayoutAccountSheet extends StatefulWidget {
-  const _PayoutAccountSheet();
+/// Formulaire du compte de versement (affiché dans une feuille basse) :
+/// renvoie `{provider, account_ref}` à l'appelant, comme avant.
+class _PayoutAccountForm extends StatefulWidget {
+  const _PayoutAccountForm();
 
   @override
-  State<_PayoutAccountSheet> createState() => _PayoutAccountSheetState();
+  State<_PayoutAccountForm> createState() => _PayoutAccountFormState();
 }
 
-class _PayoutAccountSheetState extends State<_PayoutAccountSheet> {
+class _PayoutAccountFormState extends State<_PayoutAccountForm> {
   String _provider = 'om';
   final _ref = TextEditingController();
+  String? _error;
 
   @override
   void dispose() {
@@ -428,118 +773,173 @@ class _PayoutAccountSheetState extends State<_PayoutAccountSheet> {
     super.dispose();
   }
 
+  void _submit() {
+    final ref = _ref.text.trim();
+    if (ref.isEmpty) {
+      setState(() => _error = 'Saisissez un numéro ou un IBAN.');
+      return;
+    }
+    Navigator.of(context).pop({'provider': _provider, 'account_ref': ref});
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Compte de versement',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _provider,
-            decoration: const InputDecoration(labelText: 'Opérateur'),
-            items: const [
-              DropdownMenuItem(value: 'om', child: Text('Orange Money')),
-              DropdownMenuItem(value: 'mtn', child: Text('MTN MoMo')),
-              DropdownMenuItem(value: 'moov', child: Text('Moov Money')),
-              DropdownMenuItem(value: 'wave', child: Text('Wave')),
-              DropdownMenuItem(value: 'bank', child: Text('Compte bancaire')),
-            ],
-            onChanged: (v) => setState(() => _provider = v ?? 'om'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _ref,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-                labelText: 'Numéro / IBAN', hintText: '+225 0X XX XX XX XX'),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                if (_ref.text.trim().isEmpty) return;
-                Navigator.of(context).pop(
-                    {'provider': _provider, 'account_ref': _ref.text.trim()});
-              },
-              child: const Text('Enregistrer'),
-            ),
-          ),
-        ],
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Opérateur',
+          style: TratraTheme.style(TtType.bodySm)
+              .copyWith(fontWeight: FontWeight.w600, fontSize: 14),
+        ),
+        const SizedBox(height: TtSpace.s2),
+        Wrap(
+          spacing: TtSpace.s2,
+          runSpacing: TtSpace.s2,
+          children: [
+            for (final entry in _providerLabels.entries)
+              SizedBox(
+                height: TtLayout.touchTarget,
+                child: TratraChip(
+                  label: entry.value,
+                  selected: _provider == entry.key,
+                  onTap: () => setState(() => _provider = entry.key),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: TtSpace.s4),
+        TratraInput(
+          label: 'Numéro / IBAN',
+          hint: '+225 0X XX XX XX XX',
+          required: true,
+          controller: _ref,
+          keyboardType:
+              _provider == 'bank' ? TextInputType.text : TextInputType.phone,
+          textInputAction: TextInputAction.done,
+          errorText: _error,
+          onChanged: (_) {
+            if (_error != null) setState(() => _error = null);
+          },
+          onSubmitted: (_) => _submit(),
+        ),
+        const SizedBox(height: TtSpace.s5),
+        TratraButton(
+          label: 'Enregistrer',
+          size: TratraButtonSize.lg,
+          block: true,
+          onPressed: _submit,
+        ),
+      ],
     );
   }
 }
 
 // ============================ COMPTE ============================
-class _AccountTab extends StatelessWidget {
+class _AccountTab extends StatefulWidget {
   const _AccountTab();
+
+  @override
+  State<_AccountTab> createState() => _AccountTabState();
+}
+
+class _AccountTabState extends State<_AccountTab> {
+  bool _loggingOut = false;
+
+  Future<void> _logout() async {
+    setState(() => _loggingOut = true);
+    try {
+      await context.read<Session>().logout();
+    } finally {
+      if (mounted) setState(() => _loggingOut = false);
+    }
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (r) => false);
+  }
 
   @override
   Widget build(BuildContext context) {
     final session = context.watch<Session>();
     final user = session.user;
+    final name = user?.fullName ?? 'Artisan';
+    final email = user?.email ?? '';
+    final phone = (user?.phoneNumber ?? '').trim();
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: _pagePadding,
       children: [
-        const SizedBox(height: 8),
-        Center(
-          child: CircleAvatar(
-            radius: 40,
-            backgroundColor: AppConstants.primaryLight,
-            child: const Icon(Icons.handyman,
-                size: 40, color: AppConstants.primaryColor),
+        WorkerReveal(
+          child: Column(
+            children: [
+              TratraAvatar(name: name, photoUrl: user?.profileImage, size: 88),
+              const SizedBox(height: TtSpace.s4),
+              Text(
+                name,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TratraTheme.style(TtType.h2),
+              ),
+              const SizedBox(height: TtSpace.s2),
+              const TratraBadge('Artisan', icon: Icons.handyman_outlined),
+              if (email.isNotEmpty) ...[
+                const SizedBox(height: TtSpace.s3),
+                Text(
+                  email,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.bodySm, color: TtColors.ash),
+                ),
+              ],
+              if (phone.isNotEmpty) ...[
+                const SizedBox(height: TtSpace.s1),
+                Text(
+                  phone,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.bodySm, color: TtColors.ash),
+                ),
+              ],
+            ],
           ),
         ),
-        const SizedBox(height: 12),
-        Center(
-          child: Text(user?.fullName ?? 'Artisan',
-              style:
-                  const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        const SizedBox(height: TtSpace.s8),
+        WorkerReveal(
+          index: 1,
+          child: _AccountTile(
+            icon: Icons.verified_user_outlined,
+            title: 'Vérification (KYC)',
+            subtitle: 'Pièces d’identité et justificatifs',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const KycScreen()),
+            ),
+          ),
         ),
-        Center(
-          child: Text(user?.email ?? '',
-              style: const TextStyle(color: AppConstants.textSecondary)),
+        const SizedBox(height: TtSpace.s3),
+        WorkerReveal(
+          index: 2,
+          child: _AccountTile(
+            icon: Icons.workspace_premium_outlined,
+            title: 'Abonnement Pro',
+            subtitle: 'Mise en avant et avantages artisan',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const _SubscriptionScreen()),
+            ),
+          ),
         ),
-        const SizedBox(height: 24),
-        _AccountTile(
-          icon: Icons.verified_user_outlined,
-          title: 'Vérification (KYC)',
-          subtitle: 'Pièces d\'identité et justificatifs',
-          onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const KycScreen())),
-        ),
-        _AccountTile(
-          icon: Icons.workspace_premium_outlined,
-          title: 'Abonnement Pro',
-          subtitle: 'Mise en avant et avantages artisan',
-          onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const _SubscriptionScreen())),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-                foregroundColor: AppConstants.dangerColor),
-            onPressed: () async {
-              await context.read<Session>().logout();
-              if (!context.mounted) return;
-              Navigator.of(context)
-                  .pushNamedAndRemoveUntil('/login', (r) => false);
-            },
-            icon: const Icon(Icons.logout),
-            label: const Text('Déconnexion'),
+        const SizedBox(height: TtSpace.s6),
+        WorkerReveal(
+          index: 3,
+          child: TratraButton(
+            label: 'Déconnexion',
+            variant: TratraButtonVariant.outline,
+            size: TratraButtonSize.lg,
+            block: true,
+            loading: _loggingOut,
+            leading: const Icon(Icons.logout_rounded, color: TtColors.danger),
+            onPressed: _logout,
           ),
         ),
       ],
@@ -552,27 +952,42 @@ class _AccountTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
-  const _AccountTile(
-      {required this.icon,
-      required this.title,
-      required this.subtitle,
-      required this.onTap});
+  const _AccountTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppConstants.borderColor),
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: AppConstants.primaryColor),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
+    return TratraCard(
+      padding: TratraCard.compact,
+      onTap: onTap,
+      child: Row(
+        children: [
+          WorkerIconTile(icon),
+          const SizedBox(width: TtSpace.s3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TratraTheme.style(TtType.title)),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.bodySm, color: TtColors.ash),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: TtSpace.s2),
+          const ExcludeSemantics(
+            child: Icon(Icons.chevron_right_rounded, color: TtColors.fog),
+          ),
+        ],
       ),
     );
   }
@@ -588,95 +1003,186 @@ class _SubscriptionScreen extends StatefulWidget {
 
 class _SubscriptionScreenState extends State<_SubscriptionScreen> {
   late Future<List<Map<String, dynamic>>> _plans;
+  int? _subscribingPlan;
 
   @override
   void initState() {
     super.initState();
-    _plans = context.read<HandymanService>().plans(audience: 'handyman');
+    _plans = _fetchPlans();
   }
 
+  Future<List<Map<String, dynamic>>> _fetchPlans() =>
+      context.read<HandymanService>().plans(audience: 'handyman');
+
   Future<void> _subscribe(int planId) async {
+    setState(() => _subscribingPlan = planId);
     try {
       await context.read<HandymanService>().subscribe(planId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Abonnement activé.'),
-          backgroundColor: AppConstants.successColor));
+      showWorkerToast(context, 'Abonnement activé.',
+          tone: WorkerToastTone.success);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Échec : $e'),
-          backgroundColor: AppConstants.dangerColor));
+      showWorkerToast(context, 'Échec : $e', tone: WorkerToastTone.danger);
+    } finally {
+      if (mounted) setState(() => _subscribingPlan = null);
     }
+  }
+
+  /// Prix lisible ; la valeur brute est conservée si elle n'est pas un entier.
+  String _priceLabel(dynamic raw) {
+    final value = num.tryParse('${raw ?? 0}');
+    if (value == null) return '${raw ?? 0}';
+    if (value != value.roundToDouble()) return '$value';
+    return formatAmount(value);
+  }
+
+  String _intervalLabel(dynamic raw) {
+    final interval = '${raw ?? ''}';
+    return switch (interval) {
+      'monthly' => 'mois',
+      'yearly' => 'an',
+      _ => interval,
+    };
+  }
+
+  Widget _planCard(Map<String, dynamic> p) {
+    final features = (p['features'] as List?)?.cast<dynamic>() ?? const [];
+    final id = int.tryParse('${p['id']}');
+    final interval = _intervalLabel(p['interval']);
+    return TratraCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(p['name']?.toString() ?? 'Offre',
+              style: TratraTheme.style(TtType.h3)),
+          const SizedBox(height: TtSpace.s2),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: _priceLabel(p['price']),
+                  style:
+                      TratraTheme.style(TtType.h1, color: TtColors.primaryDark),
+                ),
+                TextSpan(
+                  text: ' FCFA${interval.isEmpty ? '' : ' / $interval'}',
+                  style: TratraTheme.style(TtType.bodySm, color: TtColors.ash),
+                ),
+              ],
+            ),
+          ),
+          if (features.isNotEmpty) ...[
+            const SizedBox(height: TtSpace.s4),
+            for (final f in features)
+              Padding(
+                padding: const EdgeInsets.only(bottom: TtSpace.s2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: Icon(Icons.check_circle_rounded,
+                          size: 18, color: TtColors.primary),
+                    ),
+                    const SizedBox(width: TtSpace.s2 + 2),
+                    Expanded(
+                      child: Text(
+                        f.toString(),
+                        style: TratraTheme.style(TtType.body,
+                                color: TtColors.inkSoft)
+                            .copyWith(fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          const SizedBox(height: TtSpace.s3),
+          TratraButton(
+            label: 'Choisir cette offre',
+            size: TratraButtonSize.lg,
+            block: true,
+            loading: id != null && _subscribingPlan == id,
+            onPressed: (id == null || _subscribingPlan != null)
+                ? null
+                : () => _subscribe(id),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Abonnement Pro')),
+      backgroundColor: TtColors.canvas,
+      appBar: const TratraAppBar(title: 'Abonnement Pro'),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _plans,
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const SingleChildScrollView(
+              child: TratraSkeletonList(
+                  count: 2, padding: EdgeInsets.all(TtLayout.gutterMobile)),
+            );
           }
-          final plans = snap.data ?? const [];
+          if (snap.hasError) {
+            return ListView(
+              padding: _pagePadding,
+              children: [
+                TratraAlert(
+                  tone: TratraAlertTone.danger,
+                  title: 'Offres indisponibles',
+                  message: 'Impossible de charger les offres.\n${snap.error}',
+                  action: TratraButton(
+                    label: 'Réessayer',
+                    size: TratraButtonSize.sm,
+                    variant: TratraButtonVariant.outline,
+                    leading: const Icon(Icons.refresh_rounded),
+                    onPressed: () => setState(() {
+                      _plans = _fetchPlans();
+                    }),
+                  ),
+                ),
+              ],
+            );
+          }
+          final plans = snap.data ?? const <Map<String, dynamic>>[];
           if (plans.isEmpty) {
-            return const _InfoBox(
-                icon: Icons.workspace_premium_outlined,
-                text: 'Aucune offre disponible.');
+            return const TratraEmptyState(
+              icon: Icons.workspace_premium_outlined,
+              title: 'Aucune offre disponible',
+              description:
+                  'Les offres d’abonnement Pro apparaîtront ici dès qu’elles seront publiées.',
+            );
           }
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: plans.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, i) {
-              final p = plans[i];
-              final features =
-                  (p['features'] as List?)?.cast<dynamic>() ?? const [];
-              return Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppConstants.borderColor),
+          return ListView(
+            padding: _pagePadding,
+            children: [
+              const WorkerReveal(
+                child: TratraCard(
+                  variant: TratraCardVariant.soft,
+                  padding: TratraCard.compact,
+                  child: Row(
+                    children: [
+                      WorkerIconTile(Icons.workspace_premium_outlined),
+                      SizedBox(width: TtSpace.s3),
+                      Expanded(child: _SubscriptionIntro()),
+                    ],
+                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(p['name']?.toString() ?? 'Offre',
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text('${p['price'] ?? 0} FCFA / ${p['interval'] ?? ''}',
-                        style: const TextStyle(
-                            color: AppConstants.primaryColor,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 10),
-                    ...features.map((f) => Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Row(children: [
-                            const Icon(Icons.check_circle,
-                                size: 16, color: AppConstants.successColor),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(f.toString())),
-                          ]),
-                        )),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          final id = int.tryParse('${p['id']}');
-                          if (id != null) _subscribe(id);
-                        },
-                        child: const Text('Choisir cette offre'),
-                      ),
-                    ),
-                  ],
+              ),
+              const SizedBox(height: TtSpace.s5),
+              for (var i = 0; i < plans.length; i++)
+                WorkerReveal(
+                  index: i + 1,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: TtSpace.s3),
+                    child: _planCard(plans[i]),
+                  ),
                 ),
-              );
-            },
+            ],
           );
         },
       ),
@@ -684,71 +1190,34 @@ class _SubscriptionScreenState extends State<_SubscriptionScreen> {
   }
 }
 
-// ============================ SHARED ============================
-class StatusChip extends StatelessWidget {
-  final String status;
-  const StatusChip({super.key, required this.status});
-
-  static const _labels = {
-    'pending': 'En attente',
-    'confirmed': 'Confirmée',
-    'in_progress': 'En cours',
-    'completed': 'Terminée',
-    'cancelled': 'Annulée',
-  };
-
-  Color get _color {
-    switch (status) {
-      case 'completed':
-        return AppConstants.successColor;
-      case 'cancelled':
-        return AppConstants.dangerColor;
-      case 'in_progress':
-        return AppConstants.accentDark;
-      default:
-        return AppConstants.primaryColor;
-    }
-  }
+class _SubscriptionIntro extends StatelessWidget {
+  const _SubscriptionIntro();
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: _color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(_labels[status] ?? status,
-          style: TextStyle(
-              color: _color, fontSize: 12, fontWeight: FontWeight.w600)),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Abonnement Pro', style: TratraTheme.style(TtType.title)),
+        const SizedBox(height: 2),
+        Text(
+          'Mise en avant et avantages artisan',
+          style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft),
+        ),
+      ],
     );
   }
 }
 
-class _InfoBox extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  const _InfoBox({required this.icon, required this.text});
+// ============================ SHARED ============================
+
+/// Pastille de statut d'une réservation. Conservée pour compatibilité des imports :
+/// délègue au badge du Design System (libellés et tons identiques sur tout le produit).
+class StatusChip extends StatelessWidget {
+  final String status;
+  const StatusChip({super.key, required this.status});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppConstants.borderColor),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, size: 40, color: AppConstants.textSecondary),
-          const SizedBox(height: 8),
-          Text(text,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppConstants.textSecondary)),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      TratraStatusBadge(TratraStatus.booking, status);
 }

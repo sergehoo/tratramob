@@ -10,8 +10,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/core/theme.dart';
+import 'package:flutter_tratra/design/design.dart';
 
 void main() {
+  setUpAll(() => TratraTheme.useBrandFonts = false);
+
   testWidgets('renders the Tratra branded application shell',
       (WidgetTester tester) async {
     await tester.pumpWidget(
