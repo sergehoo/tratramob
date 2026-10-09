@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/theme.dart';
@@ -52,6 +53,10 @@ final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 /// Ouvre le guide de style au lancement (debug uniquement) :
 /// `flutter run --dart-define=TRATRA_GALLERY=true`.
 const bool _openGallery = bool.fromEnvironment('TRATRA_GALLERY');
+
+/// App en français (sélecteurs de date/heure, boutons système…).
+const Locale _appLocale = Locale('fr');
+const List<Locale> _supportedLocales = [Locale('fr'), Locale('en')];
 
 void main() {
   runZonedGuarded(() async {
@@ -263,6 +268,9 @@ class _MyAppState extends State<MyApp> {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
+            locale: _appLocale,
+            supportedLocales: _supportedLocales,
+            localizationsDelegates: GlobalMaterialLocalizations.delegates,
             home: const Scaffold(
               body: Center(
                 child: Column(
@@ -294,6 +302,9 @@ class _MyAppState extends State<MyApp> {
           title: 'Tratra',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
+          locale: _appLocale,
+          supportedLocales: _supportedLocales,
+          localizationsDelegates: GlobalMaterialLocalizations.delegates,
           initialRoute: initialRoute,
           onGenerateRoute: _generateRoute,
         );
