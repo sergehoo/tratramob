@@ -2,46 +2,17 @@
 // Les valeurs viennent exclusivement de tokens.dart (généré depuis tokens.json).
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'tokens.dart';
 
 abstract final class TratraTheme {
-  /// Polices de marque (Montserrat/Poppins via google_fonts : téléchargées une fois puis
-  /// mises en cache). À désactiver dans les tests / environnements sans réseau.
-  /// Pour un fonctionnement 100 % hors-ligne, déposer les .ttf dans `assets/google_fonts/`
-  /// (le paquet les utilise automatiquement, sans réseau).
-  static bool useBrandFonts = true;
-
-  /// Charge les polices pendant l'écran de démarrage (évite un changement de police visible).
-  /// Silencieux et borné : sans réseau, l'app démarre avec la police système.
-  static Future<void> preloadFonts() async {
-    if (!useBrandFonts) return;
-    try {
-      await GoogleFonts.pendingFonts([
-        GoogleFonts.poppins(),
-        GoogleFonts.poppins(fontWeight: FontWeight.w600),
-        GoogleFonts.montserrat(fontWeight: FontWeight.w700),
-        GoogleFonts.montserrat(fontWeight: FontWeight.w800),
-      ]).timeout(const Duration(seconds: 4));
-    } catch (_) {
-      // Repli sur la police système : jamais bloquant.
-    }
-  }
-
   /// Style de texte construit depuis une spécification de jeton (mobile = tailles compactes).
+  /// Polices EMBARQUÉES (assets/fonts, licence SIL OFL) : aucun téléchargement à l'exécution,
+  /// rendu identique hors ligne. Montserrat est une police variable : l'axe `wght` porte la graisse.
   static TextStyle style(TtTextSpec s, {Color color = TtColors.ink}) {
-    if (!useBrandFonts) {
-      return TextStyle(
-        fontSize: s.sizeMobile,
-        height: s.line,
-        fontWeight: s.weight,
-        letterSpacing: s.tracking * s.sizeMobile,
-        color: color,
-      );
-    }
-    final font = s.display ? GoogleFonts.montserrat : GoogleFonts.poppins;
-    return font(
+    return TextStyle(
+      fontFamily: s.display ? TtFont.display : TtFont.body,
+      fontVariations: s.display ? [FontVariation('wght', s.weight.value.toDouble())] : null,
       fontSize: s.sizeMobile,
       height: s.line,
       fontWeight: s.weight,

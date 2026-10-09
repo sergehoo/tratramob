@@ -129,13 +129,10 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     // Hydrate la session (utilisateur + rôle) depuis le stockage chiffré.
-    _bootFuture = Future.wait<void>([
-      context.read<Session>().loadFromStorage().timeout(
-            const Duration(seconds: 8),
-            onTimeout: () {},
-          ),
-      TratraTheme.preloadFonts(),
-    ]);
+    _bootFuture = context.read<Session>().loadFromStorage().timeout(
+          const Duration(seconds: 8),
+          onTimeout: () {},
+        );
   }
 
   Route<dynamic> _generateRoute(RouteSettings settings) {

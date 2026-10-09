@@ -9,10 +9,6 @@ Widget _host(Widget child) => MaterialApp(
     );
 
 void main() {
-  setUpAll(() {
-    // Pas de réseau en test : polices de marque désactivées (police système).
-    TratraTheme.useBrandFonts = false;
-  });
 
   group('Jetons & thème', () {
     test('la marque reprend les valeurs de la landing', () {

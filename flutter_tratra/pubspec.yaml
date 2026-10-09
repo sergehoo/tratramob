@@ -12,7 +12,6 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  google_fonts: ^6.3.1
   flutter_rating_bar: ^4.0.1
   intl: ^0.20.2
   carousel_slider: ^5.1.1
@@ -40,7 +39,29 @@ dev_dependencies:
   # flutter_native_splash: ^2.4.1
 
 flutter:
-  uses-material-design: true  # <= DOIT être ici, sous "flutter:"
+  uses-material-design: true
+
+  # Polices de la marque, embarquées (SIL OFL — voir assets/fonts/OFL-*.txt).
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Poppins-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
+    - family: Montserrat
+      fonts:
+        - asset: assets/fonts/Montserrat-Variable.ttf
+          weight: 600
+        - asset: assets/fonts/Montserrat-Variable.ttf
+          weight: 700
+        - asset: assets/fonts/Montserrat-Variable.ttf
+          weight: 800
+  # <= DOIT être ici, sous "flutter:"
   assets:
     - assets/images/
     - assets/icons/
