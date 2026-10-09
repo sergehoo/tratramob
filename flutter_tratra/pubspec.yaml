@@ -70,14 +70,9 @@ flutter:
           weight: 800
   # <= DOIT être ici, sous "flutter:"
   assets:
-    - assets/images/
+    - assets/images/   # contient le logo officiel tratra_logo.webp (copie de frontend/public/tratra_logo.webp)
     - assets/icons/
     - assets/handy.sqlite
-    - assets/images/tratra_logo.webp
-    - assets/images/tratra_logo_dark.webp
-    - assets/images/placeholder-1-1.png 
-    # Assure-toi que ces fichiers existent réellement :
-    # - assets/images/logo.webp
     # - assets/images/logo_dark.png
 
 # Configs outils (facultatives) — laisses-les ICI, hors de "flutter:"
