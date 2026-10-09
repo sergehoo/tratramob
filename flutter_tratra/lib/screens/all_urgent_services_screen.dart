@@ -229,7 +229,8 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
       reviewCount: reviewCount,
       discountedPrice: null,
       duration: const Duration(),
-      isUrgent: (data['is_urgent'] ?? false) == true, // bool sûr
+      // Liste filtrée côté serveur (`urgent=true`) : artisan en ligne maintenant, hors congé.
+      isUrgent: true,
       includedServices: const [],
       requiredTools: const [],
       priceType: (data['price_type'] ?? 'fixed').toString(),
@@ -347,11 +348,23 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
           const _UrgentMark(),
           const SizedBox(width: TtSpace.s3),
           Flexible(
-            child: Text(
-              'Services urgents',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TratraTheme.style(TtType.h3),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Services urgents',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.h3),
+                ),
+                Text(
+                  'Artisans en ligne maintenant',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TratraTheme.style(TtType.caption, color: TtColors.ash),
+                ),
+              ],
             ),
           ),
         ],
@@ -484,9 +497,9 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
     }
     return TratraEmptyState(
       icon: Icons.bolt_rounded,
-      title: 'Aucun service urgent pour le moment',
+      title: 'Aucun artisan disponible maintenant',
       description:
-          'Les services signalés comme urgents apparaîtront ici. Actualisez ou consultez tous les services.',
+          'Les services apparaissent ici dès qu’un artisan vérifié est en ligne et disponible. Actualisez ou consultez tous les services.',
       actions: [
         TratraButton(
           label: 'Voir tous les services',
