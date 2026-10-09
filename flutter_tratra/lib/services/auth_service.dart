@@ -56,6 +56,26 @@ class AuthService {
     }
   }
 
+  /// POST /auth/otp/request/ — envoie un code de vérification au téléphone du compte
+  /// (utilisateur connecté). Le code éventuellement renvoyé en développement n'est JAMAIS exposé.
+  Future<void> requestOtp() async {
+    final r = await api.client.post(
+      Uri.parse('${api.baseUrl}${AppConstants.otpRequestEndpoint}'),
+      headers: await api.headers,
+    );
+    if (r.statusCode != 200 && r.statusCode != 201) api.handleError(r);
+  }
+
+  /// POST /auth/otp/verify/ { code } — marque le compte comme vérifié.
+  Future<void> verifyOtp(String code) async {
+    final r = await api.client.post(
+      Uri.parse('${api.baseUrl}${AppConstants.otpVerifyEndpoint}'),
+      headers: await api.headers,
+      body: jsonEncode({'code': code}),
+    );
+    if (r.statusCode != 200) api.handleError(r);
+  }
+
   Future<User> getCurrentUser() async {
     final r = await api.client.get(
       Uri.parse('${api.baseUrl}${AppConstants.usersMeEndpoint}'),

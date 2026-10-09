@@ -4,6 +4,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/core/auth_http_client.dart';
 
@@ -111,17 +112,7 @@ class BaseApi {
   }
 
   Never handleError(http.Response r) {
-    if (r.statusCode == 401) {
-      throw Exception('Non autorisé — veuillez vous reconnecter');
-    } else if (r.statusCode == 403) {
-      throw Exception('Accès refusé');
-    } else if (r.statusCode == 404) {
-      throw Exception('Ressource non trouvée');
-    } else if (r.statusCode >= 500) {
-      throw Exception('Erreur serveur ${r.statusCode}');
-    } else {
-      throw Exception('Erreur ${r.statusCode}: ${r.body}');
-    }
+    throw ApiException.fromResponse(r);
   }
 
   dynamic decodeBody(http.Response r) {

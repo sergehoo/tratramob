@@ -15,6 +15,7 @@ export 'widgets/tratra_card.dart';
 export 'widgets/tratra_chip.dart';
 export 'widgets/tratra_empty_state.dart';
 export 'widgets/tratra_input.dart';
+export 'widgets/tratra_otp_input.dart';
 export 'widgets/tratra_section_header.dart';
 export 'widgets/tratra_sheet.dart';
 export 'widgets/tratra_skeleton.dart';

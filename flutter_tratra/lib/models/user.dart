@@ -16,6 +16,9 @@ class User {
   final Map<String, dynamic>? preferences;
   final String? username; // utile si login par username
 
+  /// Téléphone vérifié par code OTP (`is_verified` côté API).
+  final bool isVerified;
+
   const User({
     required this.id,
     required this.email,
@@ -28,6 +31,7 @@ class User {
     required this.isActive,
     this.preferences,
     this.username,
+    this.isVerified = false,
   });
 
   /// Concatène prénom/nom en gérant les null/vides proprement.
@@ -107,6 +111,7 @@ class User {
       dateJoined: _asDate(json['date_joined']),
       isActive: _asBool(json['is_active'], fallback: true),
       preferences: _asMap(json['preferences']),
+      isVerified: _asBool(json['is_verified'], fallback: false),
       username: _asString(json['username'], fallback: '').isEmpty
           ? null
           : _asString(json['username']),

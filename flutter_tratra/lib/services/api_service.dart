@@ -1,5 +1,6 @@
 // services/api_service.dart
 import 'dart:convert';
+import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/models/notification.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_tratra/models/artisan.dart';
@@ -37,17 +38,8 @@ class ApiService {
 
   // Gestion des erreurs
   void _handleError(http.Response response) {
-    if (response.statusCode == 401) {
-      throw Exception('Non autorisé - Veuillez vous reconnecter');
-    } else if (response.statusCode == 403) {
-      throw Exception('Accès refusé');
-    } else if (response.statusCode == 404) {
-      throw Exception('Ressource non trouvée');
-    } else if (response.statusCode >= 500) {
-      throw Exception('Erreur serveur: ${response.statusCode}');
-    } else {
-      throw Exception('Erreur: ${response.statusCode} - ${response.body}');
-    }
+    // Message lisible, jamais le JSON brut (voir core/api_exception.dart).
+    throw ApiException.fromResponse(response);
   }
 
   // ============ UTILISATEURS ============

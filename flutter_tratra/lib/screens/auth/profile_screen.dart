@@ -172,6 +172,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 value: phone ?? 'Non renseigné',
                 muted: phone == null,
               ),
+              if (phone != null) ...[
+                const Divider(),
+                if (u.isVerified)
+                  const _InfoRow(
+                    icon: Icons.verified_outlined,
+                    label: 'Vérification',
+                    value: 'Téléphone vérifié',
+                  )
+                else
+                  InkWell(
+                    onTap: () => Navigator.pushNamed(context, RouteNames.verifyPhone,
+                        arguments: const OtpArgs(nextRoute: RouteNames.profile)),
+                    child: const Row(
+                      children: [
+                        Expanded(
+                          child: _InfoRow(
+                            icon: Icons.sms_outlined,
+                            label: 'Vérification',
+                            value: 'Vérifier mon téléphone',
+                          ),
+                        ),
+                        Icon(Icons.chevron_right_rounded, color: TtColors.ash),
+                      ],
+                    ),
+                  ),
+              ],
               if (username != null) ...[
                 const Divider(),
                 _InfoRow(

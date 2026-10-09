@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tratra/core/session.dart';
+import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/auth/widgets/auth_frame.dart';
@@ -71,7 +72,11 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.pushReplacementNamed(context, route);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = authErrorMessage(e));
+      setState(() {
+        _error = (e is ApiException && (e.statusCode == 400 || e.statusCode == 401))
+            ? 'Identifiants invalides.' // même message que le web
+            : authErrorMessage(e);
+      });
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

@@ -14,6 +14,7 @@ class RouteNames {
   static const register = '/register';
   static const login = '/login';
   static const profile = '/profile';
+  static const verifyPhone = '/verify-phone';
 
   static const String allNearbyArtisans = '/all-nearby-artisans';
   static const String allServices = '/all-services';
@@ -22,6 +23,12 @@ class RouteNames {
 }
 
 // ---- Arguments typés ----
+class OtpArgs {
+  /// Route à ouvrir une fois le téléphone vérifié (ou en choisissant « Plus tard »).
+  final String nextRoute;
+  const OtpArgs({this.nextRoute = RouteNames.home});
+}
+
 class ServiceDetailArgs {
   final Service service;
   ServiceDetailArgs(this.service);

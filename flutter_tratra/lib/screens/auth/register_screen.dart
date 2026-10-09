@@ -95,7 +95,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await _storageService.saveUserData(user);
 
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, RouteNames.home);
+      // Un numéro a été saisi : proposer sa vérification par code (« Plus tard » possible).
+      if (_phoneController.text.trim().isNotEmpty) {
+        Navigator.pushReplacementNamed(context, RouteNames.verifyPhone,
+            arguments: const OtpArgs());
+      } else {
+        Navigator.pushReplacementNamed(context, RouteNames.home);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = authErrorMessage(e));
