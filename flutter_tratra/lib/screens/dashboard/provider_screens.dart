@@ -338,6 +338,7 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
           const SizedBox(height: TtSpace.s3),
           _LabeledDropdown<String>(
             label: 'Métier',
+            required: true,
             value: _category,
             error: _errors['category'],
             items: [for (final c in _categories) DropdownMenuItem(value: '${c['id']}', child: Text('${c['name']}', overflow: TextOverflow.ellipsis))],
@@ -379,8 +380,9 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
 }
 
 class _LabeledDropdown<T> extends StatelessWidget {
-  const _LabeledDropdown({required this.label, required this.value, required this.items, required this.onChanged, this.error});
+  const _LabeledDropdown({required this.label, required this.value, required this.items, required this.onChanged, this.error, this.required = false});
   final String label;
+  final bool required;
   final T? value;
   final List<DropdownMenuItem<T>> items;
   final ValueChanged<T?> onChanged;
@@ -389,7 +391,10 @@ class _LabeledDropdown<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: TratraTheme.style(TtType.bodySm).copyWith(fontWeight: FontWeight.w600)),
+      Text.rich(TextSpan(children: [
+        TextSpan(text: label),
+        if (required) const TextSpan(text: ' *', style: TextStyle(color: TtColors.danger)),
+      ]), style: TratraTheme.style(TtType.bodySm).copyWith(fontWeight: FontWeight.w600)),
       const SizedBox(height: 6),
       DropdownButtonFormField<T>(
         initialValue: value,
