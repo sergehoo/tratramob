@@ -64,9 +64,9 @@ flutter_native_splash:
   color: "#FFFFFF"
   color_dark: "#000000"
   image: assets/images/tratra_logo.webp
-  image_dark: assets/images/tratra_logo_dark.webp
+  image_dark: assets/images/tratra_logo.webp
   android_12:
     color: "#FFFFFF"
     color_dark: "#000000"
     image: assets/images/tratra_logo.webp
-    image_dark: assets/images/tratra_logo_dark.webp
+    image_dark: assets/images/tratra_logo.webp
