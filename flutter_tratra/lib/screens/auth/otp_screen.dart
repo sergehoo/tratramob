@@ -34,12 +34,30 @@ class OtpScreen extends StatefulWidget {
 
 class _OtpScreenState extends State<OtpScreen> {
   String _code = '';
+
+  /// Change après une erreur : recrée le champ (vide, refocalisé), comme sur le web.
+  int _attempt = 0;
   bool _sent = false;
   bool _busy = false;
   bool _done = false;
   String? _error;
   int _cooldown = 0;
   Timer? _timer;
+
+  /// Le profil en session peut être périmé : on le recharge avant de décider si le numéro
+  /// est déjà vérifié.
+  bool _checking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshProfile();
+  }
+
+  Future<void> _refreshProfile() async {
+    await context.read<Session>().refreshProfile();
+    if (mounted) setState(() => _checking = false);
+  }
 
   @override
   void dispose() {
@@ -91,7 +109,13 @@ class _OtpScreenState extends State<OtpScreen> {
       await session.refreshProfile();
       if (mounted) setState(() => _done = true);
     } catch (e) {
-      if (mounted) setState(() => _error = authErrorMessage(e));
+      if (mounted) {
+        setState(() {
+          _error = authErrorMessage(e);
+          _code = '';
+          _attempt++;
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -106,7 +130,12 @@ class _OtpScreenState extends State<OtpScreen> {
     final alreadyVerified = (user?.isVerified ?? false) || _done;
 
     Widget body;
-    if (alreadyVerified) {
+    if (_checking) {
+      body = const Padding(
+        padding: EdgeInsets.symmetric(vertical: TtSpace.s4),
+        child: TratraSkeletonText(lines: 3),
+      );
+    } else if (alreadyVerified) {
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -149,6 +178,7 @@ class _OtpScreenState extends State<OtpScreen> {
             ),
             const SizedBox(height: TtSpace.s4),
             TratraOtpInput(
+              key: ValueKey(_attempt),
               enabled: !_busy,
               hasError: _error != null,
               onChanged: (v) => setState(() {
