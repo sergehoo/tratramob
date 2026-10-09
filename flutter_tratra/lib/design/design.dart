@@ -19,3 +19,4 @@ export 'widgets/tratra_otp_input.dart';
 export 'widgets/tratra_section_header.dart';
 export 'widgets/tratra_sheet.dart';
 export 'widgets/tratra_skeleton.dart';
+export 'widgets/tratra_wordmark.dart';

@@ -161,25 +161,11 @@ class _BrandHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final wordmark =
-        TratraTheme.style(TtType.h2).copyWith(fontWeight: FontWeight.w800);
     return Row(
       children: [
         const Hero(tag: 'app-logo', child: TratraBrandMark(size: 44)),
         const SizedBox(width: TtSpace.s3),
-        ExcludeSemantics(
-          child: Text.rich(
-            TextSpan(
-              style: wordmark,
-              children: [
-                const TextSpan(text: 'Tra'),
-                TextSpan(
-                    text: 'tra',
-                    style: wordmark.copyWith(color: TtColors.primaryDark)),
-              ],
-            ),
-          ),
-        ),
+        const TratraWordmark(size: 34),
         const Spacer(),
         if (onBack != null)
           TratraButton(

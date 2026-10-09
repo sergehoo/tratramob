@@ -81,14 +81,7 @@ class HomeHero extends StatelessWidget {
                       children: [
                         const TratraBrandMark(size: 40),
                         const SizedBox(width: TtSpace.s3),
-                        Flexible(
-                          child: Text(
-                            'Tratra',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TratraTheme.style(TtType.h3, color: Colors.white),
-                          ),
-                        ),
+                        const Flexible(child: TratraWordmark(size: 32, onNight: true)),
                       ],
                     ),
                     actions: [

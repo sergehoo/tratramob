@@ -141,6 +141,8 @@ abstract final class TtLayout {
 abstract final class TtFont {
   static const String display = 'Montserrat';
   static const String body = 'Poppins';
+  /// Script de marque, réservé au nom « Tratra » (TratraWordmark).
+  static const String brand = 'Bonskin';
 }
 
 /// Spécification d'un style de texte (taille desktop/mobile, interligne, graisse, crénage en em).

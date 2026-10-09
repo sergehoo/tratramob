@@ -148,4 +148,14 @@ void main() {
     await tester.pumpWidget(_host(const TratraAvatar(name: 'Aya Konan')));
     expect(find.text('AK'), findsOneWidget);
   });
+
+  testWidgets('TratraWordmark : nom « Tratra » en police de marque', (tester) async {
+    await tester.pumpWidget(_host(const TratraWordmark(size: 32, onNight: true)));
+    expect(find.bySemanticsLabel('Tratra'), findsOneWidget);
+    final rich = tester.widget<RichText>(
+        find.descendant(of: find.byType(TratraWordmark), matching: find.byType(RichText)));
+    final wordmark = (rich.text as TextSpan).children!.single as TextSpan; // le style de marque est celui du TextSpan fourni
+    expect(wordmark.style?.fontFamily, TtFont.brand);
+    expect(TtFont.brand, 'Bonskin');
+  });
 }

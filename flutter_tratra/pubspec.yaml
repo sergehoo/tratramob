@@ -53,6 +53,11 @@ flutter:
           weight: 600
         - asset: assets/fonts/Poppins-Bold.ttf
           weight: 700
+    # Script de marque : nom « Tratra » uniquement. Licence commerciale requise avant
+    # production — voir frontend/design-system/BONSKIN-LICENCE.md (dépôt tratra).
+    - family: Bonskin
+      fonts:
+        - asset: assets/fonts/Bonskin.otf
     - family: Montserrat
       fonts:
         - asset: assets/fonts/Montserrat-Variable.ttf
