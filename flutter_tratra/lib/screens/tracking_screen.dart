@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/booking.dart';
+import 'package:flutter_tratra/screens/dashboard/messages_screen.dart' show openBookingConversation;
 import 'package:flutter_tratra/services/booking_service.dart';
 
 import 'booking_flow/booking_format.dart';
@@ -206,6 +207,17 @@ class _TrackingScreenState extends State<TrackingScreen> {
             BookingReveal(index: 1, child: _StatusNote(status: b.status)),
             const SizedBox(height: TtSpace.s4),
             BookingReveal(index: 2, child: _DetailsCard(booking: b)),
+            if (b.handymanId.isNotEmpty && b.status != 'cancelled' && int.tryParse(b.id) != null) ...[
+              const SizedBox(height: TtSpace.s4),
+              TratraButton(
+                label: 'Écrire à l’artisan',
+                variant: TratraButtonVariant.outline,
+                size: TratraButtonSize.lg,
+                block: true,
+                leading: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                onPressed: () => openBookingConversation(context, int.parse(b.id)),
+              ),
+            ],
           ],
         ),
       ),

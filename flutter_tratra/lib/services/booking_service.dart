@@ -17,9 +17,16 @@ class BookingService extends BaseApi {
     return Booking.fromJson(decodeBody(r));
   }
 
-  Future<List<Booking>> list() async {
-    final r = await client.get(Uri.parse('$baseUrl/bookings/'),
-        headers: await headers);
+  /// `/bookings/` renvoie les réservations où le compte est client OU artisan :
+  /// un compte unique filtre donc par rôle (`clientId` : mes réservations,
+  /// `handymanId` : mes missions).
+  Future<List<Booking>> list({String? clientId, String? handymanId}) async {
+    final query = <String, String>{
+      if (clientId != null && clientId.isNotEmpty) 'client': clientId,
+      if (handymanId != null && handymanId.isNotEmpty) 'handyman': handymanId,
+    };
+    final uri = Uri.parse('$baseUrl/bookings/').replace(queryParameters: query.isEmpty ? null : query);
+    final r = await client.get(uri, headers: await headers);
     if (r.statusCode != 200) handleError(r);
     final decoded = decodeBody(r);
     final list = extractResults(decoded);

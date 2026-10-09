@@ -61,9 +61,7 @@ class Session extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Route d'accueil correspondant au rôle courant.
-  String homeRoute() {
-    if (isHandyman) return '/worker';
-    return '/'; // client par défaut
-  }
+  /// Route d'accueil : l'espace unifié (un même compte peut être client ET artisan ;
+  /// les fonctions artisan s'affichent selon la présence réelle d'un profil professionnel).
+  String homeRoute() => '/';
 }

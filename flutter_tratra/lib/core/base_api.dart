@@ -86,7 +86,14 @@ class BaseApi {
   }
 
   Future<Map<String, String>> get headers async {
-    await initialize();
+    // Le stockage chiffré est la source de vérité du jeton : les services métier sont des
+    // instances distinctes et ne doivent jamais réutiliser le jeton d'un compte précédent
+    // après une déconnexion / reconnexion avec un autre compte.
+    try {
+      _authToken = await storage.read(key: AppConstants.authTokenKey);
+    } catch (_) {
+      await initialize();
+    }
     final h = <String, String>{
       'Accept': 'application/json',
       'Content-Type': 'application/json',

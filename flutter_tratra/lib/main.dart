@@ -31,6 +31,8 @@ import 'package:flutter_tratra/services/api_service.dart';
 
 // Écrans
 import 'package:flutter_tratra/screens/home_screen.dart';
+import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
+import 'package:flutter_tratra/screens/dashboard/dashboard_screen.dart';
 import 'package:flutter_tratra/screens/search_screen.dart';
 import 'package:flutter_tratra/screens/service_detail_screen.dart';
 import 'package:flutter_tratra/screens/booking_screen.dart';
@@ -110,6 +112,19 @@ void main() {
             update: (_, api, __) => MatchService(api),
           ),
 
+          // Espace unifié : API bornée au compte courant + données partagées (purgées au changement de compte)
+          ProxyProvider<BaseApi, DashboardApi>(
+            update: (_, api, __) => DashboardApi(api),
+          ),
+          ChangeNotifierProxyProvider2<DashboardApi, Session, DashboardController>(
+            create: (ctx) => DashboardController(ctx.read<DashboardApi>()),
+            update: (_, api, session, prev) {
+              final c = prev ?? DashboardController(api);
+              c.bindUser(session.user?.id);
+              return c;
+            },
+          ),
+
           // Compat
           Provider<ApiService>(create: (_) => ApiService()),
         ],
@@ -144,6 +159,9 @@ class _MyAppState extends State<MyApp> {
   Route<dynamic> _generateRoute(RouteSettings settings) {
     switch (settings.name) {
       case RouteNames.home:
+        // Accueil = espace utilisateur unifié (client + artisan sur un même compte).
+        return MaterialPageRoute(builder: (_) => const DashboardScreen());
+      case RouteNames.explore:
         return MaterialPageRoute(builder: (_) => const HomeScreen());
       case '/worker':
         return MaterialPageRoute(builder: (_) => const WorkerHomeScreen());
@@ -295,7 +313,7 @@ class _MyAppState extends State<MyApp> {
             ? TratraGalleryScreen.route
             : !session.isAuthenticated
             ? '/login'
-            : (session.isHandyman ? '/worker' : RouteNames.home);
+            : RouteNames.home;
 
         return MaterialApp(
           navigatorKey: appNavigatorKey,

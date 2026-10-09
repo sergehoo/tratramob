@@ -4,6 +4,8 @@ import 'package:flutter_tratra/models/artisan.dart';
 
 class RouteNames {
   static const home = '/';
+  /// Catalogue (ancien accueil client) : onglet « Explorer » du tableau de bord.
+  static const explore = '/explore';
   static const search = '/search';
   static const serviceDetail = '/service-detail';
   static const booking = '/booking';

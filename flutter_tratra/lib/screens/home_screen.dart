@@ -34,7 +34,9 @@ export 'home/home_cards.dart' show ArtisanCardPremium, ServiceCardPremium;
 export 'home/home_hero.dart' show SearchBarPremium;
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  /// `embedded` : onglet « Explorer » de l'espace unifié (la navigation basse est celle du tableau de bord).
+  const HomeScreen({super.key, this.embedded = false});
+  final bool embedded;
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -435,7 +437,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: TratraBottomNav(
+      bottomNavigationBar: widget.embedded
+          ? null
+          : TratraBottomNav(
         currentIndex: 0,
         onTap: _onNavTap,
         items: const [
