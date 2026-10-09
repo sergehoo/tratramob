@@ -156,6 +156,6 @@ void main() {
         find.descendant(of: find.byType(TratraWordmark), matching: find.byType(RichText)));
     final wordmark = (rich.text as TextSpan).children!.single as TextSpan; // le style de marque est celui du TextSpan fourni
     expect(wordmark.style?.fontFamily, TtFont.brand);
-    expect(TtFont.brand, 'Bonskin');
+    expect(TtFont.brand, 'Kaushan Script');
   });
 }

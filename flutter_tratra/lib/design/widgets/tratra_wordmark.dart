@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../tokens.dart';
 
-/// Nom de l'application « Tratra » en script de marque (Bonskin) — seul endroit où cette police
+/// Nom de l'application « Tratra » en script de marque (Kaushan Script, OFL) — seul endroit où cette police
 /// est utilisée (miroir de `BrandWordmark` côté web). `onNight` : fond sombre (blanc + jaune) ;
 /// sinon fond clair (encre + vert). Décoratif : le nom accessible est « Tratra ».
 class TratraWordmark extends StatelessWidget {

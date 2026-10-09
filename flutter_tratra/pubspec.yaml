@@ -57,9 +57,9 @@ flutter:
           weight: 700
     # Script de marque : nom « Tratra » uniquement. Licence commerciale requise avant
     # production — voir frontend/design-system/BONSKIN-LICENCE.md (dépôt tratra).
-    - family: Bonskin
+    - family: Kaushan Script
       fonts:
-        - asset: assets/fonts/Bonskin.otf
+        - asset: assets/fonts/KaushanScript-Regular.ttf
     - family: Montserrat
       fonts:
         - asset: assets/fonts/Montserrat-Variable.ttf
