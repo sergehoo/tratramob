@@ -81,8 +81,19 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           ? null
           : TratraAppBar(
               automaticallyImplyLeading: false,
-              titleWidget: _index == 0 ? const TratraWordmark(size: 28) : null,
-              title: _index == 0 ? null : _titles[_index],
+              // Logo officiel + nom de la marque sur l'accueil ; logo + titre sur les autres onglets
+              // (comme la barre supérieure du web).
+              titleWidget: Row(mainAxisSize: MainAxisSize.min, children: [
+                const TratraBrandMark(size: 38),
+                const SizedBox(width: TtSpace.s3),
+                if (_index == 0)
+                  const TratraWordmark(size: 28)
+                else
+                  Flexible(
+                    child: Text(_titles[_index],
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: TratraTheme.style(TtType.h3)),
+                  ),
+              ]),
               actions: [
                 IconButton(
                   tooltip: 'Notifications',
