@@ -265,7 +265,8 @@ class _PresenceCard extends StatelessWidget {
               children: [
                 // La clé relance l'animation de pulsation quand la présence change.
                 TratraBadge(
-                  isOnline ? 'En ligne' : 'Hors ligne',
+                  // Statut inconnu tant que l'artisan n'a pas touché au contrôle : pas de faux « Hors ligne ».
+                  online == null ? 'Disponibilité' : (isOnline ? 'En ligne' : 'Hors ligne'),
                   key: ValueKey<bool>(isOnline),
                   tone: isOnline ? TratraTone.success : TratraTone.gray,
                   dot: true,

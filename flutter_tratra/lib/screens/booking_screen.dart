@@ -658,7 +658,7 @@ class _ServiceCard extends StatelessWidget {
                     const SizedBox(width: TtSpace.s1 + 2),
                     Expanded(
                       child: Text(
-                        s.duration != null
+                        s.hasDuration
                             ? s.durationDisplay
                             : 'Durée non spécifiée',
                         maxLines: 1,

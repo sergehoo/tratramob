@@ -179,7 +179,7 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
             ),
 
             // Tarification + durée (uniquement les informations réellement connues)
-            if (pricing != null || s.duration != null)
+            if (pricing != null || s.hasDuration)
               Padding(
                 padding: const EdgeInsets.fromLTRB(TtSpace.s5, TtSpace.s5, TtSpace.s5, 0),
                 // IntrinsicHeight : les deux tuiles gardent la même hauteur dans une
@@ -196,8 +196,8 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
                             value: pricing,
                           ),
                         ),
-                      if (pricing != null && s.duration != null) const SizedBox(width: TtSpace.s3),
-                      if (s.duration != null)
+                      if (pricing != null && s.hasDuration) const SizedBox(width: TtSpace.s3),
+                      if (s.hasDuration)
                         Expanded(
                           child: _FactTile(
                             icon: Icons.timer_outlined,

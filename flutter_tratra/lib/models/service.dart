@@ -84,8 +84,11 @@ class Service {
     return '${price!.toStringAsFixed(0)}F';
   }
 
+  /// Durée réellement renseignée (une durée nulle ou 0 min n'est pas affichée).
+  bool get hasDuration => duration != null && duration!.inMinutes > 0;
+
   String get durationDisplay {
-    if (duration == null) return 'Durée non spécifiée';
+    if (!hasDuration) return 'Durée non spécifiée';
     final hours = duration!.inHours;
     final minutes = duration!.inMinutes.remainder(60);
     if (hours > 0 && minutes > 0) return '${hours}h ${minutes}min';
@@ -247,38 +250,6 @@ class Service {
       'required_tools': requiredTools,
     };
   }
-
-  // ----- Factory pour des mocks -----
-  factory Service.minimal({
-    required String id,
-    required String title,
-    required String categoryName,
-    required double price,
-    required String imageUrl,
-  }) {
-    return Service(
-      id: id,
-      title: title,
-      description: 'Description du service $title',
-      priceType: 'hourly',
-      price: price,
-      handymanId: '1',
-      categoryId: '1',
-      categoryName: categoryName,
-      duration: const Duration(hours: 2),
-      imageUrl: imageUrl,
-      isActive: true,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-      rating: 4.5,
-      reviewCount: 10,
-      isUrgent: false,
-      discountedPrice: null,
-      includedServices: const [],
-      requiredTools: const [],
-      category: '',
-    );
-  }
 }
 
 // Modèle pour la catégorie de service
@@ -427,75 +398,3 @@ extension ServiceListExtensions on List<Service> {
   }
 }
 
-// ----- Données mock pour le développement -----
-class MockServices {
-  static final List<Service> services = [
-    Service.minimal(
-      id: '1',
-      title: 'Réparation de fuite d\'eau',
-      categoryName: 'Plomberie',
-      price: 15000,
-      imageUrl:
-          'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?q=80&w=1000',
-    ),
-    Service.minimal(
-      id: '2',
-      title: 'Installation électrique',
-      categoryName: 'Électricité',
-      price: 20000,
-      imageUrl:
-          'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?q=80&w=1000',
-    ),
-    Service.minimal(
-      id: '3',
-      title: 'Peinture intérieure',
-      categoryName: 'Peinture',
-      price: 12000,
-      imageUrl:
-          'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?q=80&w=1000',
-    ),
-    Service.minimal(
-      id: '4',
-      title: 'Nettoyage profond',
-      categoryName: 'Nettoyage',
-      price: 8000,
-      imageUrl:
-          'https://images.unsplash.com/photo-1621905252507-b35492cc74b4?q=80&w=1000',
-    ),
-  ];
-
-  static final List<ServiceCategory> categories = [
-    ServiceCategory(
-      id: '1',
-      name: 'Plomberie',
-      slug: 'plomberie',
-      description: 'Services de plomberie et réparation',
-      icon: 'fa-wrench',
-      isActive: true,
-    ),
-    ServiceCategory(
-      id: '2',
-      name: 'Électricité',
-      slug: 'electricite',
-      description: 'Installation et réparation électrique',
-      icon: 'fa-bolt',
-      isActive: true,
-    ),
-    ServiceCategory(
-      id: '3',
-      name: 'Peinture',
-      slug: 'peinture',
-      description: 'Services de peinture intérieure et extérieure',
-      icon: 'fa-paint-roller',
-      isActive: true,
-    ),
-    ServiceCategory(
-      id: '4',
-      name: 'Nettoyage',
-      slug: 'nettoyage',
-      description: 'Services de nettoyage et entretien',
-      icon: 'fa-broom',
-      isActive: true,
-    ),
-  ];
-}

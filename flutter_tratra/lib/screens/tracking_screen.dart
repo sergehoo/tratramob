@@ -488,7 +488,7 @@ class _DetailsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final b = booking;
     final place = _place(b);
-    final duration = b.service?.duration;
+    final hasDuration = b.service?.hasDuration ?? false;
     final hasAmount = b.amount != null && b.amount! > 0;
     final hasNotes = b.notes != null && b.notes!.trim().isNotEmpty;
 
@@ -506,7 +506,7 @@ class _DetailsCard extends StatelessWidget {
             ? formatDateTimeLong(b.bookingDate!)
             : 'Non renseignée',
       ),
-      if (duration != null)
+      if (hasDuration)
         BookingInfoRow(
           icon: Icons.schedule_rounded,
           label: 'Durée estimée',
