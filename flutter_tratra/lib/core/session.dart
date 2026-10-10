@@ -51,8 +51,15 @@ class Session extends ChangeNotifier {
     }
   }
 
+  /// Exécuté avant la révocation du jeton (ex. retrait de l'appareil des notifications push, qui exige encore un
+  /// jeton valide). Best-effort : n'empêche jamais la déconnexion.
+  Future<void> Function()? onBeforeLogout;
+
   /// Déconnexion : révoque côté backend (best-effort) puis purge local.
   Future<void> logout() async {
+    try {
+      await onBeforeLogout?.call();
+    } catch (_) {}
     try {
       await _auth.logout();
     } catch (_) {}

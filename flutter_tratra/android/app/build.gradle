@@ -5,6 +5,12 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// Push FCM : le fichier de configuration Firebase (android/app/google-services.json, hors Git) est fourni par le
+// projet Firebase de Tratra. Sans lui l'application compile et fonctionne, simplement sans notifications push.
+if (file("google-services.json").exists()) {
+    apply plugin: "com.google.gms.google-services"
+}
+
 // Les identifiants de signature restent hors du dépôt dans android/key.properties.
 // Sans ce fichier, un build release reste volontairement non signé : il ne doit
 // jamais retomber sur la clé de débogage.
@@ -40,6 +46,8 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Nom affiché de l'application (surchargé pour la copie de recette, voir buildTypes.debug).
+        manifestPlaceholders += [appLabel: "Tratra"]
     }
 
     signingConfigs {
@@ -53,8 +61,23 @@ android {
         }
     }
 
+    // Copie de recette installable À CÔTÉ d'une installation existante (sessions et données intactes) :
+    //   TRATRA_APP_ID_SUFFIX=.recette flutter build apk --debug   (ou --release pour valider le build de production)
+    // Sans la variable, aucun changement : l'identifiant reste com.tratra.
+    def idSuffix = System.getenv("TRATRA_APP_ID_SUFFIX")
+
     buildTypes {
+        debug {
+            if (idSuffix) {
+                applicationIdSuffix = idSuffix
+                manifestPlaceholders += [appLabel: "Tratra Recette"]
+            }
+        }
         release {
+            if (idSuffix) {
+                applicationIdSuffix = idSuffix
+                manifestPlaceholders += [appLabel: "Tratra Recette"]
+            }
             // Ne configure la signature release que si la clé fournie hors Git
             // est disponible. Un artefact sans key.properties ne peut donc pas
             // être publié accidentellement avec la clé debug.

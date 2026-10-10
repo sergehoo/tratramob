@@ -23,6 +23,7 @@ import 'package:flutter_tratra/services/payment_service.dart';
 import 'package:flutter_tratra/services/review_service.dart';
 import 'package:flutter_tratra/services/messaging_service.dart';
 import 'package:flutter_tratra/services/notification_service.dart';
+import 'package:flutter_tratra/services/push_service.dart';
 import 'package:flutter_tratra/services/match_service.dart';
 import 'package:flutter_tratra/services/handyman_service.dart';
 
@@ -33,6 +34,7 @@ import 'package:flutter_tratra/services/api_service.dart';
 import 'package:flutter_tratra/screens/home_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_screen.dart';
+import 'package:flutter_tratra/screens/dashboard/notifications_screen.dart';
 import 'package:flutter_tratra/screens/search_screen.dart';
 import 'package:flutter_tratra/screens/service_detail_screen.dart';
 import 'package:flutter_tratra/screens/booking_screen.dart';
@@ -75,6 +77,7 @@ void main() {
     final baseApi = BaseApi();
     final location = LocationService();
     final authService = AuthService(baseApi);
+    final push = PushService(baseApi);
 
     runApp(
       MultiProvider(
@@ -84,6 +87,9 @@ void main() {
           Provider<BaseApi>.value(value: baseApi),
           Provider<LocationService>.value(value: location),
           Provider<AuthService>.value(value: authService),
+
+          // Notifications push (FCM, Android) : appareil rattaché au compte courant
+          ChangeNotifierProvider<PushService>.value(value: push),
 
           // Session (rôle / utilisateur courant)
           ChangeNotifierProvider<Session>(
@@ -146,15 +152,65 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   late final Future<void> _bootFuture;
+  late final Session _session = context.read<Session>();
+  late final PushService _push = context.read<PushService>();
 
   @override
   void initState() {
     super.initState();
     // Hydrate la session (utilisateur + rôle) depuis le stockage chiffré.
-    _bootFuture = context.read<Session>().loadFromStorage().timeout(
+    final session = _session;
+    final push = _push;
+    session.onBeforeLogout = push.unregister;
+    push.onForeground = _onPushForeground;
+    push.onTap = _onPushTap;
+    session.addListener(_syncPush);
+    _bootFuture = session.loadFromStorage().timeout(
           const Duration(seconds: 8),
           onTimeout: () {},
         );
+    // Push : démarré une fois la session connue, sans bloquer l'affichage.
+    _bootFuture.whenComplete(() {
+      _syncPush();
+      unawaited(push.start());
+    });
+  }
+
+  @override
+  void dispose() {
+    _session.removeListener(_syncPush);
+    super.dispose();
+  }
+
+  /// L'appareil suit toujours le compte connecté (enregistré à la connexion, retiré à la déconnexion).
+  void _syncPush() {
+    unawaited(_push.bindUser(_session.user?.id));
+  }
+
+  /// Notification reçue application ouverte : bandeau discret + compteur du tableau de bord à jour.
+  void _onPushForeground(PushMessage m) {
+    final ctx = appNavigatorKey.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    try {
+      ctx.read<DashboardController>().load();
+    } catch (_) {}
+    final text = [m.title, m.body].whereType<String>().where((t) => t.isNotEmpty).join(' — ');
+    if (text.isEmpty) return;
+    ScaffoldMessenger.maybeOf(ctx)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(text),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(label: 'Voir', onPressed: _openNotifications),
+      ));
+  }
+
+  /// Notification touchée (application en arrière-plan ou fermée) : ouvre la liste des notifications du compte.
+  void _onPushTap(PushMessage m) => _openNotifications();
+
+  void _openNotifications() {
+    if (!_session.isAuthenticated) return;
+    appNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
   }
 
   Route<dynamic> _generateRoute(RouteSettings settings) {

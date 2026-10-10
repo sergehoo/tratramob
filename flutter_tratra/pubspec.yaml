@@ -36,11 +36,14 @@ dependencies:
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
   web_socket_channel: ^3.0.3
+  firebase_core: ^4.15.0
+  firebase_messaging: ^16.7.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  stream_channel: ^2.1.4
   # (optionnel) si tu génères les icônes/splash :
   # flutter_launcher_icons: ^0.13.1
   # flutter_native_splash: ^2.4.1

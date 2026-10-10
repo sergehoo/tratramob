@@ -11,3 +11,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Configuration Firebase du projet Tratra (fournie hors dépôt)
+app/google-services.json
