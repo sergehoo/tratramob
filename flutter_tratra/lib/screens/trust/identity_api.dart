@@ -168,7 +168,14 @@ class PassTarget extends ScanTarget {
   final String token;
 }
 
+/// QR d'un équipement Tratra Business (réservé aux membres de son organisation).
+class EquipTarget extends ScanTarget {
+  const EquipTarget(this.code);
+  final String code;
+}
+
 final _codeRe = RegExp(r'^TR-[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$');
+final _equipRe = RegExp(r'^EQ-[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$');
 
 /// Interprète le contenu d'un QR : URL Tratra (`/verify/<code>` ou `/verify/pass/<jeton>`) ou code nu.
 /// Seul le code ou le jeton extrait est envoyé à NOTRE API : l'URL n'est jamais ouverte.
@@ -177,7 +184,10 @@ ScanTarget? parseQr(String raw) {
   if (v.isEmpty || v.length > 400) return null;
   final upper = v.toUpperCase();
   if (_codeRe.hasMatch(upper)) return IdTarget(upper);
+  if (_equipRe.hasMatch(upper)) return EquipTarget(upper);
   final seg = Uri.tryParse(v)?.pathSegments ?? const <String>[];
+  final e = seg.indexOf('equipment');
+  if (e >= 0 && seg.length > e + 1 && _equipRe.hasMatch(seg[e + 1].toUpperCase())) return EquipTarget(seg[e + 1].toUpperCase());
   final i = seg.indexOf('verify');
   if (i < 0) return null;
   if (seg.length > i + 2 && seg[i + 1] == 'pass' && seg[i + 2].isNotEmpty) return PassTarget(seg[i + 2]);

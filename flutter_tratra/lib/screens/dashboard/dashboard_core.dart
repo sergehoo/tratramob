@@ -218,6 +218,7 @@ class DashData {
         phoneVerified = _b(_m(j['user'])['is_verified']),
         isProvider = _b(_m(j['capabilities'])['provider']),
         isCompany = _b(_m(j['capabilities'])['company']),
+        isBusiness = _b(_m(j['capabilities'])['business']),
         bookingsTotal = _i(_m(_m(j['client'])['bookings'])['total']),
         bookingsActive = _i(_m(_m(j['client'])['bookings'])['pending']) +
             _i(_m(_m(j['client'])['bookings'])['confirmed']) +
@@ -238,6 +239,7 @@ class DashData {
   final bool phoneVerified;
   final bool isProvider;
   final bool isCompany;
+  final bool isBusiness;
   final int bookingsTotal;
   final int bookingsActive;
   final int bookingsCompleted;

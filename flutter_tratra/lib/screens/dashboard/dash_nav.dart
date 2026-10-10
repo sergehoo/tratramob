@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:flutter_tratra/routes.dart';
+import 'package:flutter_tratra/screens/business/business_screens.dart';
 import 'package:flutter_tratra/screens/auth/profile_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/bookings_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
@@ -34,6 +35,7 @@ Future<void> openReviews(BuildContext context) => pushPage(context, const Review
 Future<void> openReputation(BuildContext context) => pushPage(context, const ReputationScreen());
 Future<void> openMyBadge(BuildContext context) => pushPage(context, const MyBadgeScreen());
 Future<void> openScanner(BuildContext context) => pushPage(context, const ScanScreen());
+Future<void> openBusiness(BuildContext context) => pushPage(context, const BusinessHomeScreen());
 Future<void> openNotifications(BuildContext context) => pushPage(context, const NotificationsScreen());
 Future<void> openProvide(BuildContext context) => pushPage(context, const ProvideScreen());
 Future<void> openProProfile(BuildContext context) => pushPage(context, const ProProfileScreen());

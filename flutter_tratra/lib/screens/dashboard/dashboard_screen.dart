@@ -143,6 +143,8 @@ class _MoreTab extends StatelessWidget {
         _Entry(Icons.workspace_premium_outlined, 'Ma réputation', 'Badges, score de confiance et justificatifs', () => openReputation(context)),
         _Entry(Icons.badge_outlined, 'Mon badge Tratra ID', 'QR de vérification et badge imprimable', () => openMyBadge(context)),
       ],
+      if (data?.isBusiness == true || data?.isCompany == true)
+        _Entry(Icons.apartment_rounded, 'Tratra Business', 'Sites, équipements et demandes d’intervention', () => openBusiness(context)),
       _Entry(Icons.qr_code_scanner_rounded, 'Scanner un badge', 'Vérifier un professionnel ou l’artisan de votre réservation', () => openScanner(context)),
       _Entry(Icons.star_outline_rounded, 'Avis', 'À rédiger, reçus et donnés', () => openReviews(context),
           badge: data?.reviewsToWrite),

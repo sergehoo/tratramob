@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
+import 'package:flutter_tratra/screens/business/business_screens.dart' show EquipmentReportScreen;
 import 'package:flutter_tratra/screens/trust/identity_api.dart';
 import 'package:flutter_tratra/screens/trust/verify_result.dart';
 
@@ -47,9 +48,18 @@ class _ScanScreenState extends State<ScanScreen> {
       _unrecognized = null;
     });
     await _camera.stop();
+    if (target is EquipTarget) {
+      // QR d'équipement Business : ouvre le signalement (réservé aux membres de l'organisation).
+      if (!mounted) return;
+      setState(() => _busy = false);
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => EquipmentReportScreen(code: target.code)));
+      if (mounted && !_manualMode) await _camera.start();
+      return;
+    }
     final outcome = switch (target) {
       IdTarget(:final code) => await _api.verifyCode(code),
       PassTarget(:final token) => await _api.consumePass(token),
+      EquipTarget() => throw StateError('traité plus haut'),
     };
     if (!mounted) return;
     setState(() {
