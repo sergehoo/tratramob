@@ -1,6 +1,6 @@
 // lib/services/push_service.dart
 //
-// Notifications push (Firebase Cloud Messaging) — Android uniquement pour la version pilote.
+// Notifications push (Firebase Cloud Messaging) — Android et iOS (jamais le web).
 //
 //  * Sans fichier de configuration Firebase (android/app/google-services.json) l'initialisation échoue proprement :
 //    l'application fonctionne, le statut passe à `unconfigured`, la notification in-app reste la source fiable.
@@ -21,7 +21,7 @@ enum PushStatus {
   /// Pas encore démarré.
   idle,
 
-  /// Plateforme non prise en charge (web, iOS dans cette version).
+  /// Plateforme non prise en charge (web).
   unsupported,
 
   /// Projet Firebase absent du build (google-services.json non fourni) ou refusé.
@@ -74,9 +74,11 @@ class FirebasePushGateway implements PushGateway {
   Future<bool> init() async {
     try {
       if (Firebase.apps.isEmpty) await Firebase.initializeApp();
+      // iOS : afficher aussi la notification quand l'application est ouverte (Android : bandeau dans l'application).
+      await _fm.setForegroundNotificationPresentationOptions(alert: true, badge: true, sound: true);
       return true;
     } catch (_) {
-      return false; // pas de google-services.json dans ce build
+      return false; // pas de google-services.json / GoogleService-Info.plist dans ce build
     }
   }
 
@@ -87,7 +89,16 @@ class FirebasePushGateway implements PushGateway {
   }
 
   @override
-  Future<String?> token() => _fm.getToken();
+  Future<String?> token() async {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      // iOS : le jeton APNs doit exister avant le jeton FCM (délivré par le système, quelques secondes au plus).
+      for (var i = 0; i < 10 && await _fm.getAPNSToken() == null; i++) {
+        await Future<void>.delayed(const Duration(seconds: 1));
+      }
+      if (await _fm.getAPNSToken() == null) return null;
+    }
+    return _fm.getToken();
+  }
 
   @override
   Future<void> deleteToken() => _fm.deleteToken();
@@ -111,7 +122,7 @@ class FirebasePushGateway implements PushGateway {
 class PushService extends ChangeNotifier {
   PushService(this._api, {PushGateway? gateway, bool? supported})
       : _gateway = gateway ?? FirebasePushGateway(),
-        _supported = supported ?? (!kIsWeb && defaultTargetPlatform == TargetPlatform.android);
+        _supported = supported ?? (!kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS));
 
   final BaseApi _api;
   final PushGateway _gateway;
@@ -195,10 +206,16 @@ class PushService extends ChangeNotifier {
   Future<bool> _register(String token) async {
     if (_userId == null) return false; // jeton renouvelé alors que personne n'est connecté : rien à rattacher
     try {
+      // Jeton renouvelé : l'ancien est envoyé pour être retiré du compte (jamais de doublon d'appareil).
+      final previous = await _api.storage.read(key: deviceTokenKey);
       final r = await _api.client.post(
         Uri.parse('${_api.baseUrl}/devices/'),
         headers: await _api.headers,
-        body: jsonEncode({'device_token': token, 'device_type': 'android'}),
+        body: jsonEncode({
+          'device_token': token,
+          'device_type': defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
+          if (previous != null && previous.isNotEmpty && previous != token) 'previous_token': previous,
+        }),
       );
       if (r.statusCode != 200 && r.statusCode != 201) {
         _set(PushStatus.error);

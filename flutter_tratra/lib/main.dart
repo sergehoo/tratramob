@@ -34,7 +34,8 @@ import 'package:flutter_tratra/services/api_service.dart';
 import 'package:flutter_tratra/screens/home_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_screen.dart';
-import 'package:flutter_tratra/screens/dashboard/notifications_screen.dart';
+import 'package:flutter_tratra/core/deep_links.dart';
+import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
 import 'package:flutter_tratra/screens/search_screen.dart';
 import 'package:flutter_tratra/screens/service_detail_screen.dart';
 import 'package:flutter_tratra/screens/booking_screen.dart';
@@ -187,7 +188,7 @@ class _MyAppState extends State<MyApp> {
     unawaited(_push.bindUser(_session.user?.id));
   }
 
-  /// Notification reçue application ouverte : bandeau discret + compteur du tableau de bord à jour.
+  /// Notification reçue application ouverte : bandeau discret (touchable → objet concerné) + compteur à jour.
   void _onPushForeground(PushMessage m) {
     final ctx = appNavigatorKey.currentContext;
     if (ctx == null || !ctx.mounted) return;
@@ -201,16 +202,20 @@ class _MyAppState extends State<MyApp> {
       ..showSnackBar(SnackBar(
         content: Text(text),
         behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(label: 'Voir', onPressed: _openNotifications),
+        action: SnackBarAction(label: 'Voir', onPressed: () => _openFromPush(m)),
       ));
   }
 
-  /// Notification touchée (application en arrière-plan ou fermée) : ouvre la liste des notifications du compte.
-  void _onPushTap(PushMessage m) => _openNotifications();
+  /// Notification touchée (application en arrière-plan ou fermée) : ouvre directement l'objet concerné.
+  void _onPushTap(PushMessage m) => _openFromPush(m);
 
-  void _openNotifications() {
+  void _openFromPush(PushMessage m) {
     if (!_session.isAuthenticated) return;
-    appNavigatorKey.currentState?.push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+    final ctx = appNavigatorKey.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    final link = parseDeepLink(m.data);
+    // L'objet est rechargé auprès du serveur : un lien d'un autre compte (changement de compte) échoue proprement.
+    openDeepLink(ctx, link);
   }
 
   Route<dynamic> _generateRoute(RouteSettings settings) {

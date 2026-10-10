@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -109,6 +110,15 @@ void main() {
     expect(await const FlutterSecureStorage().read(key: PushService.deviceIdKey), '41');
   });
 
+  test('iOS : l’appareil est enregistré avec le type « ios »', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final (push, _, calls) = build();
+    await push.start();
+    await push.bindUser('1');
+    expect(calls.single.body!['device_type'], 'ios');
+  });
+
   test('notifications refusées : l’appareil est tout de même enregistré (réglage modifiable ensuite)', () async {
     final (push, _, calls) = build(gateway: FakeGateway(permission: false));
     await push.start();
@@ -127,6 +137,8 @@ void main() {
     gw.refresh.add('tok-2');
     await Future<void>.delayed(const Duration(milliseconds: 20));
     expect(calls.map((c) => c.body?['device_token']), ['tok-1', 'tok-2']);
+    expect(calls.first.body!.containsKey('previous_token'), isFalse);
+    expect(calls.last.body!['previous_token'], 'tok-1'); // l'ancien jeton est retiré du compte côté serveur
   });
 
   test('changement de compte sur le même téléphone : le jeton est réenregistré pour le nouveau compte', () async {

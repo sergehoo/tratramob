@@ -51,5 +51,9 @@
 	<string>Tratra a besoin de la caméra pour photographier vos pièces justificatives (vérification KYC).</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Tratra utilise votre position lorsque l’application est ouverte afin de trouver les artisans et services à proximité.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

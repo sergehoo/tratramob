@@ -3,11 +3,14 @@
 // Navigation depuis l'espace unifié vers les écrans (existants ou nouveaux).
 import 'package:flutter/material.dart';
 
+import 'package:flutter_tratra/core/deep_links.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/business/business_screens.dart';
 import 'package:flutter_tratra/screens/auth/profile_screen.dart';
+import 'package:flutter_tratra/screens/dashboard/announcements_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/bookings_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
+import 'package:flutter_tratra/screens/dashboard/messages_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/my_badge_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/notifications_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/provider_screens.dart';
@@ -61,3 +64,27 @@ void openTarget(BuildContext context, DashTarget target, {VoidCallback? onMessag
       break;
   }
 }
+
+/// Ouvre l'objet désigné par un lien profond (notification touchée, centre de notifications, bandeau).
+/// Chaque écran recharge ses données auprès du serveur : un objet supprimé ou interdit s'affiche comme une erreur normale.
+Future<void> openDeepLink(BuildContext context, DeepLink link) {
+  switch (link.kind) {
+    case DeepLinkKind.booking:
+      return pushPage(context, TrackingScreen(bookingId: '${link.id}'));
+    case DeepLinkKind.mission:
+      return pushPage(context, MissionDetailScreen(bookingId: '${link.id}'));
+    case DeepLinkKind.conversation:
+      return pushPage(context, ConversationScreen(conversationId: link.id!, title: 'Conversation'));
+    case DeepLinkKind.reviews:
+      return openReviews(context);
+    case DeepLinkKind.kyc:
+      return openKyc(context);
+    case DeepLinkKind.businessRequest:
+      return openBusiness(context);
+    case DeepLinkKind.announcement:
+      return pushPage(context, AnnouncementsScreen(highlightId: link.id));
+    case DeepLinkKind.notifications:
+      return openNotifications(context);
+  }
+}
+

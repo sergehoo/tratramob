@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/routes.dart';
+import 'package:flutter_tratra/screens/dashboard/announcements_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
@@ -117,6 +118,7 @@ class _DashboardHomeState extends State<DashboardHome> {
             onProvide: () => provider != null ? openProviderHub(context) : openProvide(context),
           ),
           const SizedBox(height: TtSpace.s4),
+          const AnnouncementsBanner(),
           for (final k in kpis) ...[k, const SizedBox(height: TtSpace.s3)],
           if (data.actions.isNotEmpty) ...[
             const TratraSectionHeader(title: 'À traiter', subtitle: 'Ce qui demande votre attention.', padding: EdgeInsets.fromLTRB(0, 20, 0, 12)),

@@ -27,6 +27,10 @@ class DashboardApi {
         r = await _base.client.post(uri, headers: headers, body: encoded);
       case 'PATCH':
         r = await _base.client.patch(uri, headers: headers, body: encoded);
+      case 'PUT':
+        r = await _base.client.put(uri, headers: headers, body: encoded);
+      case 'DELETE':
+        r = await _base.client.delete(uri, headers: headers);
       default:
         r = await _base.client.get(uri, headers: headers);
     }
@@ -49,6 +53,15 @@ class DashboardApi {
   Future<Map<String, dynamic>> post(String path, [Object? body]) async {
     final d = await _send('POST', path, body: body);
     return d is Map ? d.cast<String, dynamic>() : <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> put(String path, Object body) async {
+    final d = await _send('PUT', path, body: body);
+    return d is Map ? d.cast<String, dynamic>() : <String, dynamic>{};
+  }
+
+  Future<void> delete(String path) async {
+    await _send('DELETE', path);
   }
 
   Future<Map<String, dynamic>> patch(String path, Object body) async {
