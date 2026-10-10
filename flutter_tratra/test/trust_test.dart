@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/artisan.dart';
+import 'package:flutter_tratra/models/booking.dart';
 import 'package:flutter_tratra/screens/trust/passport_screen.dart';
 import 'package:flutter_tratra/screens/trust/trust_widgets.dart';
 
@@ -63,6 +64,31 @@ void main() {
       final b = Artisan.fromJson({'id': 4});
       expect(b.trustBadges, isEmpty);
       expect(b.trustScore, isNull);
+    });
+
+    test('Booking.fromJson : artisan et badges ACTUELS issus de l’API, jamais déduits', () {
+      final b = Booking.fromJson({
+        'id': 5,
+        'status': 'confirmed',
+        'client': 1,
+        'handyman': 2,
+        'service': 7,
+        'service_detail': {
+          'id': 7,
+          'title': 'Plomberie',
+          'artisan': {
+            'id': 3,
+            'display_name': 'Awa K.',
+            'badges': [{'code': 'VERIFIE'}, {'code': 'SUR'}, {'code': 'INVENTE'}],
+          },
+        },
+      });
+      expect(b.artisanName, 'Awa K.');
+      expect(b.artisanProfileId, '3');
+      expect(b.artisanBadges, ['VERIFIE', 'SUR']);
+      final none = Booking.fromJson({'id': 6, 'status': 'pending', 'client': 1, 'handyman': 2, 'service': 7});
+      expect(none.artisanName, isNull);
+      expect(none.artisanBadges, isEmpty);
     });
 
     testWidgets('score absent : aucune pastille ; présent : valeur exacte', (t) async {

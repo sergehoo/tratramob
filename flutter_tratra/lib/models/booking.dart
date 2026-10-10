@@ -23,6 +23,11 @@ class Booking {
   final Service? service;
   final double? amount;
 
+  /// Artisan (résumé public joint par l'API) : nom affiché, id du profil (passeport) et badges Tratra Trust ACTUELS.
+  final String? artisanName;
+  final String? artisanProfileId;
+  final List<String> artisanBadges;
+
   Booking({
     required this.id,
     required this.status,
@@ -39,6 +44,9 @@ class Booking {
     this.notes,
     this.service,
     this.amount,
+    this.artisanName,
+    this.artisanProfileId,
+    this.artisanBadges = const [],
   });
 
   /// Titre du service associé (pratique pour l'affichage des listes).
@@ -62,7 +70,17 @@ class Booking {
       svc = Service.fromJson(Map<String, dynamic>.from(serviceData));
     }
 
+    final artisan = serviceData is Map && serviceData['artisan'] is Map ? Map<String, dynamic>.from(serviceData['artisan'] as Map) : null;
+    const knownBadges = {'VERIFIE', 'EXPERT', 'SUR'};
+    final badges = ((artisan?['badges'] as List?) ?? const [])
+        .map((e) => e is Map ? '${e['code']}' : '$e')
+        .where(knownBadges.contains)
+        .toList();
+
     return Booking(
+      artisanName: (artisan?['display_name'] ?? '').toString().isEmpty ? null : artisan!['display_name'].toString(),
+      artisanProfileId: artisan?['id']?.toString(),
+      artisanBadges: badges,
       id: (json['id'] ?? '').toString(),
       status: (json['status'] ?? 'pending').toString(),
       createdAt: _dt(json['created_at']) ?? DateTime.now(),

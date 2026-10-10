@@ -10,6 +10,7 @@ import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/booking.dart';
 import 'package:flutter_tratra/screens/dashboard/messages_screen.dart' show openBookingConversation;
 import 'package:flutter_tratra/screens/live/live_cards.dart' show ClientLiveCard;
+import 'package:flutter_tratra/screens/trust/passport_screen.dart' show PassportScreen;
 import 'package:flutter_tratra/screens/trust/mission_qr_card.dart' show IdentityVerifyCard;
 import 'package:flutter_tratra/services/booking_service.dart';
 
@@ -515,6 +516,18 @@ class _DetailsCard extends StatelessWidget {
     final hasNotes = b.notes != null && b.notes!.trim().isNotEmpty;
 
     final rows = <Widget>[
+      if (b.artisanName != null)
+        InkWell(
+          onTap: b.artisanProfileId == null
+              ? null
+              : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PassportScreen(profileId: b.artisanProfileId!))),
+          borderRadius: BorderRadius.circular(TtRadius.control),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            BookingInfoRow(icon: Icons.person_outline_rounded, label: 'Artisan', value: b.artisanName!),
+            if (b.artisanBadges.isNotEmpty)
+              Padding(padding: const EdgeInsets.only(top: 6, left: 44), child: TratraTrustBadges(b.artisanBadges)),
+          ]),
+        ),
       if (b.serviceTitle != null && b.serviceTitle!.isNotEmpty)
         BookingInfoRow(
           icon: Icons.home_repair_service_outlined,
