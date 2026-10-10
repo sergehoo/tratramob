@@ -75,7 +75,7 @@ class ActivityBanner extends StatelessWidget {
                 const SizedBox(width: TtSpace.s2),
                 Text('Activité en cours', style: TratraTheme.style(TtType.caption, color: TtColors.primaryDark).copyWith(fontWeight: FontWeight.w700)),
                 const Spacer(),
-                TratraStatusBadge(TratraStatus.booking, a.status),
+                if (a.kind == 'contract') TratraBadge(a.statusLabel, tone: TratraTone.primary, dot: true) else TratraStatusBadge(TratraStatus.booking, a.status),
               ]),
               const SizedBox(height: TtSpace.s2),
               Text(a.title, style: TratraTheme.style(TtType.h3)),

@@ -40,6 +40,7 @@ import 'package:flutter_tratra/screens/home_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_screen.dart';
 import 'package:flutter_tratra/core/deep_links.dart';
+import 'package:flutter_tratra/engagements/engagements_api.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
 import 'package:flutter_tratra/screens/search_screen.dart';
 import 'package:flutter_tratra/screens/service_detail_screen.dart';
@@ -128,6 +129,11 @@ void main() {
           ),
           ProxyProvider<BaseApi, MatchService>(
             update: (_, api, __) => MatchService(api),
+          ),
+
+          // Engagements récurrents et de longue durée (API commune web/Flutter)
+          ProxyProvider<BaseApi, EngagementsApi>(
+            update: (_, api, __) => EngagementsApi(api),
           ),
 
           // Espace unifié : API bornée au compte courant + données partagées (purgées au changement de compte)

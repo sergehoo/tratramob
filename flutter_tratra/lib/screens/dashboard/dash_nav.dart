@@ -4,6 +4,10 @@
 import 'package:flutter/material.dart';
 
 import 'package:flutter_tratra/core/deep_links.dart';
+import 'package:flutter_tratra/engagements/contract_screen.dart';
+import 'package:flutter_tratra/engagements/engagements_home.dart';
+import 'package:flutter_tratra/engagements/posting_screen.dart';
+import 'package:flutter_tratra/engagements/replacements_screen.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/business/business_screens.dart';
 import 'package:flutter_tratra/screens/auth/profile_screen.dart';
@@ -38,6 +42,7 @@ Future<void> openReviews(BuildContext context) => pushPage(context, const Review
 Future<void> openReputation(BuildContext context) => pushPage(context, const ReputationScreen());
 Future<void> openMyBadge(BuildContext context) => pushPage(context, const MyBadgeScreen());
 Future<void> openScanner(BuildContext context) => pushPage(context, const ScanScreen());
+Future<void> openEngagements(BuildContext context) => pushPage(context, const EngagementsHomeScreen());
 Future<void> openBusiness(BuildContext context) => pushPage(context, const BusinessHomeScreen());
 Future<void> openNotifications(BuildContext context) => pushPage(context, const NotificationsScreen());
 Future<void> openProvide(BuildContext context) => pushPage(context, const ProvideScreen());
@@ -83,6 +88,12 @@ Future<void> openDeepLink(BuildContext context, DeepLink link) {
       return openBusiness(context);
     case DeepLinkKind.announcement:
       return pushPage(context, AnnouncementsScreen(highlightId: link.id));
+    case DeepLinkKind.contract:
+      return pushPage(context, ContractScreen(id: link.id!));
+    case DeepLinkKind.posting:
+      return pushPage(context, PostingScreen(id: link.id!));
+    case DeepLinkKind.replacements:
+      return pushPage(context, const ReplacementsScreen());
     case DeepLinkKind.notifications:
       return openNotifications(context);
   }

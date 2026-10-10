@@ -1,6 +1,6 @@
 // lib/continuity/activity.dart
 //
-// Activité en cours telle que le serveur la décrit (GET /me/activities/) : réservation, mission ou demande Business.
+// Activité en cours telle que le serveur la décrit (GET /me/activities/) : réservation, mission, demande Business ou contrat.
 // Jamais de coordonnées ni d'adresse complète ; le détail se charge à l'ouverture, avec les contrôles habituels.
 
 class Activity {
@@ -21,9 +21,9 @@ class Activity {
     this.active = true,
   });
 
-  final String kind; // booking | mission | business_request
+  final String kind; // booking | mission | business_request | contract
   final int id;
-  final String role; // client | handyman | requester
+  final String role; // client | handyman | requester | principal | worker
   final String status;
   final String statusLabel;
   final String title;

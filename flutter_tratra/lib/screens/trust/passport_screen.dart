@@ -109,6 +109,10 @@ class PassportBody extends StatelessWidget {
     final pun = (p['punctuality'] as Map?)?.cast<String, dynamic>() ?? const {};
     final rea = (p['reactivity'] as Map?)?.cast<String, dynamic>() ?? const {};
     final exp = (p['experience'] as Map?)?.cast<String, dynamic>() ?? const {};
+    // Expérience VÉRIFIABLE tirée des contrats longue durée acceptés par les deux parties (additif).
+    final eng = (p['engagements'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final engMonths = (eng['months_total'] as num?)?.toInt() ?? 0;
+    final engDone = (eng['contracts_completed'] as num?)?.toInt() ?? 0;
     final skills = (p['skills'] as Map?)?.cast<String, dynamic>() ?? const {};
     final certified = maps(skills['certified']);
     final declared = maps(skills['declared']);
@@ -196,6 +200,21 @@ class PassportBody extends StatelessWidget {
                   : 'Pas encore assez de demandes traitées (${rea['sample'] ?? 0}/${rea['min_sample'] ?? 3})',
               source: 'plateforme',
             ),
+            if (engMonths > 0 || engDone > 0) ...[
+              const SizedBox(height: TtSpace.s3),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(TtSpace.s3),
+                decoration: BoxDecoration(color: TtColors.primarySoft, borderRadius: BorderRadius.circular(TtRadius.control)),
+                child: Text(
+                  'Engagements de longue durée vérifiés sur Tratra : $engDone contrat${engDone > 1 ? 's' : ''} terminé${engDone > 1 ? 's' : ''}'
+                  '${((eng['contracts_active'] as num?)?.toInt() ?? 0) > 0 ? ', ${(eng['contracts_active'] as num).toInt()} en cours' : ''} · $engMonths mois d’activité · '
+                  '${(eng['distinct_principals'] as num?)?.toInt() ?? 0} donneur(s) d’ordre différent(s)'
+                  '${(eng['evaluations'] as Map?)?['average'] != null ? ' · note ${(eng['evaluations'] as Map)['average']}/5 (${(eng['evaluations'] as Map)['count']} évaluations)' : ''}',
+                  style: TratraTheme.style(TtType.caption, color: TtColors.inkSoft),
+                ),
+              ),
+            ],
             const SizedBox(height: TtSpace.s3),
             Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
               Text('Expérience déclarée : ${exp['years'] ?? 0} an${(exp['years'] ?? 0) > 1 ? 's' : ''}',

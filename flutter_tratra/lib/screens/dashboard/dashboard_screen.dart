@@ -138,6 +138,7 @@ class _MoreTab extends StatelessWidget {
         _Entry(Icons.handyman_outlined, 'Mes prestations', 'Services, missions et disponibilité', () => openProviderHub(context))
       else
         _Entry(Icons.add_business_outlined, 'Proposer un service', 'Devenir artisan avec ce compte', () => openProvide(context)),
+      _Entry(Icons.description_outlined, 'Engagements', 'Contrats récurrents et de longue durée, offres et candidatures', () => openEngagements(context)),
       _Entry(Icons.account_balance_wallet_outlined, 'Portefeuille', isProvider ? 'Paiements, gains et retraits' : 'Vos paiements', () => openWallet(context)),
       if (isProvider) ...[
         _Entry(Icons.workspace_premium_outlined, 'Ma réputation', 'Badges, score de confiance et justificatifs', () => openReputation(context)),
