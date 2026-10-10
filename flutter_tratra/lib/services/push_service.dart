@@ -2,7 +2,8 @@
 //
 // Notifications push (Firebase Cloud Messaging) — Android et iOS (jamais le web).
 //
-//  * Sans fichier de configuration Firebase (android/app/google-services.json) l'initialisation échoue proprement :
+//  * Configuration Firebase : valeurs `--dart-define` (lib/services/firebase_config.dart, rien dans Git) ou fichier natif. Sans aucune
+//    des deux (android/app/google-services.json absent) l'initialisation échoue proprement :
 //    l'application fonctionne, le statut passe à `unconfigured`, la notification in-app reste la source fiable.
 //  * Le jeton de l'appareil est enregistré sur le compte COURANT (POST /devices/, idempotent côté serveur) et retiré à
 //    la déconnexion (DELETE /devices/{id}/) : un téléphone ne reçoit jamais les notifications d'un autre compte.
@@ -16,6 +17,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
+import 'package:flutter_tratra/services/firebase_config.dart';
 
 enum PushStatus {
   /// Pas encore démarré.
@@ -73,7 +75,11 @@ class FirebasePushGateway implements PushGateway {
   @override
   Future<bool> init() async {
     try {
-      if (Firebase.apps.isEmpty) await Firebase.initializeApp();
+      if (Firebase.apps.isEmpty) {
+        // Configuration injectée au build (--dart-define) en priorité ; sinon fichier natif (google-services.json / plist).
+        final options = firebaseOptionsFor(defaultTargetPlatform);
+        await (options != null ? Firebase.initializeApp(options: options) : Firebase.initializeApp());
+      }
       // iOS : afficher aussi la notification quand l'application est ouverte (Android : bandeau dans l'application).
       await _fm.setForegroundNotificationPresentationOptions(alert: true, badge: true, sound: true);
       return true;

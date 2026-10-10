@@ -1,2 +1,14 @@
 # Archive locale du projet (890 Mo) : ne jamais versionner
 flutter_tratra.zip
+
+# Identifiants Firebase / Apple / signature : JAMAIS versionnés
+google-services.json
+GoogleService-Info.plist
+*firebase-adminsdk*.json
+*service-account*.json
+*.p8
+*.p12
+*.mobileprovision
+*.jks
+*.keystore
+key.properties
