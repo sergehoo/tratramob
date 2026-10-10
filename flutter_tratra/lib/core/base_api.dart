@@ -66,7 +66,7 @@ class BaseApi {
         Uri.parse('$baseUrl${AppConstants.authRefreshEndpoint}'),
         headers: const {'Accept': 'application/json', 'Content-Type': 'application/json'},
         body: jsonEncode({'refresh': refresh}),
-      );
+      ).timeout(const Duration(seconds: 15));
       if (r.statusCode != 200) return null;
       final data = json.decode(utf8.decode(r.bodyBytes));
       final access = (data['access'] ?? '').toString();

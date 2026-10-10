@@ -7,19 +7,44 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding, WidgetsBindingObserver;
 import 'package:geolocator/geolocator.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart' show friendlyError;
+import 'package:flutter_tratra/screens/live/live_socket.dart';
 import 'package:flutter_tratra/screens/live/live_state.dart';
 
 enum GeoStatus { idle, waiting, sharing, denied, unavailable }
 
-class LiveController extends ChangeNotifier {
-  LiveController(this._base, this.bookingId);
+/// Délai avant la n-ième reconnexion : progressif et plafonné (2 s, 4 s, 8 s, 16 s, 30 s…), sans débordement.
+Duration liveReconnectDelay(int attempt) => Duration(seconds: (1 << attempt.clamp(1, 6)).clamp(1, 30));
+
+/// Ouvre la WebSocket du suivi (remplacée dans les tests).
+typedef LiveSocketConnector = WebSocketChannel Function(Uri uri);
+
+class LiveController extends ChangeNotifier with WidgetsBindingObserver {
+  LiveController(
+    this._base,
+    this.bookingId, {
+    LiveSocketConnector? connect,
+    Duration pollEvery = const Duration(seconds: 5),
+    Duration watchdogAfter = const Duration(seconds: 45),
+    Duration Function(int attempt)? backoff,
+    Duration requestTimeout = const Duration(seconds: 10),
+  })  : _requestTimeout = requestTimeout,
+        _connect = connect ?? connectLiveSocket,
+        _pollEvery = pollEvery,
+        _watchdogAfter = watchdogAfter,
+        _backoff = backoff ?? liveReconnectDelay;
   final BaseApi _base;
   final int bookingId;
+  final LiveSocketConnector _connect;
+  final Duration _pollEvery;
+  final Duration _watchdogAfter;
+  final Duration Function(int attempt) _backoff;
+  final Duration _requestTimeout;
 
   LiveSnapshot? state;
   String? error;
@@ -33,30 +58,58 @@ class LiveController extends ChangeNotifier {
   Timer? _poll;
   Timer? _retry;
   int _attempt = 0;
+  int _gen = 0; // génération de la connexion : les événements d'une connexion remplacée sont ignorés
   bool _disposed = false;
+  DateTime _lastSync = DateTime.now();
 
   StreamSubscription<Position>? _geoSub;
+  bool _geoStarting = false;
   DateTime _lastSent = DateTime.fromMillisecondsSinceEpoch(0);
 
   Uri _uri(String path) => Uri.parse('${_base.baseUrl}/bookings/$bookingId/live/$path');
 
   void start() {
+    WidgetsBinding.instance.addObserver(this);
     refresh();
-    _poll = Timer.periodic(const Duration(seconds: 5), (_) {
+    _poll = Timer.periodic(_pollEvery, (_) {
       final s = state;
       if (s != null && !s.isOpen) return; // mission close : plus de suivi
-      if (!realtime) refresh();
+      if (!realtime) {
+        refresh();
+      } else if (DateTime.now().difference(_lastSync) > _watchdogAfter) {
+        _watchdog();
+      }
     });
     _openSocket();
+  }
+
+  /// Le serveur ne pousse que les changements : après un long silence, on vérifie par une lecture directe ; si elle
+  /// échoue (réseau changé ou coupé), la connexion temps réel est rouverte.
+  Future<void> _watchdog() async {
+    if (!await refresh()) _openSocket();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _resume();
+  }
+
+  /// Retour au premier plan : Android a pu couper la connexion et le GPS pendant la veille → on repart de zéro.
+  void _resume() {
+    if (_disposed) return;
+    _attempt = 0;
+    refresh();
+    _openSocket();
+    _flushPosition();
   }
 
   @override
   void dispose() {
     _disposed = true;
+    WidgetsBinding.instance.removeObserver(this);
     _poll?.cancel();
     _retry?.cancel();
-    _socketSub?.cancel();
-    _socket?.sink.close();
+    _closeSocket();
     _geoSub?.cancel();
     super.dispose();
   }
@@ -70,27 +123,61 @@ class LiveController extends ChangeNotifier {
       state = LiveSnapshot.fromJson(body.cast<String, dynamic>());
       error = null;
       offline = false;
+      _lastSync = DateTime.now();
       _syncGeo();
       _notify();
     }
   }
 
-  Future<void> refresh() async {
+  /// Lecture directe de l'état. Vrai si le serveur a répondu ; au retour du réseau, la connexion temps réel est
+  /// rouverte tout de suite (sans attendre la fin du délai de reconnexion) et la position est renvoyée.
+  bool _refreshing = false;
+
+  Future<bool> refresh() async {
+    if (_refreshing) return !offline; // une lecture est déjà en cours : jamais de requêtes empilées sur un réseau lent
+    _refreshing = true;
     try {
-      final r = await _base.client.get(_uri(''), headers: await _base.headers);
+      final r = await _base.client.get(_uri(''), headers: await _base.headers).timeout(_requestTimeout);
       if (r.statusCode != 200) _base.handleError(r);
+      final wasOffline = offline;
       _apply(_base.decodeBody(r));
+      if (wasOffline && !_disposed) {
+        if (!realtime) {
+          _attempt = 0;
+          _openSocket();
+        }
+        _flushPosition();
+      }
+      return true;
     } catch (e) {
       offline = true;
       error = friendlyError(e);
       _notify();
+      return false;
+    } finally {
+      _refreshing = false;
     }
   }
 
-  Future<void> _openSocket() async {
+  void _closeSocket() {
+    _socketSub?.cancel();
+    _socketSub = null;
     try {
-      final r = await _base.client.post(_uri('ticket/'), headers: await _base.headers, body: '{}');
+      _socket?.sink.close();
+    } catch (_) {}
+    _socket = null;
+    realtime = false;
+  }
+
+  Future<void> _openSocket() async {
+    if (_disposed) return;
+    _retry?.cancel();
+    _closeSocket();
+    final gen = ++_gen;
+    try {
+      final r = await _base.client.post(_uri('ticket/'), headers: await _base.headers, body: '{}').timeout(_requestTimeout);
       if (r.statusCode != 200) _base.handleError(r);
+      if (_disposed || gen != _gen) return;
       final t = (_base.decodeBody(r) as Map).cast<String, dynamic>();
       final base = Uri.parse(_base.baseUrl);
       final ws = Uri(
@@ -100,15 +187,16 @@ class LiveController extends ChangeNotifier {
         path: '${t['path']}',
         queryParameters: {'ticket': '${t['ticket']}'},
       );
-      final channel = WebSocketChannel.connect(ws);
+      final channel = _connect(ws);
       _socket = channel;
       await channel.ready;
-      if (_disposed) {
+      if (_disposed || gen != _gen) {
         channel.sink.close();
         return;
       }
       _attempt = 0;
       realtime = true;
+      _lastSync = DateTime.now();
       _notify();
       _socketSub = channel.stream.listen(
         (msg) {
@@ -117,22 +205,23 @@ class LiveController extends ChangeNotifier {
             if (d is Map && d['type'] == 'state') _apply(d['state']);
           } catch (_) {/* message illisible : ignoré */}
         },
-        onDone: _socketClosed,
-        onError: (_) => _socketClosed(),
+        onDone: () => _socketClosed(gen),
+        onError: (_) => _socketClosed(gen),
         cancelOnError: true,
       );
     } catch (_) {
-      _socketClosed();
+      _socketClosed(gen);
     }
   }
 
-  void _socketClosed() {
+  void _socketClosed(int gen) {
+    if (gen != _gen) return; // connexion déjà remplacée
     realtime = false;
     _notify();
     if (_disposed) return;
-    _attempt += 1;
+    _attempt = (_attempt + 1).clamp(1, 6); // reconnexion progressive, plafonnée (2 s … 30 s)
     _retry?.cancel();
-    _retry = Timer(Duration(seconds: (1 << _attempt).clamp(1, 30)), _openSocket); // reconnexion progressive
+    _retry = Timer(_backoff(_attempt), _openSocket);
   }
 
   // ---- Actions ----------------------------------------------------------------------------------------------
@@ -169,7 +258,7 @@ class LiveController extends ChangeNotifier {
 
   void _syncGeo() {
     if (_shouldShare) {
-      if (_geoSub == null) _startGeo();
+      if (_geoSub == null && !_geoStarting) _startGeo();
     } else if (_geoSub != null) {
       _geoSub?.cancel();
       _geoSub = null;
@@ -178,6 +267,7 @@ class LiveController extends ChangeNotifier {
   }
 
   Future<void> _startGeo() async {
+    _geoStarting = true;
     geo = GeoStatus.waiting;
     _notify();
     try {
@@ -195,9 +285,13 @@ class LiveController extends ChangeNotifier {
         _notify();
         return;
       }
+      if (_disposed || !_shouldShare) return; // le partage a été suspendu pendant la demande d'autorisation
       _geoSub = Geolocator.getPositionStream(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 5)).listen(
         _onPosition,
         onError: (_) {
+          // Flux interrompu (GPS coupé…) : on libère l'abonnement ; il sera relancé dès que le service revient.
+          _geoSub?.cancel();
+          _geoSub = null;
           geo = GeoStatus.unavailable;
           geoNote = 'Signal GPS indisponible.';
           _notify();
@@ -207,7 +301,20 @@ class LiveController extends ChangeNotifier {
       geo = GeoStatus.unavailable;
       geoNote = 'Signal GPS indisponible.';
       _notify();
+    } finally {
+      _geoStarting = false;
     }
+  }
+
+  /// Après une coupure ou un retour au premier plan : envoie tout de suite la position actuelle (un artisan immobile
+  /// n'en émettrait pas avant d'avoir bougé de 5 m, et le client verrait une position périmée).
+  Future<void> _flushPosition() async {
+    if (_geoSub == null || !_shouldShare) return;
+    try {
+      final p = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 10)));
+      _lastSent = DateTime.fromMillisecondsSinceEpoch(0);
+      await _onPosition(p);
+    } catch (_) {/* sans position disponible : le flux normal reprendra */}
   }
 
   Future<void> _onPosition(Position p) async {

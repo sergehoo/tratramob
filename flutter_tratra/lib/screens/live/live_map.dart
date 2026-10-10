@@ -81,7 +81,9 @@ class _LiveMapState extends State<LiveMap> {
           options: MapOptions(
             initialCenter: const LatLng(5.36, -4.0083),
             initialZoom: 12,
-            interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
+            // Pas de glisser à un doigt : la carte occupe un tiers de l'écran et piégerait le défilement de la page
+          // (constaté sur téléphone). Le cadrage suit les repères ; pincer / double-toucher suffit pour zoomer.
+          interactionOptions: const InteractionOptions(flags: InteractiveFlag.pinchZoom | InteractiveFlag.doubleTapZoom),
             onMapReady: () {
               _ready = true;
               _fit();
