@@ -36,6 +36,16 @@ class _ScanScreenState extends State<ScanScreen> {
     super.dispose();
   }
 
+  /// Relance la caméra. Quand le widget de scan vient d'être réaffiché, il démarre déjà la caméra de lui-même : un
+  /// second démarrage lève « controllerInitializing » (exception non gérée constatée sur téléphone) — sans conséquence.
+  Future<void> _startCamera() async {
+    try {
+      await _camera.start();
+    } on MobileScannerException {
+      // déjà en cours de démarrage, ou caméra indisponible : l'écran d'erreur du widget informe l'utilisateur
+    }
+  }
+
   Future<void> _handle(String raw) async {
     if (_busy || _outcome != null) return;
     final target = parseQr(raw);
@@ -53,7 +63,7 @@ class _ScanScreenState extends State<ScanScreen> {
       if (!mounted) return;
       setState(() => _busy = false);
       await Navigator.of(context).push(MaterialPageRoute(builder: (_) => EquipmentReportScreen(code: target.code)));
-      if (mounted && !_manualMode) await _camera.start();
+      if (mounted && !_manualMode) await _startCamera();
       return;
     }
     final outcome = switch (target) {
@@ -74,7 +84,7 @@ class _ScanScreenState extends State<ScanScreen> {
       _unrecognized = null;
       _manual.clear();
     });
-    if (!_manualMode) await _camera.start();
+    if (!_manualMode) await _startCamera();
   }
 
   @override
@@ -137,7 +147,7 @@ class _ScanScreenState extends State<ScanScreen> {
                 if (_manualMode) {
                   await _camera.stop();
                 } else {
-                  await _camera.start();
+                  await _startCamera();
                 }
               },
             ),

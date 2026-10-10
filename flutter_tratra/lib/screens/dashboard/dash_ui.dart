@@ -142,7 +142,7 @@ class DashKpi extends StatelessWidget {
                 ),
                 Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
                 if (hint != null)
-                  Text(hint!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TratraTheme.style(TtType.caption, color: TtColors.fog)),
+                  Text(hint!, maxLines: 2, overflow: TextOverflow.ellipsis, style: TratraTheme.style(TtType.caption, color: TtColors.fog)), // 2 lignes : « 0 créées ce mois-ci » ne doit pas être coupé en tuiles étroites
               ],
             ),
           ),
