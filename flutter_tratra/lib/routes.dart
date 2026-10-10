@@ -17,6 +17,7 @@ class RouteNames {
   static const login = '/login';
   static const profile = '/profile';
   static const verifyPhone = '/verify-phone';
+  static const forgotPassword = '/forgot-password';
 
   static const String allNearbyArtisans = '/all-nearby-artisans';
   static const String allServices = '/all-services';
@@ -28,7 +29,10 @@ class RouteNames {
 class OtpArgs {
   /// Route à ouvrir une fois le téléphone vérifié (ou en choisissant « Plus tard »).
   final String nextRoute;
-  const OtpArgs({this.nextRoute = RouteNames.home});
+
+  /// Envoie le code dès l'arrivée sur l'écran (juste après l'inscription).
+  final bool autoSend;
+  const OtpArgs({this.nextRoute = RouteNames.home, this.autoSend = false});
 }
 
 class ServiceDetailArgs {

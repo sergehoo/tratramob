@@ -18,9 +18,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _usernameController = TextEditingController();
-  final _phoneController = TextEditingController();
+  final _phoneController = TextEditingController(text: '+225 '); // +225 par défaut (E.164)
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -33,8 +31,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _error;
 
   final FocusNode _lastNameFocusNode = FocusNode();
-  final FocusNode _emailFocusNode = FocusNode();
-  final FocusNode _usernameFocusNode = FocusNode();
   final FocusNode _phoneFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
   final FocusNode _confirmPasswordFocusNode = FocusNode();
@@ -50,14 +46,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
-    _emailController.dispose();
-    _usernameController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _lastNameFocusNode.dispose();
-    _emailFocusNode.dispose();
-    _usernameFocusNode.dispose();
     _phoneFocusNode.dispose();
     _passwordFocusNode.dispose();
     _confirmPasswordFocusNode.dispose();
@@ -81,8 +73,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final user = await _apiService.register(
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
-        email: _emailController.text.trim(),
-        username: _usernameController.text.trim(),
         phone: _phoneController.text.trim(),
         password: _passwordController.text,
       );
@@ -95,13 +85,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await _storageService.saveUserData(user);
 
       if (!mounted) return;
-      // Un numéro a été saisi : proposer sa vérification par code (« Plus tard » possible).
-      if (_phoneController.text.trim().isNotEmpty) {
-        Navigator.pushReplacementNamed(context, RouteNames.verifyPhone,
-            arguments: const OtpArgs());
-      } else {
-        Navigator.pushReplacementNamed(context, RouteNames.home);
-      }
+      // Le numéro n'est PAS vérifié : écran du code OTP (envoi automatique, « Plus tard » possible).
+      Navigator.pushReplacementNamed(context, RouteNames.verifyPhone,
+          arguments: const OtpArgs(autoSend: true));
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = authErrorMessage(e));
@@ -145,7 +131,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       eyebrow: 'Nouveau compte',
       title: 'Créer un compte',
       subtitle:
-          'Rejoignez Tratra en quelques étapes. Tous les champs sont obligatoires.',
+          'Un seul compte pour réserver des artisans et proposer vos services.',
       onBack: () => Navigator.pop(context),
       footer: Wrap(
         alignment: WrapAlignment.center,
@@ -189,40 +175,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Nom requis' : null,
                 textInputAction: TextInputAction.next,
-                onSubmitted: (_) => _emailFocusNode.requestFocus(),
-              ),
-              const SizedBox(height: TtSpace.s4),
-              TratraInput(
-                label: 'Adresse email',
-                controller: _emailController,
-                focusNode: _emailFocusNode,
-                keyboardType: TextInputType.emailAddress,
-                leadingIcon: Icons.email_outlined,
-                autofillHints: const [AutofillHints.email],
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return 'Email requis';
-                  }
-                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                      .hasMatch(v.trim())) {
-                    return "Format d'email invalide";
-                  }
-                  return null;
-                },
-                textInputAction: TextInputAction.next,
-                onSubmitted: (_) => _usernameFocusNode.requestFocus(),
-              ),
-              const SizedBox(height: TtSpace.s4),
-              TratraInput(
-                label: "Nom d'utilisateur",
-                controller: _usernameController,
-                focusNode: _usernameFocusNode,
-                leadingIcon: Icons.alternate_email_outlined,
-                autofillHints: const [AutofillHints.newUsername],
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? "Nom d'utilisateur requis"
-                    : null,
-                textInputAction: TextInputAction.next,
                 onSubmitted: (_) => _phoneFocusNode.requestFocus(),
               ),
               const SizedBox(height: TtSpace.s4),
@@ -233,9 +185,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 keyboardType: TextInputType.phone,
                 leadingIcon: Icons.phone_outlined,
                 autofillHints: const [AutofillHints.telephoneNumber],
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? 'Numéro de téléphone requis'
-                    : null,
+                helper: 'Avec l’indicatif du pays : +225 pour la Côte d’Ivoire.',
+                validator: (v) {
+                  final digits = (v ?? '').replaceAll(RegExp(r'\D'), '');
+                  return digits.length < 8 ? 'Numéro de téléphone invalide' : null;
+                },
                 textInputAction: TextInputAction.next,
                 onSubmitted: (_) => _passwordFocusNode.requestFocus(),
               ),

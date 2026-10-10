@@ -25,8 +25,11 @@ String maskPhone(String phone) {
 }
 
 class OtpScreen extends StatefulWidget {
-  const OtpScreen({super.key, this.nextRoute = RouteNames.home});
+  const OtpScreen({super.key, this.nextRoute = RouteNames.home, this.autoSend = false});
   final String nextRoute;
+
+  /// Envoie le code dès l'arrivée sur l'écran (juste après l'inscription).
+  final bool autoSend;
 
   @override
   State<OtpScreen> createState() => _OtpScreenState();
@@ -42,7 +45,9 @@ class _OtpScreenState extends State<OtpScreen> {
   bool _done = false;
   String? _error;
   int _cooldown = 0;
+  int _expiresIn = 0;
   Timer? _timer;
+  Timer? _expiryTimer;
 
   /// Le profil en session peut être périmé : on le recharge avant de décider si le numéro
   /// est déjà vérifié.
@@ -55,19 +60,38 @@ class _OtpScreenState extends State<OtpScreen> {
   }
 
   Future<void> _refreshProfile() async {
-    await context.read<Session>().refreshProfile();
-    if (mounted) setState(() => _checking = false);
+    final session = context.read<Session>();
+    await session.refreshProfile();
+    if (!mounted) return;
+    setState(() => _checking = false);
+    final user = session.user;
+    if (widget.autoSend && !(user?.isVerified ?? false) && (user?.phoneNumber ?? '').isNotEmpty) {
+      _request();
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _expiryTimer?.cancel();
     super.dispose();
   }
 
-  void _startCooldown() {
+  void _startExpiry(int seconds) {
+    _expiryTimer?.cancel();
+    setState(() => _expiresIn = seconds);
+    _expiryTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return t.cancel();
+      setState(() => _expiresIn = _expiresIn > 0 ? _expiresIn - 1 : 0);
+      if (_expiresIn == 0) t.cancel();
+    });
+  }
+
+  String _clock(int s) => '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+
+  void _startCooldown([int seconds = kOtpResendSeconds]) {
     _timer?.cancel();
-    setState(() => _cooldown = kOtpResendSeconds);
+    setState(() => _cooldown = seconds);
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return t.cancel();
       setState(() => _cooldown = _cooldown > 0 ? _cooldown - 1 : 0);
@@ -81,13 +105,14 @@ class _OtpScreenState extends State<OtpScreen> {
       _error = null;
     });
     try {
-      await context.read<AuthService>().requestOtp();
+      final r = await context.read<AuthService>().requestOtp();
       if (!mounted) return;
       setState(() {
         _sent = true;
         _code = '';
       });
-      _startCooldown();
+      _startCooldown((r['resend_in'] as num?)?.toInt() ?? kOtpResendSeconds);
+      _startExpiry((r['expires_in'] as num?)?.toInt() ?? 600);
     } catch (e) {
       if (mounted) setState(() => _error = authErrorMessage(e));
     } finally {
@@ -97,7 +122,7 @@ class _OtpScreenState extends State<OtpScreen> {
 
   Future<void> _verify([String? value]) async {
     final code = value ?? _code;
-    if (code.length != 6 || _busy) return;
+    if (code.length != 6 || _busy || (_sent && _expiresIn == 0)) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -187,6 +212,12 @@ class _OtpScreenState extends State<OtpScreen> {
               }),
               onCompleted: _verify,
             ),
+            const SizedBox(height: TtSpace.s2),
+            Text(
+              _expiresIn > 0 ? 'Le code expire dans ${_clock(_expiresIn)}.' : 'Ce code a expiré : demandez-en un nouveau.',
+              textAlign: TextAlign.center,
+              style: TratraTheme.style(TtType.caption, color: TtColors.ash),
+            ),
           ],
           if (_error != null) ...[
             const SizedBox(height: TtSpace.s4),
@@ -195,7 +226,7 @@ class _OtpScreenState extends State<OtpScreen> {
           const SizedBox(height: TtSpace.s5),
           if (!_sent)
             TratraButton(
-              label: 'Recevoir le code',
+              label: _error != null ? 'Réessayer l’envoi' : 'Recevoir le code',
               size: TratraButtonSize.lg,
               block: true,
               loading: _busy,
@@ -207,7 +238,7 @@ class _OtpScreenState extends State<OtpScreen> {
               size: TratraButtonSize.lg,
               block: true,
               loading: _busy,
-              onPressed: _code.length == 6 ? _verify : null,
+              onPressed: (_code.length == 6 && _expiresIn > 0) ? _verify : null,
             ),
             const SizedBox(height: TtSpace.s2),
             TextButton(
@@ -217,6 +248,11 @@ class _OtpScreenState extends State<OtpScreen> {
           ],
           const SizedBox(height: TtSpace.s1),
           TextButton(onPressed: _busy ? null : _continue, child: const Text('Plus tard')),
+          Text(
+            'Tant que le code n’est pas validé, votre numéro n’est pas considéré comme vérifié.',
+            textAlign: TextAlign.center,
+            style: TratraTheme.style(TtType.caption, color: TtColors.ash),
+          ),
         ],
       );
     }

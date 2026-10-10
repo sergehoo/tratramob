@@ -43,6 +43,7 @@ import 'package:flutter_tratra/screens/payment_screen.dart';
 import 'package:flutter_tratra/screens/auth/profile_screen.dart';
 import 'package:flutter_tratra/screens/auth/login_screen.dart';
 import 'package:flutter_tratra/screens/auth/otp_screen.dart';
+import 'package:flutter_tratra/screens/auth/forgot_password_screen.dart';
 import 'package:flutter_tratra/screens/auth/register_screen.dart';
 import 'package:flutter_tratra/screens/all_categories_screen.dart';
 import 'package:flutter_tratra/screens/all_nearby_artisans_screen.dart';
@@ -249,8 +250,11 @@ class _MyAppState extends State<MyApp> {
         return MaterialPageRoute(
           builder: (_) => OtpScreen(
             nextRoute: args is OtpArgs ? args.nextRoute : RouteNames.home,
+            autoSend: args is OtpArgs && args.autoSend,
           ),
         );
+      case RouteNames.forgotPassword:
+        return MaterialPageRoute(builder: (_) => const ForgotPasswordScreen());
 
       case '/login':
         return MaterialPageRoute(builder: (_) => const LoginScreen());

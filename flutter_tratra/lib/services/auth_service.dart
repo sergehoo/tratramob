@@ -58,12 +58,39 @@ class AuthService {
 
   /// POST /auth/otp/request/ — envoie un code de vérification au téléphone du compte
   /// (utilisateur connecté). Le code éventuellement renvoyé en développement n'est JAMAIS exposé.
-  Future<void> requestOtp() async {
+  /// Renvoie `expires_in` (validité du code, s) et `resend_in` (délai avant renvoi, s) ; jamais le code.
+  /// 503 : SMS indisponible, 502 : envoi refusé, 429 : délai ou quota — message du serveur, aucun faux succès.
+  Future<Map<String, dynamic>> requestOtp() async {
     final r = await api.client.post(
       Uri.parse('${api.baseUrl}${AppConstants.otpRequestEndpoint}'),
       headers: await api.headers,
     );
     if (r.statusCode != 200 && r.statusCode != 201) api.handleError(r);
+    final data = api.decodeBody(r);
+    return data is Map ? data.cast<String, dynamic>() : <String, dynamic>{};
+  }
+
+  /// POST /auth/password-reset/request/ { phone } — code de récupération par SMS (202 identique que le
+  /// numéro soit inscrit ou non).
+  Future<Map<String, dynamic>> requestPasswordReset(String phone) async {
+    final r = await api.client.post(
+      Uri.parse('${api.baseUrl}/auth/password-reset/request/'),
+      headers: await api.getHeaders(withAuth: false),
+      body: jsonEncode({'phone': phone}),
+    );
+    if (r.statusCode != 200 && r.statusCode != 202) api.handleError(r);
+    final data = api.decodeBody(r);
+    return data is Map ? data.cast<String, dynamic>() : <String, dynamic>{};
+  }
+
+  /// POST /auth/password-reset/confirm/ { phone, code, password } — nouveau mot de passe.
+  Future<void> confirmPasswordReset({required String phone, required String code, required String password}) async {
+    final r = await api.client.post(
+      Uri.parse('${api.baseUrl}/auth/password-reset/confirm/'),
+      headers: await api.getHeaders(withAuth: false),
+      body: jsonEncode({'phone': phone, 'code': code, 'password': password}),
+    );
+    if (r.statusCode != 200) api.handleError(r);
   }
 
   /// POST /auth/otp/verify/ { code } — marque le compte comme vérifié.

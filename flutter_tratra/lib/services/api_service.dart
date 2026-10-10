@@ -502,21 +502,22 @@ class ApiService {
   }
 
 // ============ INSCRIPTION AVEC RÉSULTAT DÉTAILLÉ ============
+  /// Inscription du compte UNIQUE (POST /users/) : prénom, nom, téléphone (E.164, +225 par défaut),
+  /// mot de passe et acceptation des conditions. Ni identifiant ni e-mail : la connexion se fait par
+  /// téléphone. Le téléphone reste NON vérifié tant qu'un code OTP n'a pas été validé.
   Future<Map<String, dynamic>> registerWithDetails({
     required String firstName,
     required String lastName,
-    required String email,
-    required String username,
     required String phone,
     required String password,
   }) async {
+    authToken = null; // point d'accès public : jamais le jeton d'une session précédente
     final userData = {
       'first_name': firstName,
       'last_name': lastName,
-      'email': email,
-      'username': username,
       'phone': phone,
       'password': password,
+      'accept_terms': true,
     };
 
     final response = await client.post(
@@ -529,12 +530,7 @@ class ApiService {
     );
 
     if (response.statusCode != 201) {
-      if (response.statusCode == 400) {
-        final errorData = json.decode(response.body);
-        final errorMessage = _parseRegistrationError(errorData);
-        throw Exception(errorMessage);
-      }
-      _handleError(response);
+      _handleError(response); // message lisible du serveur (champ invalide, inscription impossible…)
     }
 
     final user = User.fromJson(json.decode(response.body));
@@ -547,7 +543,7 @@ class ApiService {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        body: json.encode({'username': username, 'password': password}),
+        body: json.encode({'username': phone, 'password': password}),
       );
 
       if (loginResponse.statusCode == 200) {
@@ -595,49 +591,22 @@ class ApiService {
   Future<User> register({
     required String firstName,
     required String lastName,
-    required String email,
-    required String username,
     required String phone,
     required String password,
   }) async {
     final result = await registerWithDetails(
       firstName: firstName,
       lastName: lastName,
-      email: email,
-      username: username,
       phone: phone,
       password: password,
     );
 
     final user = result['user'] as User;
     final token = result['token'] as String?;
-
-    // Si pas de token (auto-login KO), on peut tenter un fallback sûr:
     if (token != null && token.isNotEmpty) {
-      setAuthToken(token); // ⬅️ double sécurité
-    } else {
-      // Fallback optionnel si ta vue de login attend un autre champ:
-      // await loginWithUsername(username, password);
+      setAuthToken(token); // double sécurité
     }
-
     return user;
   }
 
-  String _parseRegistrationError(dynamic errorData) {
-    // errorData typiquement: {"email":["user with this email already exists."],"username":["..."], "password": ["..."]}
-    if (errorData is Map) {
-      final messages = <String>[];
-      errorData.forEach((key, value) {
-        if (value is List) {
-          messages.add('$key: ${value.join(", ")}');
-        } else if (value is String) {
-          messages.add('$key: $value');
-        } else {
-          messages.add('$key: ${value.toString()}');
-        }
-      });
-      if (messages.isNotEmpty) return messages.join(' | ');
-    }
-    return 'Erreur de validation';
-  }
 }

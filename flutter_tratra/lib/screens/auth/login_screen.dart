@@ -74,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       setState(() {
         _error = (e is ApiException && (e.statusCode == 400 || e.statusCode == 401))
-            ? 'Identifiants invalides.' // même message que le web
+            ? 'Téléphone ou mot de passe incorrect.' // même message que le web
             : authErrorMessage(e);
       });
     } finally {
@@ -109,12 +109,13 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TratraInput(
-                label: 'Email ou nom d’utilisateur',
+                label: 'Téléphone',
+                helper: 'Avec l’indicatif (+225…). Ancien compte : identifiant ou e-mail.',
                 controller: _usernameController,
                 leadingIcon: Icons.person_outline,
                 autofillHints: const [AutofillHints.username],
                 validator: (v) => (v == null || v.trim().isEmpty)
-                    ? "Nom d'utilisateur requis"
+                    ? 'Téléphone requis'
                     : null,
                 textInputAction: TextInputAction.next,
                 onSubmitted: (_) => _passwordFocusNode.requestFocus(),
@@ -131,6 +132,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     (v == null || v.isEmpty) ? 'Mot de passe requis' : null,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _login(),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pushNamed(context, RouteNames.forgotPassword),
+                  child: const Text('Mot de passe oublié ?'),
+                ),
               ),
               AuthNotice(
                 title: 'Erreur de connexion',
