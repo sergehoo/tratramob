@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/booking.dart';
 import 'package:flutter_tratra/screens/dashboard/messages_screen.dart' show openBookingConversation;
+import 'package:flutter_tratra/screens/live/live_cards.dart' show ClientLiveCard;
 import 'package:flutter_tratra/screens/trust/mission_qr_card.dart' show IdentityVerifyCard;
 import 'package:flutter_tratra/services/booking_service.dart';
 
@@ -208,6 +209,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
             BookingReveal(index: 1, child: _StatusNote(status: b.status)),
             const SizedBox(height: TtSpace.s4),
             BookingReveal(index: 2, child: _DetailsCard(booking: b)),
+            if (['confirmed', 'in_progress'].contains(b.status) && int.tryParse(b.id) != null) ...[
+              const SizedBox(height: TtSpace.s4),
+              ClientLiveCard(bookingId: int.parse(b.id)),
+            ],
             if (['confirmed', 'in_progress', 'completed'].contains(b.status) && int.tryParse(b.id) != null) ...[
               const SizedBox(height: TtSpace.s4),
               IdentityVerifyCard(bookingId: int.parse(b.id), active: b.status != 'completed'),

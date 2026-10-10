@@ -9,6 +9,7 @@ import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/booking.dart';
 import 'package:flutter_tratra/screens/dashboard/messages_screen.dart' show openBookingConversation;
 import 'package:flutter_tratra/screens/worker/dashboard/worker_ui.dart';
+import 'package:flutter_tratra/screens/live/live_cards.dart';
 import 'package:flutter_tratra/screens/trust/mission_qr_card.dart';
 import 'package:flutter_tratra/services/booking_service.dart';
 
@@ -194,6 +195,10 @@ class _MissionDetailScreenState extends State<MissionDetailScreen> {
                   leading: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
                   onPressed: () => openBookingConversation(context, int.parse(b.id)),
                 ),
+              ],
+              if (b.status == 'confirmed' && int.tryParse(b.id) != null) ...[
+                const SizedBox(height: TtSpace.s4),
+                ArtisanLiveCard(bookingId: int.parse(b.id), onChanged: _reload),
               ],
               if ((b.status == 'confirmed' || b.status == 'in_progress') && int.tryParse(b.id) != null) ...[
                 const SizedBox(height: TtSpace.s4),
