@@ -12,6 +12,7 @@ import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/detail_shared/detail_helpers.dart';
 import 'package:flutter_tratra/screens/detail_shared/service_mini_card.dart';
 import 'package:flutter_tratra/screens/service_detail_screen.dart';
+import 'package:flutter_tratra/screens/trust/passport_screen.dart';
 
 class ArtisanProfileScreen extends StatefulWidget {
   const ArtisanProfileScreen({
@@ -133,6 +134,8 @@ class _ArtisanProfileScreenState extends State<ArtisanProfileScreen> {
               .toList()
           : <String>[],
       description: (j['description'] ?? j['bio'] ?? '').toString(),
+      trustBadges: trustBadgeCodes(j['badges']),
+      trustScore: j['trust_score'] is num ? (j['trust_score'] as num).round() : null,
     );
   }
 
@@ -368,6 +371,36 @@ class _ArtisanProfileScreenState extends State<ArtisanProfileScreen> {
         ),
       ],
 
+      // Passeport de confiance (Tratra Trust) : badges, score expliqué, avis, historique.
+      if (!_missingId) ...[
+        const SizedBox(height: TtSpace.s4),
+        TratraCard(
+          padding: TratraCard.compact,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => PassportScreen(profileId: _artisanId!)),
+          ),
+          child: Row(children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: TtColors.primarySoft, borderRadius: BorderRadius.circular(TtRadius.control)),
+              child: const Icon(Icons.badge_outlined, color: TtColors.primary),
+            ),
+            const SizedBox(width: TtSpace.s3),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Passeport de confiance', style: TratraTheme.style(TtType.title)),
+                Text(
+                  a.trustScore != null ? 'Score ${a.trustScore}/100 · badges, compétences et avis' : 'Identité, badges, compétences et avis réels',
+                  style: TratraTheme.style(TtType.caption, color: TtColors.ash),
+                ),
+              ]),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: TtColors.fog),
+          ]),
+        ),
+      ],
+
       // Spécialités
       if (a.specialties.isNotEmpty) ...[
         const TratraSectionHeader(
@@ -470,7 +503,7 @@ class _ProfileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final a = artisan;
-    final hasBadges = a.isCertified || a.isAvailable;
+    final hasBadges = a.isCertified || a.isAvailable || a.trustBadges.isNotEmpty;
 
     return TratraCard(
       variant: TratraCardVariant.night,
@@ -522,7 +555,9 @@ class _ProfileHeader extends StatelessWidget {
               spacing: TtSpace.s2,
               runSpacing: TtSpace.s2,
               children: [
-                if (a.isCertified)
+                if (a.trustBadges.isNotEmpty)
+                  TratraTrustBadges(a.trustBadges, onNight: true)
+                else if (a.isCertified)
                   const TratraBadge('Vérifié', tone: TratraTone.success, icon: Icons.verified_rounded),
                 if (a.isAvailable)
                   const TratraBadge('Disponible', tone: TratraTone.primary, dot: true),

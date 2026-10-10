@@ -150,6 +150,14 @@ class _ArtisanLine extends StatelessWidget {
           const SizedBox(width: 4),
           const Icon(Icons.verified_rounded, size: 15, color: TtColors.primary, semanticLabel: 'Profil vérifié'),
         ],
+        // Badges cumulables Expert / Sûr (compacts : l'icône suffit, le libellé est en infobulle et lu par les lecteurs d'écran).
+        for (final code in artisan.badges.where((c) => c == 'EXPERT' || c == 'SUR')) ...[
+          const SizedBox(width: 3),
+          Tooltip(
+            message: trustBadgeInfo[code]!.help,
+            child: Icon(trustBadgeInfo[code]!.icon, size: 15, color: code == 'SUR' ? TtColors.night : TtColors.accentDark, semanticLabel: 'Badge ${trustBadgeInfo[code]!.label}'),
+          ),
+        ],
       ],
     );
   }

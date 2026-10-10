@@ -9,6 +9,7 @@ import 'package:flutter_tratra/screens/dashboard/bookings_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/notifications_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/provider_screens.dart';
+import 'package:flutter_tratra/screens/dashboard/reputation_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/reviews_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/wallet_screen.dart';
 import 'package:flutter_tratra/screens/tracking_screen.dart';
@@ -28,6 +29,7 @@ Future<void> openBookings(BuildContext context) => pushPage(context, const Booki
 Future<void> openProviderHub(BuildContext context) => pushPage(context, const ProviderHubScreen());
 Future<void> openWallet(BuildContext context) => pushPage(context, const WalletScreen());
 Future<void> openReviews(BuildContext context) => pushPage(context, const ReviewsScreen());
+Future<void> openReputation(BuildContext context) => pushPage(context, const ReputationScreen());
 Future<void> openNotifications(BuildContext context) => pushPage(context, const NotificationsScreen());
 Future<void> openProvide(BuildContext context) => pushPage(context, const ProvideScreen());
 Future<void> openProProfile(BuildContext context) => pushPage(context, const ProProfileScreen());

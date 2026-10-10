@@ -15,6 +15,10 @@ class Artisan {
   final List<String> specialties;
   final String description;
 
+  /// Tratra Trust : badges ACTUELS (codes) et score expliqué (null tant qu'il n'est pas calculable).
+  final List<String> trustBadges;
+  final int? trustScore;
+
   Artisan({
     required this.id,
     required this.name,
@@ -30,6 +34,8 @@ class Artisan {
     required this.yearsExperience,
     required this.specialties,
     required this.description,
+    this.trustBadges = const [],
+    this.trustScore,
   });
 
   // Méthode fromJson — tolère le snake_case du backend Django DRF
@@ -68,6 +74,8 @@ class Artisan {
       yearsExperience: toInt(pick(['experience_years', 'years_experience', 'yearsExperience'])),
       specialties: List<String>.from(pick(['specialties']) ?? const []),
       description: (pick(['description', 'bio']) ?? '').toString(),
+      trustBadges: _trustCodes(json['badges']),
+      trustScore: json['trust_score'] is num ? (json['trust_score'] as num).round() : null,
     );
   }
 
@@ -94,4 +102,11 @@ class Artisan {
       'description': description,
     };
   }
+}
+
+/// Codes de badges Tratra Trust depuis `[{code, label}, ...]` (codes inconnus ignorés).
+List<String> _trustCodes(dynamic raw) {
+  const known = {'NOUVEAU', 'VERIFIE', 'EXPERT', 'SUR'};
+  if (raw is! List) return const [];
+  return raw.map((e) => e is Map ? '${e['code']}' : '$e').where(known.contains).toList();
 }

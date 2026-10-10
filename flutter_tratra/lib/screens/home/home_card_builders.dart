@@ -57,6 +57,13 @@ Widget homeNearbyCard(
     onShare: onShare,
     onPrimary: onOpen,
     // « Vérifié » uniquement si l'API le confirme pour cet artisan.
-    badgeText: (a?.verified ?? false) ? 'Vérifié' : null,
+    // Le badge le plus élevé (Sûr > Expert > Vérifié), toujours issu de l'attribution automatique du serveur.
+    badgeText: a == null
+        ? null
+        : (a.badges.contains('SUR')
+            ? 'Sûr'
+            : a.badges.contains('EXPERT')
+                ? 'Expert'
+                : (a.verified ? 'Vérifié' : null)),
   );
 }

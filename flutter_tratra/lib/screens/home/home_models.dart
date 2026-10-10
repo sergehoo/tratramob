@@ -2,6 +2,7 @@
 //
 // Données et formatage de l'accueil client. Aucune règle métier : uniquement la lecture
 // tolérante de la réponse de l'API et l'affichage (prix, distance, URL de média).
+import 'package:flutter_tratra/design/design.dart' show trustBadgeCodes;
 import 'package:flutter_tratra/models/service.dart';
 
 /// Réécrit les URL de médias vers l'hôte public (même logique qu'avant le découpage).
@@ -39,6 +40,8 @@ class HomeArtisanBrief {
     this.online = false,
     this.photoUrl,
     this.distanceKm,
+    this.badges = const [],
+    this.trustScore,
   });
 
   final String? displayName;
@@ -50,6 +53,10 @@ class HomeArtisanBrief {
   final bool online;
   final String? photoUrl;
   final double? distanceKm;
+
+  /// Tratra Trust : badges ACTUELS (codes VERIFIE / EXPERT / SUR) et score (null tant qu'il n'est pas calculable).
+  final List<String> badges;
+  final int? trustScore;
 
   bool get hasName => (displayName ?? '').trim().isNotEmpty;
 
@@ -78,6 +85,8 @@ class HomeArtisanBrief {
       online: a['online'] == true,
       photoUrl: photo.isEmpty ? null : photo,
       distanceKm: distance,
+      badges: trustBadgeCodes(a['badges']),
+      trustScore: a['trust_score'] is num ? (a['trust_score'] as num).round() : null,
     );
   }
 }

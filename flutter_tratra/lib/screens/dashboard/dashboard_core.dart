@@ -69,6 +69,20 @@ class DashboardApi {
     return d is Map ? d.cast<String, dynamic>() : <String, dynamic>{};
   }
 
+  /// POST multipart avec champs texte (justificatif professionnel…).
+  Future<Map<String, dynamic>> postForm(String path, Map<String, String> fields, String fileField, String filePath) async {
+    final req = http.MultipartRequest('POST', Uri.parse('${_base.baseUrl}$path'));
+    final h = await _base.headers;
+    h.remove('Content-Type');
+    req.headers.addAll(h);
+    req.fields.addAll(fields);
+    req.files.add(await http.MultipartFile.fromPath(fileField, filePath));
+    final r = await http.Response.fromStream(await _base.client.send(req));
+    if (r.statusCode < 200 || r.statusCode >= 300) _base.handleError(r);
+    final d = _base.decodeBody(r);
+    return d is Map ? d.cast<String, dynamic>() : <String, dynamic>{};
+  }
+
   /// PATCH multipart (photo de profil) : `http` pose lui-même le Content-Type avec sa frontière.
   Future<void> patchFile(String path, String field, String filePath) async {
     final req = http.MultipartRequest('PATCH', Uri.parse('${_base.baseUrl}$path'));
