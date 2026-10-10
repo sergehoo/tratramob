@@ -1,6 +1,7 @@
 // Espace utilisateur unifié : modèle du tableau de bord, accueil et navigation « Plus »
 // pour un compte client seul et pour un compte client + artisan.
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -159,6 +160,48 @@ void main() {
       await t.tap(find.text('Missions'));
       await t.pump();
       expect(find.text('Installation électrique'), findsWidgets);
+    });
+  });
+
+  group('Hors ligne au démarrage', () {
+    testWidgets('tableau de bord indisponible : la dernière activité connue reste accessible, signalée hors ligne', (t) async {
+      FlutterSecureStorage.setMockInitialValues({});
+      _tall(t);
+      var offline = false;
+      final activities = ActivitiesController(
+        retryBase: const Duration(hours: 1),
+        fetch: (_) async {
+          if (offline) throw Exception('réseau coupé');
+          return {
+            'server_time': '2026-10-10T10:30:00Z',
+            'activities': [
+              {'kind': 'contract', 'id': 1, 'role': 'client', 'status': 'active', 'status_label': 'En cours', 'version': 3, 'title': 'Gardiennage de nuit', 'counterpart': 'Moussa A.', 'city': 'Abidjan', 'active': true, 'deeplink': 'tratra://contract/1', 'resume_label': 'Voir mon contrat'}
+            ],
+            'primary': null,
+          };
+        },
+      );
+      await activities.bindUser('9');
+      offline = true;
+      await activities.refresh(force: true);
+      final failing = _FakeController(DashData(_payload()))
+        ..data = null
+        ..error = 'Connexion impossible.';
+      await t.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider<DashboardController>.value(value: failing),
+          ChangeNotifierProvider<ActivitiesController>.value(value: activities),
+          ChangeNotifierProvider<OfflineQueue>.value(value: OfflineQueue(send: (_) async => 200)),
+        ],
+        child: MaterialApp(theme: TratraTheme.light(), home: Scaffold(body: DashboardHome(onExplore: () {}, onMessages: () {}))),
+      ));
+      expect(find.text('Tableau de bord indisponible'), findsOneWidget);
+      expect(find.text('Gardiennage de nuit'), findsOneWidget);
+      expect(find.text('Voir mon contrat'), findsOneWidget);
+      expect(find.textContaining('Hors ligne'), findsWidgets);
+      expect(find.text('Réessayer'), findsOneWidget);
+      await t.pumpWidget(const SizedBox.shrink());
+      activities.dispose(); // arrête la relance automatique programmée
     });
   });
 

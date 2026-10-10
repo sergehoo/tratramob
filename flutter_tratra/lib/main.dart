@@ -15,6 +15,7 @@ import 'package:flutter_tratra/continuity/activities_controller.dart';
 import 'package:flutter_tratra/continuity/drafts.dart';
 import 'package:flutter_tratra/continuity/offline_queue.dart';
 import 'package:flutter_tratra/continuity/vault.dart';
+import 'package:flutter_tratra/engagements/evidence_viewer.dart';
 import 'package:flutter_tratra/routes.dart';
 
 // Services socle
@@ -86,6 +87,8 @@ void main() {
     final authService = AuthService(baseApi);
     final push = PushService(baseApi);
     final vault = ContinuityVault();
+    // Copies temporaires d'un PDF privé laissées par une lecture interrompue (application fermée pendant l'affichage).
+    unawaited(EvidenceFiles.purge());
 
     runApp(
       MultiProvider(

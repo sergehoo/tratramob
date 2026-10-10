@@ -252,6 +252,7 @@ class _PaymentTile extends StatelessWidget {
         ]),
         const SizedBox(height: 2),
         Text('Déclaré par $who · versé le ${dateFr(p.sn('paid_on'))}${p.s('reference').isNotEmpty ? ' · réf. ${p.s('reference')}' : ''}', style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
+        if (status == 'confirmed' && p['trust'] is Map && p.m('trust').s('note').isNotEmpty) Text(p.m('trust').s('note'), style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
         if (status == 'rejected' && p.s('rejection_reason').isNotEmpty) Text('Motif de contestation : ${p.s('rejection_reason')}', style: TratraTheme.style(TtType.caption, color: TtColors.dangerInk)),
         if (p['evidence'] is Map) EvidenceLink(api: api, evidence: p.m('evidence')),
         if (status == 'declared' && p.b('mine')) Text('En attente de confirmation de l’autre partie : un paiement ne se confirme jamais soi-même.', style: TratraTheme.style(TtType.caption, color: TtColors.ash)),

@@ -265,5 +265,30 @@ void main() {
         }
       }
     });
+
+    testWidgets('paiement confirmé : la mention « Tratra ne vérifie pas ce paiement » est affichée, jamais « vérifié »', (t) async {
+      await t.binding.setSurfaceSize(const Size(800, 3000));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      const note = 'Confirmé par les deux parties. Tratra ne vérifie pas ce paiement auprès d’un prestataire de paiement : il n’a pas transité par Tratra.';
+      Map<String, dynamic> installment(String status) => {
+            'id': 9, 'number': 1, 'period_start': '2027-01-04', 'period_end': '2027-02-03', 'due_date': '2027-02-05', 'status': 'partial', 'currency': 'XOF', 'computed': true,
+            'total': '150000.00', 'confirmed': '87500.00', 'declared': '0.00', 'balance': '62500.00', 'remaining_to_declare': '62500.00', 'platform_fee': '0.00', 'can_waive': false,
+            'advance_remaining': null, 'lines': [],
+            'payments': [
+              {
+                'id': 4, 'amount': '87500.00', 'method': 'mobile_money', 'reference': 'OM-1', 'paid_on': '2027-01-10', 'is_advance': true, 'status': status, 'declared_by_role': 'principal',
+                'mine': false, 'can_respond': false, 'evidence': null,
+                'trust': {'level': status == 'confirmed' ? 'confirmed' : 'declared', 'verified': false, 'note': status == 'confirmed' ? note : 'Déclaré par une partie.'}
+              }
+            ],
+          };
+      for (final status in ['declared', 'confirmed']) {
+        final f = fakeApi((r) async => ok(installment(status)));
+        await t.pumpWidget(host(f.api, Scaffold(body: SingleChildScrollView(child: InstallmentDetail(key: ValueKey(status), api: f.api, c: contract(status: 'active', role: 'worker'), id: 9, onChanged: () {})))));
+        await settle(t);
+        expect(find.textContaining('Tratra ne vérifie pas ce paiement'), status == 'confirmed' ? findsOneWidget : findsNothing);
+        expect(find.textContaining('vérifié par'), findsNothing);
+      }
+    });
   });
 }

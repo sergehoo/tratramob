@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/engagements/engagements_api.dart';
+import 'package:flutter_tratra/engagements/evidence_viewer.dart';
 import 'package:flutter_tratra/engagements/labels.dart';
 
 /// Erreurs par champ d'une réponse `{code:"invalid", fields:{champ: message}}`.
@@ -356,11 +357,15 @@ class _ScheduleEditorState extends State<ScheduleEditor> {
   }
 }
 
-/// Pièce justificative PRIVÉE : téléchargée avec la session ; image affichée dans la feuille, PDF signalé (à ouvrir depuis le web).
+/// Pièce justificative PRIVÉE : téléchargée avec la session (même origine uniquement). Image : affichée dans une feuille ; PDF : lu DANS
+/// l'application (`EvidencePdfPage`, copie temporaire supprimée à la fermeture) — jamais confié à une application tierce.
 class EvidenceLink extends StatefulWidget {
-  const EvidenceLink({super.key, required this.api, required this.evidence});
+  const EvidenceLink({super.key, required this.api, required this.evidence, this.pdfBodyBuilder});
   final EngagementsApi api;
   final Json evidence;
+
+  /// Remplaçable dans les tests (le moteur PDF natif n'existe pas hors appareil).
+  final PdfBodyBuilder? pdfBodyBuilder;
   @override
   State<EvidenceLink> createState() => _EvidenceLinkState();
 }
@@ -377,14 +382,21 @@ class _EvidenceLinkState extends State<EvidenceLink> {
     try {
       final bytes = await widget.api.download(widget.evidence.s('url'));
       if (!mounted) return;
-      final isPdf = widget.evidence.s('name').toLowerCase().endsWith('.pdf');
+      final refused = EvidenceFiles.refusal(bytes);
+      if (refused != null) throw FormError(refused);
+      final isPdf = EvidenceFiles.looksLikePdf(bytes) || widget.evidence.s('name').toLowerCase().endsWith('.pdf');
+      if (isPdf) {
+        await Navigator.of(context).push<void>(MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => EvidencePdfPage(bytes: bytes, title: 'Pièce jointe (PDF)', bodyBuilder: widget.pdfBodyBuilder, purgeOnClose: widget.pdfBodyBuilder == null),
+        ));
+        return;
+      }
       await showTratraSheet<void>(
         context,
         title: 'Pièce jointe',
         description: 'Privée : visible des deux parties seulement.',
-        child: isPdf
-            ? Text('Document PDF (${(bytes.length / 1024).round()} Ko). Ouvrez-le depuis la version web de Tratra.', style: TratraTheme.style(TtType.body))
-            : ClipRRect(borderRadius: BorderRadius.circular(TtRadius.control), child: Image.memory(bytes, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Text('Image illisible.'))),
+        child: ClipRRect(borderRadius: BorderRadius.circular(TtRadius.control), child: Image.memory(bytes, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Text('Image illisible.'))),
       );
     } catch (e) {
       if (mounted) setState(() => _error = messageOf(e, 'Pièce indisponible.'));

@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 
 /// Page de résultats `{count, next_offset, results}`.
@@ -79,9 +80,11 @@ class EngagementsApi {
   }
 
   /// Pièce justificative PRIVÉE (visible des deux parties seulement) : l'URL renvoyée par l'API est relative à l'origine.
+  /// Le jeton de session n'est envoyé QU'À l'origine de l'API : une URL d'une autre origine est refusée (jamais de fuite du jeton).
   Future<Uint8List> download(String url) async {
     final origin = Uri.parse(_base.baseUrl).origin;
     final uri = url.startsWith('http') ? Uri.parse(url) : Uri.parse('$origin$url');
+    if (uri.origin != origin) throw ApiException(0, 'Pièce jointe indisponible.');
     final r = await _base.client.get(uri, headers: await _base.headers);
     if (r.statusCode < 200 || r.statusCode >= 300) _base.handleError(r);
     return r.bodyBytes;

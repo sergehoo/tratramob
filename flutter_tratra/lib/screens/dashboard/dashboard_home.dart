@@ -32,11 +32,20 @@ class _DashboardHomeState extends State<DashboardHome> {
     final data = c.data;
     if (data == null) {
       if (c.error != null) {
-        return TratraEmptyState(
-          icon: Icons.cloud_off_rounded,
-          title: 'Tableau de bord indisponible',
-          description: c.error,
-          actions: [TratraButton(label: 'Réessayer', variant: TratraButtonVariant.outline, onPressed: c.load)],
+        // Sans réseau au démarrage, la dernière activité connue (mission, réservation, contrat) reste accessible au-dessus de l'erreur :
+        // reprendre son travail ne dépend pas du tableau de bord (voir continuity/ — l'état hors ligne y est signalé comme tel).
+        return Column(
+          children: [
+            const Padding(padding: EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s4, TtSpace.s4, 0), child: ActivityBanner()),
+            Expanded(
+              child: TratraEmptyState(
+                icon: Icons.cloud_off_rounded,
+                title: 'Tableau de bord indisponible',
+                description: c.error,
+                actions: [TratraButton(label: 'Réessayer', variant: TratraButtonVariant.outline, onPressed: c.load)],
+              ),
+            ),
+          ],
         );
       }
       return const TratraSkeletonList(count: 4);
