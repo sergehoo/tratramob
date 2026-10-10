@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter_tratra/core/base_api.dart';
+import 'package:flutter_tratra/models/booking.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/screens/live/live_cards.dart';
 import 'package:flutter_tratra/screens/live/live_controller.dart';
@@ -43,6 +44,19 @@ const _estimate = {
 };
 
 void main() {
+  group('réservation localisée (facultatif)', () {
+    BookingCreateRequest build({double? lat, double? lng}) => BookingCreateRequest.fromDateAndTime(
+          serviceId: '1', handymanId: '2', date: DateTime(2026, 10, 12), hour: 9, minute: 0,
+          address: 'Rue 1', city: 'Abidjan', postalCode: '00225', latitude: lat, longitude: lng);
+
+    test('lat/lng envoyés seulement s\'ils sont complets', () {
+      expect(build(lat: 5.36, lng: -4.0083).toJson()['lat'], 5.36);
+      expect(build(lat: 5.36, lng: -4.0083).toJson()['lng'], -4.0083);
+      expect(build().toJson().containsKey('lat'), isFalse);
+      expect(build(lat: 5.36).toJson().containsKey('lng'), isFalse); // moitié de coordonnées : ignorée
+    });
+  });
+
   group('LiveSnapshot', () {
     test('lit positions, itinéraire estimé et actions autorisées', () {
       final s = LiveSnapshot.fromJson(_json(artisan: _pos, route: _estimate));

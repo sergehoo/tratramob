@@ -173,6 +173,8 @@ class DashChecklistItem {
 class DashProvider {
   DashProvider(Map<String, dynamic> j)
       : profileId = _i(j['profile_id']),
+        badgeCodes = _l(j['badges']).map((b) => '${b['code']}').toList(),
+        trustScore = j['trust_score'] is num ? (j['trust_score'] as num).round() : null,
         online = _b(j['online']),
         publishable = _b(j['publishable']),
         percent = _i(_m(j['completion'])['percent']),
@@ -191,6 +193,10 @@ class DashProvider {
         nextMissions = _l(j['next_missions']).map(DashItem.new).toList(),
         recentMissions = _l(j['recent_missions']).map(DashItem.new).toList();
   final int profileId;
+
+  /// Badges Tratra Trust actuels (NOUVEAU tant que l'identité n'est pas vérifiée) et score s'il est calculable.
+  final List<String> badgeCodes;
+  final int? trustScore;
   final bool online;
   final bool publishable;
   final int percent;

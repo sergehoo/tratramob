@@ -22,7 +22,7 @@ String _criterion(Map<String, dynamic> c) {
     if (v is! num) return '—';
     if (c['unit'] == '%') return '${(v * 100).round()} %';
     final unit = _s(c['unit']);
-    return '${fmtDecimal(v)}${unit.isEmpty ? '' : ' $unit'}';
+    return '${fmtDecimal(v)}${unit.isEmpty ? '' : (unit.startsWith('/') ? unit : ' $unit')}';
   }
 
   return '${fmt(c['current'])} · ${c['higher_better'] == false ? 'maximum' : 'minimum'} ${fmt(c['required'])}';

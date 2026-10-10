@@ -4,6 +4,7 @@
 // (BookingScreen). Écran bâti sur le Design System Tratra (lib/design) ; la logique
 // (validation, BookingApi.create / listMine, arguments de navigation) est inchangée.
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/design/design.dart';
@@ -61,6 +62,7 @@ class _BookingScreenState extends State<BookingScreen> {
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = const TimeOfDay(hour: 9, minute: 0);
   final _addressController = TextEditingController();
+  Position? _located; // position de l'appareil (facultative), envoyée avec la réservation
   final _cityController = TextEditingController();
   final _postalController = TextEditingController();
   final _notesController = TextEditingController();
@@ -252,6 +254,8 @@ class _BookingScreenState extends State<BookingScreen> {
             : _notesController.text.trim(),
         city: _cityController.text.trim(),
         postalCode: _postalController.text.trim(),
+        latitude: _located?.latitude,
+        longitude: _located?.longitude,
       );
 
       if (!req.scheduledAt.isAfter(DateTime.now().toUtc())) {
@@ -399,6 +403,8 @@ class _BookingScreenState extends State<BookingScreen> {
                   addressController: _addressController,
                   cityController: _cityController,
                   postalController: _postalController,
+                  located: _located,
+                  onLocated: (p) => setState(() => _located = p),
                 ),
               ),
               const SizedBox(height: TtSpace.s4),
@@ -827,12 +833,29 @@ class _AddressSection extends StatelessWidget {
   final TextEditingController addressController;
   final TextEditingController cityController;
   final TextEditingController postalController;
+  final Position? located;
+  final ValueChanged<Position> onLocated;
 
   const _AddressSection({
     required this.addressController,
     required this.cityController,
     required this.postalController,
+    required this.located,
+    required this.onLocated,
   });
+
+  Future<void> _locate(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) throw StateError('désactivée');
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) perm = await Geolocator.requestPermission();
+      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) throw StateError('refusée');
+      onLocated(await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 15))));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text('Position introuvable ou refusée : vous pouvez réserver sans elle.')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -893,6 +916,21 @@ class _AddressSection extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: TtSpace.s3),
+          TratraButton(
+            label: located == null ? 'Localiser le lieu avec ma position' : 'Mettre à jour ma position',
+            variant: TratraButtonVariant.outline,
+            size: TratraButtonSize.sm,
+            leading: const Icon(Icons.my_location_rounded, size: 18),
+            onPressed: () => _locate(context),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            located != null
+                ? 'Lieu localisé (±${located!.accuracy.round()} m) : l’heure d’arrivée de l’artisan sera calculée.'
+                : 'Facultatif : permet d’afficher l’heure d’arrivée estimée de l’artisan. À utiliser seulement sur place.',
+            style: TratraTheme.style(TtType.caption, color: located != null ? TtColors.successInk : TtColors.ash),
           ),
         ],
       ),

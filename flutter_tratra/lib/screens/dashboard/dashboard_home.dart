@@ -313,6 +313,13 @@ class _ProfileCard extends StatelessWidget {
           Expanded(child: Text('Profil professionnel', style: TratraTheme.style(TtType.h3))),
           Text('${p.done}/${p.total}', style: TratraTheme.style(TtType.title, color: TtColors.primaryDark)),
         ]),
+        if (p.badgeCodes.isNotEmpty) ...[
+          const SizedBox(height: TtSpace.s3),
+          Wrap(spacing: TtSpace.s2, runSpacing: TtSpace.s2, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            TratraTrustBadges(trustBadgeCodes(p.badgeCodes)),
+            TratraTrustScorePill(p.trustScore),
+          ]),
+        ],
         const SizedBox(height: TtSpace.s3),
         ClipRRect(
           borderRadius: BorderRadius.circular(TtRadius.pill),
@@ -336,10 +343,12 @@ class _ProfileCard extends StatelessWidget {
         ],
         const SizedBox(height: TtSpace.s4),
         Row(children: [
-          Expanded(child: TratraButton(label: 'Compléter mon profil', variant: TratraButtonVariant.outline, onPressed: () => openProProfile(context))),
+          Expanded(child: TratraButton(label: 'Mon profil', variant: TratraButtonVariant.outline, onPressed: () => openProProfile(context))),
           const SizedBox(width: TtSpace.s3),
           Expanded(child: TratraButton(label: 'Mon KYC', variant: TratraButtonVariant.soft, onPressed: () => openKyc(context))),
         ]),
+        const SizedBox(height: TtSpace.s3),
+        TratraButton(label: 'Ma réputation', variant: TratraButtonVariant.soft, onPressed: () => openReputation(context)),
       ]),
     );
   }

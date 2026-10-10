@@ -139,6 +139,10 @@ class BookingCreateRequest {
   final String city;
   final String postalCode;
 
+  /// Coordonnées FACULTATIVES du lieu (position de l'appareil, avec accord) : alimentent l'heure d'arrivée du suivi.
+  final double? latitude;
+  final double? longitude;
+
   BookingCreateRequest._({
     required this.serviceId,
     required this.handymanId,
@@ -147,6 +151,8 @@ class BookingCreateRequest {
     required this.city,
     required this.postalCode,
     this.notes,
+    this.latitude,
+    this.longitude,
   });
 
   /// Transforme les sélecteurs date/heure de l'app en DateTime UTC : le
@@ -162,6 +168,8 @@ class BookingCreateRequest {
     required String city,
     required String postalCode,
     String? notes,
+    double? latitude,
+    double? longitude,
   }) {
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
       throw ArgumentError('Heure de réservation invalide.');
@@ -186,6 +194,8 @@ class BookingCreateRequest {
       notes: normalizedNotes == null || normalizedNotes.isEmpty
           ? null
           : normalizedNotes,
+      latitude: (latitude != null && longitude != null) ? latitude : null,
+      longitude: (latitude != null && longitude != null) ? longitude : null,
     );
   }
 
@@ -198,6 +208,7 @@ class BookingCreateRequest {
       'city': city,
       'postal_code': postalCode,
       'type': 'scheduled',
+      if (latitude != null && longitude != null) ...{'lat': latitude, 'lng': longitude},
       if (notes != null && notes!.isNotEmpty) "description": notes,
     };
   }

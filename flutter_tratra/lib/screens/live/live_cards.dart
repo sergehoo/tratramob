@@ -51,7 +51,8 @@ class LivePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = controller.state!;
     final route = s.route;
-    final showMap = s.phase == 'en_route' || s.phase == 'arrived' || (s.phase == 'confirmed' && (s.client != null || s.destination != null));
+    // Pas de carte vide : elle n'apparaît que s'il y a au moins un repère réel à y placer.
+    final showMap = s.artisan != null || s.client != null || s.destination != null;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       LiveSteps(phase: s.phase),
       if (controller.offline) ...[
