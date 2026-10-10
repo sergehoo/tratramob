@@ -7,12 +7,14 @@ import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/auth/profile_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/bookings_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
+import 'package:flutter_tratra/screens/dashboard/my_badge_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/notifications_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/provider_screens.dart';
 import 'package:flutter_tratra/screens/dashboard/reputation_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/reviews_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/wallet_screen.dart';
 import 'package:flutter_tratra/screens/tracking_screen.dart';
+import 'package:flutter_tratra/screens/trust/scan_screen.dart';
 import 'package:flutter_tratra/screens/worker/kyc_screen.dart';
 import 'package:flutter_tratra/screens/worker/mission_detail_screen.dart';
 
@@ -30,6 +32,8 @@ Future<void> openProviderHub(BuildContext context) => pushPage(context, const Pr
 Future<void> openWallet(BuildContext context) => pushPage(context, const WalletScreen());
 Future<void> openReviews(BuildContext context) => pushPage(context, const ReviewsScreen());
 Future<void> openReputation(BuildContext context) => pushPage(context, const ReputationScreen());
+Future<void> openMyBadge(BuildContext context) => pushPage(context, const MyBadgeScreen());
+Future<void> openScanner(BuildContext context) => pushPage(context, const ScanScreen());
 Future<void> openNotifications(BuildContext context) => pushPage(context, const NotificationsScreen());
 Future<void> openProvide(BuildContext context) => pushPage(context, const ProvideScreen());
 Future<void> openProProfile(BuildContext context) => pushPage(context, const ProProfileScreen());

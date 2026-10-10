@@ -139,8 +139,11 @@ class _MoreTab extends StatelessWidget {
       else
         _Entry(Icons.add_business_outlined, 'Proposer un service', 'Devenir artisan avec ce compte', () => openProvide(context)),
       _Entry(Icons.account_balance_wallet_outlined, 'Portefeuille', isProvider ? 'Paiements, gains et retraits' : 'Vos paiements', () => openWallet(context)),
-      if (isProvider)
+      if (isProvider) ...[
         _Entry(Icons.workspace_premium_outlined, 'Ma réputation', 'Badges, score de confiance et justificatifs', () => openReputation(context)),
+        _Entry(Icons.badge_outlined, 'Mon badge Tratra ID', 'QR de vérification et badge imprimable', () => openMyBadge(context)),
+      ],
+      _Entry(Icons.qr_code_scanner_rounded, 'Scanner un badge', 'Vérifier un professionnel ou l’artisan de votre réservation', () => openScanner(context)),
       _Entry(Icons.star_outline_rounded, 'Avis', 'À rédiger, reçus et donnés', () => openReviews(context),
           badge: data?.reviewsToWrite),
       _Entry(Icons.notifications_none_rounded, 'Notifications', 'Réservations, missions, messages', () => openNotifications(context),
