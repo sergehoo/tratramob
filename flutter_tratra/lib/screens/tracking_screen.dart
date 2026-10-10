@@ -4,8 +4,12 @@
 // statut, détails de la réservation et annulation (BookingService.cancel, c'est-à-dire la
 // transition d'état « cancelled » de la machine à états du backend).
 // Écran bâti sur le Design System Tratra (lib/design) ; aucune donnée fictive.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_tratra/continuity/drafts.dart' show randomHex;
+import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/booking.dart';
 import 'package:flutter_tratra/screens/dashboard/messages_screen.dart' show openBookingConversation;
@@ -110,7 +114,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
     });
     try {
       // Annulation = transition d'état « cancelled » (politique de pénalité côté backend).
-      final updated = await _service.cancel(b.id);
+      final updated = await _service.cancel(b.id, expectedVersion: b.version, idempotencyKey: 'cx-${randomHex(12)}');
       if (!mounted) return;
       setState(() => _booking = updated);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -124,10 +128,18 @@ class _TrackingScreenState extends State<TrackingScreen> {
           ),
         ),
       );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.isVersionConflict) {
+        setState(() => _actionError = 'Cette réservation a été modifiée entre-temps (autre appareil ou artisan). Son état vient d’être actualisé : vérifiez-le avant d’annuler.');
+        unawaited(_load(silent: true));
+      } else {
+        setState(() => _actionError = 'La réservation n’a pas pu être annulée. ${cleanError(e)}');
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _actionError =
-          'La réservation n’a pas pu être annulée. ${cleanError(e)}');
+          'Annulation non envoyée : connexion indisponible. La réservation n’a pas changé ; réessayez une fois connecté.');
     } finally {
       if (mounted) setState(() => _cancelling = false);
     }

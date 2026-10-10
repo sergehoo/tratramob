@@ -1,5 +1,6 @@
 // lib/services/booking_api.dart
 import 'dart:async';
+import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/models/booking.dart';
@@ -13,10 +14,13 @@ class BookingApi {
   BookingApi(this.api);
 
   /// POST /bookings/
-  Future<Booking> create(BookingCreateRequest req) async {
+  ///
+  /// `idempotencyKey` : un renvoi après coupure ou plantage retrouve la même réservation (aucun doublon).
+  /// Les erreurs du serveur gardent leur type ([ApiException]) pour que l'écran distingue un doublon d'un échec.
+  Future<Booking> create(BookingCreateRequest req, {String? idempotencyKey}) async {
     try {
       final uri = Uri.parse('${api.baseUrl}${AppConstants.bookingsEndpoint}/');
-      final headers = await api.getHeaders(withAuth: true);
+      final headers = {...await api.getHeaders(withAuth: true), if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey};
       final body = api.encodeBody(req.toJson());
 
       final response = await api.client.post(uri, headers: headers, body: body);
@@ -32,6 +36,8 @@ class BookingApi {
       _cache.clear();
 
       return booking;
+    } on ApiException {
+      rethrow;
     } catch (e) {
       throw Exception('Échec de la création de réservation: ${e.toString()}');
     }

@@ -55,6 +55,12 @@ class Session extends ChangeNotifier {
   /// jeton valide). Best-effort : n'empêche jamais la déconnexion.
   Future<void> Function()? onBeforeLogout;
 
+  /// Purges locales exécutées APRÈS la révocation, uniquement à la déconnexion VOLONTAIRE (brouillons, file hors
+  /// ligne, dernier état des activités : aucune donnée sensible ne reste sur le téléphone). Une session expirée, elle,
+  /// ne purge rien : l'utilisateur retrouve ses brouillons à la reconnexion.
+  final List<Future<void> Function()> _logoutWipes = [];
+  void addLogoutWipe(Future<void> Function() wipe) => _logoutWipes.add(wipe);
+
   /// Déconnexion : révoque côté backend (best-effort) puis purge local.
   Future<void> logout() async {
     try {
@@ -64,6 +70,11 @@ class Session extends ChangeNotifier {
       await _auth.logout();
     } catch (_) {}
     await _storage.clearAuthData();
+    for (final wipe in _logoutWipes) {
+      try {
+        await wipe();
+      } catch (_) {}
+    }
     _user = null;
     notifyListeners();
   }

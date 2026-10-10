@@ -28,6 +28,9 @@ class Booking {
   final String? artisanProfileId;
   final List<String> artisanBadges;
 
+  /// Version vue par ce téléphone : renvoyée avec chaque changement de statut pour détecter une écriture concurrente.
+  final int version;
+
   Booking({
     required this.id,
     required this.status,
@@ -47,6 +50,7 @@ class Booking {
     this.artisanName,
     this.artisanProfileId,
     this.artisanBadges = const [],
+    this.version = 1,
   });
 
   /// Titre du service associé (pratique pour l'affichage des listes).
@@ -78,6 +82,7 @@ class Booking {
         .toList();
 
     return Booking(
+      version: json['version'] is num ? (json['version'] as num).toInt() : 1,
       artisanName: (artisan?['display_name'] ?? '').toString().isEmpty ? null : artisan!['display_name'].toString(),
       artisanProfileId: artisan?['id']?.toString(),
       artisanBadges: badges,

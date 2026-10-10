@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/continuity/continuity_widgets.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/dashboard/announcements_screen.dart';
@@ -109,6 +110,7 @@ class _DashboardHomeState extends State<DashboardHome> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s8),
         children: [
+          const ActivityBanner(),
           _Hero(
             greeting: data.greeting,
             summary: summary,

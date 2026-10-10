@@ -1,5 +1,6 @@
 // lib/main.dart
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -10,6 +11,10 @@ import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/design/gallery.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/session.dart';
+import 'package:flutter_tratra/continuity/activities_controller.dart';
+import 'package:flutter_tratra/continuity/drafts.dart';
+import 'package:flutter_tratra/continuity/offline_queue.dart';
+import 'package:flutter_tratra/continuity/vault.dart';
 import 'package:flutter_tratra/routes.dart';
 
 // Services socle
@@ -79,6 +84,7 @@ void main() {
     final location = LocationService();
     final authService = AuthService(baseApi);
     final push = PushService(baseApi);
+    final vault = ContinuityVault();
 
     runApp(
       MultiProvider(
@@ -88,6 +94,10 @@ void main() {
           Provider<BaseApi>.value(value: baseApi),
           Provider<LocationService>.value(value: location),
           Provider<AuthService>.value(value: authService),
+
+          // Continuité : coffre chiffré cloisonné par compte, brouillons, activités en cours, file hors ligne (actions sûres)
+          Provider<ContinuityVault>.value(value: vault),
+          Provider<DraftStore>.value(value: DraftStore(vault)),
 
           // Notifications push (FCM, Android) : appareil rattaché au compte courant
           ChangeNotifierProvider<PushService>.value(value: push),
@@ -133,6 +143,23 @@ void main() {
             },
           ),
 
+          ChangeNotifierProxyProvider2<DashboardApi, Session, ActivitiesController>(
+            create: (ctx) => ActivitiesController(fetch: ctx.read<DashboardApi>().getMap, vault: vault)..startObserving(),
+            update: (_, api, session, prev) {
+              final c = prev ?? ActivitiesController(fetch: api.getMap, vault: vault)..startObserving();
+              unawaited(c.bindUser(session.user?.id));
+              return c;
+            },
+          ),
+          ChangeNotifierProxyProvider2<BaseApi, Session, OfflineQueue>(
+            create: (ctx) => OfflineQueue(send: (a) => _sendQueued(ctx.read<BaseApi>(), a), vault: vault),
+            update: (_, api, session, prev) {
+              final q = prev ?? OfflineQueue(send: (a) => _sendQueued(api, a), vault: vault);
+              unawaited(q.bindUser(session.user?.id));
+              return q;
+            },
+          ),
+
           // Compat
           Provider<ApiService>(create: (_) => ApiService()),
         ],
@@ -143,6 +170,18 @@ void main() {
     // ignore: avoid_print
     print('Uncaught in zone: $error\n$stack');
   });
+}
+
+/// Envoi d'une action de la file hors ligne (jeton + rafraîchissement automatique via BaseApi). Renvoie le code HTTP ;
+/// une panne réseau lève une exception : l'action reste en file.
+Future<int> _sendQueued(BaseApi api, QueuedAction a) async {
+  final uri = Uri.parse('${api.baseUrl}${a.path}');
+  final headers = await api.headers;
+  final body = a.body == null ? '{}' : jsonEncode(a.body);
+  final r = a.method == 'PATCH'
+      ? await api.client.patch(uri, headers: headers, body: body)
+      : await api.client.post(uri, headers: headers, body: body);
+  return r.statusCode;
 }
 
 class MyApp extends StatefulWidget {
@@ -163,6 +202,12 @@ class _MyAppState extends State<MyApp> {
     final session = _session;
     final push = _push;
     session.onBeforeLogout = push.unregister;
+    // Déconnexion volontaire : brouillons, file hors ligne et activités mises en cache sont effacés.
+    session.addLogoutWipe(context.read<ContinuityVault>().wipeAll);
+    session.addLogoutWipe(context.read<ActivitiesController>().wipe);
+    session.addLogoutWipe(context.read<OfflineQueue>().wipe);
+    // Chaque synchronisation réussie (retour du réseau, reprise au premier plan) vide la file des actions sûres.
+    context.read<ActivitiesController>().onSynced = context.read<OfflineQueue>().flush;
     push.onForeground = _onPushForeground;
     push.onTap = _onPushTap;
     session.addListener(_syncPush);

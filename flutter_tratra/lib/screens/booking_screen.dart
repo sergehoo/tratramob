@@ -3,14 +3,20 @@
 // Réservation : tunnel de création (BookingScreen.withService) et liste « Mes réservations »
 // (BookingScreen). Écran bâti sur le Design System Tratra (lib/design) ; la logique
 // (validation, BookingApi.create / listMine, arguments de navigation) est inchangée.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_tratra/continuity/drafts.dart';
+import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/core/base_api.dart';
+import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/booking.dart';
 import 'package:flutter_tratra/models/service.dart';
 import 'package:flutter_tratra/routes.dart';
+import 'package:flutter_tratra/screens/tracking_screen.dart';
 import 'package:flutter_tratra/services/booking_api.dart';
 
 import 'booking_flow/booking_format.dart';
@@ -68,6 +74,14 @@ class _BookingScreenState extends State<BookingScreen> {
   final _notesController = TextEditingController();
 
   bool _submitting = false;
+
+  // Brouillon : la saisie survit à une fermeture, un plantage ou une coupure réseau (coffre chiffré, par compte).
+  late final DraftStore _drafts;
+  String? _userId;
+  String _draftBase = randomHex(12);
+  Timer? _saveTimer;
+  bool _draftRestored = false;
+  bool _done = false; // réservation confirmée par le serveur : plus aucune sauvegarde
   bool _loadingList = true;
   String? _listError;
   List<Booking> _bookings = const [];
@@ -77,14 +91,71 @@ class _BookingScreenState extends State<BookingScreen> {
     super.initState();
     final api = context.read<BaseApi>();
     _bookingApi = BookingApi(api);
+    _drafts = context.read<DraftStore>();
+    _userId = context.read<Session>().user?.id;
 
     if (!widget.isDirect) {
       _fetchMine();
+    } else {
+      _restoreDraft();
+      for (final c in [_addressController, _cityController, _postalController, _notesController]) {
+        c.addListener(_scheduleSave);
+      }
     }
+  }
+
+  BookingDraft _currentDraft() => BookingDraft(
+        serviceId: widget.service!.id,
+        base: _draftBase,
+        date: _selectedDate,
+        hour: _selectedTime.hour,
+        minute: _selectedTime.minute,
+        address: _addressController.text,
+        city: _cityController.text,
+        postalCode: _postalController.text,
+        notes: _notesController.text,
+      );
+
+  Future<void> _restoreDraft() async {
+    final uid = _userId;
+    if (uid == null) return;
+    final d = await _drafts.load(uid, widget.service!.id);
+    if (d == null || !mounted || _done) return;
+    final today = DateTime.now();
+    setState(() {
+      _draftBase = d.base;
+      _selectedDate = d.date.isBefore(DateTime(today.year, today.month, today.day)) ? today : d.date;
+      _selectedTime = TimeOfDay(hour: d.hour, minute: d.minute);
+      _addressController.text = d.address;
+      _cityController.text = d.city;
+      _postalController.text = d.postalCode;
+      _notesController.text = d.notes;
+      _draftRestored = true;
+    });
+  }
+
+  void _scheduleSave() {
+    if (_done || _userId == null) return;
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 600), _saveNow);
+  }
+
+  Future<void> _saveNow() async {
+    final uid = _userId;
+    if (uid == null || _done) return;
+    await _drafts.save(uid, _currentDraft());
+  }
+
+  Future<void> _discardDraft() async {
+    _saveTimer?.cancel();
+    final uid = _userId;
+    if (uid != null && widget.isDirect) await _drafts.discard(uid, widget.service!.id);
   }
 
   @override
   void dispose() {
+    _saveTimer?.cancel();
+    if (widget.isDirect && !_done) unawaited(_saveNow()); // dernière saisie conservée à la fermeture de l'écran
     _addressController.dispose();
     _cityController.dispose();
     _postalController.dispose();
@@ -167,6 +238,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
     if (picked != null && picked != _selectedDate) {
       setState(() => _selectedDate = picked);
+      _scheduleSave();
     }
   }
 
@@ -189,6 +261,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
     if (picked != null && picked != _selectedTime) {
       setState(() => _selectedTime = picked);
+      _scheduleSave();
     }
   }
 
@@ -262,8 +335,15 @@ class _BookingScreenState extends State<BookingScreen> {
         throw ArgumentError('Veuillez choisir une date et une heure futures.');
       }
 
-      final booking = await _bookingApi.create(req);
+      // Le brouillon (et sa clé d'idempotence) est écrit AVANT l'envoi : un plantage pendant la requête ne perd rien, et
+      // le renvoi retrouve la même réservation si le serveur l'avait déjà créée.
+      final draft = _currentDraft();
+      final uid = _userId;
+      if (uid != null) await _drafts.save(uid, draft);
+      final booking = await _bookingApi.create(req, idempotencyKey: draft.idempotencyKey);
 
+      _done = true; // confirmée par le serveur
+      await _discardDraft();
       if (!mounted) return;
 
       final priceToPay = _priceToPay(s);
@@ -282,23 +362,48 @@ class _BookingScreenState extends State<BookingScreen> {
       if (mounted) {
         _showSuccess('Réservation créée avec succès !');
       }
+    } on ArgumentError catch (e) {
+      if (!mounted) return;
+      _showFailure('${e.message}'); // saisie invalide : rien n'a été envoyé
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      final existing = e.existingBookingId;
+      if (existing != null) {
+        // Doublon (double appui, renvoi) : la réservation existe déjà, on la montre au lieu d'en créer une autre.
+        _done = true;
+        await _discardDraft();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text('Cette réservation existe déjà.'),
+          action: SnackBarAction(
+            label: 'Voir',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => TrackingScreen(bookingId: '$existing'))),
+          ),
+        ));
+        return;
+      }
+      _showFailure('Échec de la réservation : ${cleanError(e)} Votre saisie est conservée.');
     } catch (e) {
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Échec de la réservation : ${cleanError(e)}'),
-          backgroundColor: TtColors.dangerInk,
-          action: SnackBarAction(
-            label: 'Réessayer',
-            textColor: Colors.white,
-            onPressed: _submitBooking,
-          ),
-        ),
-      );
+      // Hors ligne ou serveur injoignable : RIEN n'est confirmé. Jamais présentée comme réussie ; le brouillon reste.
+      _showFailure('Réservation non envoyée : connexion indisponible. Votre saisie est conservée, vous pourrez réessayer.');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  void _showFailure(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: TtColors.dangerInk,
+        action: SnackBarAction(
+          label: 'Réessayer',
+          textColor: Colors.white,
+          onPressed: _submitBooking,
+        ),
+      ),
+    );
   }
 
   Widget _buildListScreen() {
@@ -377,6 +482,29 @@ class _BookingScreenState extends State<BookingScreen> {
             padding: const EdgeInsets.fromLTRB(
                 TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s8),
             children: [
+              if (_draftRestored) ...[
+                TratraAlert(
+                  tone: TratraAlertTone.brand,
+                  message: 'Votre brouillon a été retrouvé : vérifiez les informations puis envoyez votre demande.',
+                  onDismiss: () => setState(() => _draftRestored = false),
+                  action: TextButton(
+                    onPressed: () async {
+                      await _discardDraft();
+                      if (!mounted) return;
+                      setState(() {
+                        _addressController.clear();
+                        _cityController.clear();
+                        _postalController.clear();
+                        _notesController.clear();
+                        _draftRestored = false;
+                        _draftBase = randomHex(12);
+                      });
+                    },
+                    child: const Text('Effacer le brouillon'),
+                  ),
+                ),
+                const SizedBox(height: TtSpace.s4),
+              ],
               const BookingReveal(
                 child: _FormIntro(),
               ),

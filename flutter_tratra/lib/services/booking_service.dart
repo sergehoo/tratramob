@@ -7,10 +7,11 @@ import 'package:flutter_tratra/models/booking.dart';
 class BookingService extends BaseApi {
   BookingService(BaseApi api, {super.client});
 
-  Future<Booking> create(Booking booking) async {
+  /// `idempotencyKey` : un renvoi (double appui, coupure, plantage) retrouve la même réservation au lieu d'en créer une autre.
+  Future<Booking> create(Booking booking, {String? idempotencyKey}) async {
     final r = await client.post(
       Uri.parse('$baseUrl/bookings/'),
-      headers: await headers,
+      headers: {...await headers, if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey},
       body: json.encode(booking.toJson()),
     );
     if (r.statusCode != 201) handleError(r);
@@ -43,11 +44,15 @@ class BookingService extends BaseApi {
   /// Change le statut via la MACHINE À ÉTATS backend (action `transition`),
   /// et non un PATCH direct (le champ `status` est en lecture seule côté API).
   /// Statuts valides : confirmed | in_progress | completed | cancelled.
-  Future<Booking> transition(String id, String status) async {
+  ///
+  /// `expectedVersion` : version de la réservation vue par ce téléphone. Si elle a changé entre-temps (autre appareil,
+  /// autre acteur), le serveur répond 409 `version_conflict` ([ApiException.isVersionConflict]) au lieu d'écraser.
+  /// `idempotencyKey` : un renvoi après coupure rejoue la réponse d'origine.
+  Future<Booking> transition(String id, String status, {int? expectedVersion, String? idempotencyKey}) async {
     final r = await client.post(
       Uri.parse('$baseUrl${AppConstants.bookingTransition(id)}'),
-      headers: await headers,
-      body: json.encode({'status': status}),
+      headers: {...await headers, if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey},
+      body: json.encode({'status': status, if (expectedVersion != null) 'expected_version': expectedVersion}),
     );
     if (r.statusCode != 200) handleError(r);
     return Booking.fromJson(decodeBody(r));
@@ -58,5 +63,6 @@ class BookingService extends BaseApi {
 
   /// Annulation = transition d'état "cancelled" (applique la politique de
   /// pénalité côté backend ; un DELETE ne déclencherait pas l'escrow/refund).
-  Future<Booking> cancel(String id) => transition(id, 'cancelled');
+  Future<Booking> cancel(String id, {int? expectedVersion, String? idempotencyKey}) =>
+      transition(id, 'cancelled', expectedVersion: expectedVersion, idempotencyKey: idempotencyKey);
 }

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/continuity/activities_controller.dart';
+import 'package:flutter_tratra/continuity/offline_queue.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
@@ -68,8 +70,13 @@ class _FakeController extends DashboardController {
   }
 }
 
-Widget _host(DashData d, Widget child) => ChangeNotifierProvider<DashboardController>.value(
-      value: _FakeController(d),
+Widget _host(DashData d, Widget child) => MultiProvider(
+      providers: [
+        ChangeNotifierProvider<DashboardController>.value(value: _FakeController(d)),
+        // Continuité : aucune activité en cours dans ces scénarios (le bandeau reste masqué).
+        ChangeNotifierProvider<ActivitiesController>.value(value: ActivitiesController(fetch: (_) async => {})),
+        ChangeNotifierProvider<OfflineQueue>.value(value: OfflineQueue(send: (_) async => 200)),
+      ],
       child: MaterialApp(theme: TratraTheme.light(), home: child),
     );
 

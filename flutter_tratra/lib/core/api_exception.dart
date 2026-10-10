@@ -75,6 +75,30 @@ class ApiException implements Exception {
     return null;
   }
 
+  /// Code d'erreur métier stable du serveur (`version_conflict`, `duplicate_booking`, `idempotency_key_reuse`…), s'il existe.
+  String? get code {
+    try {
+      final data = json.decode(body);
+      return data is Map && data['code'] is String ? data['code'] as String : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Écriture concurrente : l'objet a été modifié ailleurs (autre appareil, autre acteur) depuis le dernier chargement.
+  bool get isVersionConflict => statusCode == 409 && code == 'version_conflict';
+
+  /// Réservation identique déjà créée (double appui, renvoi) : identifiant de la réservation existante.
+  int? get existingBookingId {
+    if (statusCode != 409 || code != 'duplicate_booking') return null;
+    try {
+      final id = (json.decode(body) as Map)['existing_id'];
+      return id is int ? id : int.tryParse('$id');
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   String toString() => message;
 }

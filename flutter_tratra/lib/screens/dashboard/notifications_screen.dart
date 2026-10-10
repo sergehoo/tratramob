@@ -3,9 +3,12 @@
 // Centre de notifications : historique persistant du serveur (GET /notifications/), filtres par catégorie, compteur de
 // non lues, lecture (PATCH / POST mark-read), navigation vers l'objet concerné (lien profond) et accès aux préférences.
 // Les mêmes données alimentent le Web et l'API : lu sur un appareil = lu partout.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/continuity/offline_queue.dart';
 import 'package:flutter_tratra/core/deep_links.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
@@ -77,12 +80,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Future<void> _open(Map<String, dynamic> n) async {
     final nav = Navigator.of(context);
     if (n['is_read'] != true) {
-      try {
-        await _api.patch('/notifications/${n['id']}/', {'is_read': true});
+      // Accusé de lecture : action sûre, persistée dans la file hors ligne et rejouée au retour du réseau. La navigation
+      // n'attend pas le serveur ; les compteurs se rechargent une fois l'accusé envoyé.
+      unawaited(context.read<OfflineQueue>().enqueue('PATCH', '/notifications/${n['id']}/', {'is_read': true}).then((_) {
         if (mounted) _refresh();
-      } catch (_) {
-        // non bloquant : l'état se resynchronise au prochain chargement
-      }
+      }).catchError((_) {}));
     }
     if (!mounted) return;
     final data = Map<String, dynamic>.from((n['data'] as Map?) ?? {});

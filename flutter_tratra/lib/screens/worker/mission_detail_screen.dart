@@ -2,9 +2,14 @@
 //
 // Détail d'une mission côté artisan + transitions d'état (machine à états backend).
 // Interface : Design System Tratra.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/continuity/activities_controller.dart';
+import 'package:flutter_tratra/continuity/drafts.dart' show randomHex;
+import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/booking.dart';
 import 'package:flutter_tratra/screens/dashboard/messages_screen.dart' show openBookingConversation;
@@ -82,17 +87,37 @@ class _MissionDetailScreenState extends State<MissionDetailScreen> {
       _pendingTo = to;
     });
     try {
-      final updated =
-          await context.read<BookingService>().transition(widget.bookingId, to);
+      // Version vue par CE téléphone : si la mission a été modifiée ailleurs (autre appareil, client), le serveur
+      // répond « conflit » au lieu d'écraser. Une clé d'idempotence rend un renvoi après coupure sans effet double.
+      final seen = await _future;
+      if (!mounted) return;
+      final updated = await context.read<BookingService>().transition(
+            widget.bookingId,
+            to,
+            expectedVersion: seen.version,
+            idempotencyKey: 'tr-${randomHex(12)}',
+          );
       if (!mounted) return;
       setState(() {
-      _future = Future.value(updated);
-    });
+        _future = Future.value(updated);
+      });
+      unawaited(context.read<ActivitiesController>().refresh(force: true));
       showWorkerToast(context, 'Statut mis à jour.',
           tone: WorkerToastTone.success);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.isVersionConflict) {
+        // Modifiée ailleurs : on recharge l'état réel, l'utilisateur décide en connaissance de cause.
+        showWorkerToast(context, 'Cette mission a été modifiée entre-temps (autre appareil ou autre partie). État actualisé : vérifiez-le avant de continuer.',
+            tone: WorkerToastTone.neutral);
+        _reload();
+      } else {
+        showWorkerToast(context, 'Transition refusée : $e', tone: WorkerToastTone.danger);
+      }
     } catch (e) {
       if (!mounted) return;
-      showWorkerToast(context, 'Transition refusée : $e',
+      // Hors ligne ou serveur injoignable : rien n'a été confirmé, l'action n'est JAMAIS présentée comme réussie.
+      showWorkerToast(context, 'Action non envoyée : connexion indisponible. Le statut n’a pas changé ; réessayez une fois connecté.',
           tone: WorkerToastTone.danger);
     } finally {
       if (mounted) {

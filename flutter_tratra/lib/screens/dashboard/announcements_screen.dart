@@ -10,23 +10,25 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:flutter_tratra/continuity/offline_queue.dart';
 import 'package:flutter_tratra/core/announcement_action.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 
-/// Appels « vue / ouverte / écartée » : jamais bloquants ni bruyants (une statistique manquée ne gêne pas l'utilisateur).
-Future<void> _signal(DashboardApi api, Object id, String event) async {
+/// « Vue » / « ouverte » : passent par la file hors ligne persistante (action sûre, rejouée au retour du réseau) ;
+/// jamais bloquants ni bruyants (une statistique manquée ne gêne pas l'utilisateur).
+Future<void> _signal(OfflineQueue queue, Object id, String event) async {
   try {
-    await api.post('/me/announcements/$id/$event/', {});
+    await queue.enqueue('POST', '/me/announcements/$id/$event/');
   } catch (_) {}
 }
 
 Future<void> _runAction(BuildContext context, DashboardApi api, Map<String, dynamic> a) async {
   final action = parseAnnouncementAction((a['action'] as Map?)?.cast<String, dynamic>());
   if (action == null) return;
-  unawaited(_signal(api, a['id'] as Object, 'open'));
+  unawaited(_signal(context.read<OfflineQueue>(), a['id'] as Object, 'open'));
   switch (action) {
     case OpenExternalLink(:final uri):
       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -48,12 +50,13 @@ class AnnouncementsScreen extends StatefulWidget {
 
 class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
   late final DashboardApi _api = context.read<DashboardApi>();
+  late final OfflineQueue _queue = context.read<OfflineQueue>();
   final Set<Object> _seen = {};
   final Set<Object> _dismissed = {};
   bool _openedHighlight = false;
 
   void _onSeen(Object id) {
-    if (_seen.add(id)) unawaited(_signal(_api, id, 'seen'));
+    if (_seen.add(id)) unawaited(_signal(_queue, id, 'seen'));
   }
 
   Future<void> _dismiss(Object id) async {
@@ -80,7 +83,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen> {
             items.sort((a, b) => (b['id'] == focus ? 1 : 0) - (a['id'] == focus ? 1 : 0));
             if (!_openedHighlight && items.any((a) => a['id'] == focus)) {
               _openedHighlight = true;
-              unawaited(_signal(_api, focus, 'open')); // la notification touchée compte comme une ouverture
+              unawaited(_signal(_queue, focus, 'open')); // la notification touchée compte comme une ouverture
             }
           }
           return RefreshIndicator(
@@ -208,6 +211,7 @@ class AnnouncementsBanner extends StatefulWidget {
 
 class _AnnouncementsBannerState extends State<AnnouncementsBanner> {
   late final DashboardApi _api = context.read<DashboardApi>();
+  late final OfflineQueue _queue = context.read<OfflineQueue>();
   Object? _lastDashboard;
   List<Map<String, dynamic>> _items = const [];
   Object? _shown;
@@ -247,7 +251,7 @@ class _AnnouncementsBannerState extends State<AnnouncementsBanner> {
     final id = a['id'] as Object;
     if (_shown != id) {
       _shown = id;
-      WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_signal(_api, id, 'seen')));
+      WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_signal(_queue, id, 'seen')));
     }
     final action = parseAnnouncementAction((a['action'] as Map?)?.cast<String, dynamic>());
     return Padding(
