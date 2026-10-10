@@ -25,6 +25,7 @@ import 'package:flutter_tratra/services/location_service.dart';
 // Services spécialisés branchés sur BaseApi
 import 'package:flutter_tratra/services/auth_service.dart';
 import 'package:flutter_tratra/services/booking_service.dart';
+import 'package:flutter_tratra/services/cash_service.dart';
 import 'package:flutter_tratra/services/payment_service.dart';
 import 'package:flutter_tratra/services/review_service.dart';
 import 'package:flutter_tratra/services/messaging_service.dart';
@@ -117,6 +118,9 @@ void main() {
           ),
           ProxyProvider<BaseApi, PaymentService>(
             update: (_, api, __) => PaymentService(api),
+          ),
+          ProxyProvider<BaseApi, CashService>(
+            update: (_, api, __) => CashService(api),
           ),
           ProxyProvider<BaseApi, HandymanService>(
             update: (_, api, __) => HandymanService(api),

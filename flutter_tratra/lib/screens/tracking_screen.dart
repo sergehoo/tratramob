@@ -13,6 +13,7 @@ import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/booking.dart';
 import 'package:flutter_tratra/screens/dashboard/messages_screen.dart' show openBookingConversation;
+import 'package:flutter_tratra/screens/detail_shared/cash_payment_card.dart';
 import 'package:flutter_tratra/screens/live/live_cards.dart' show ClientLiveCard;
 import 'package:flutter_tratra/screens/trust/passport_screen.dart' show PassportScreen;
 import 'package:flutter_tratra/screens/trust/mission_qr_card.dart' show IdentityVerifyCard;
@@ -229,6 +230,10 @@ class _TrackingScreenState extends State<TrackingScreen> {
             if (['confirmed', 'in_progress', 'completed'].contains(b.status) && int.tryParse(b.id) != null) ...[
               const SizedBox(height: TtSpace.s4),
               IdentityVerifyCard(bookingId: int.parse(b.id), active: b.status != 'completed'),
+            ],
+            if (['confirmed', 'in_progress', 'completed'].contains(b.status) && int.tryParse(b.id) != null) ...[
+              const SizedBox(height: TtSpace.s4),
+              CashPaymentCard(bookingId: int.parse(b.id), bookingStatus: b.status),
             ],
             if (b.handymanId.isNotEmpty && b.status != 'cancelled' && int.tryParse(b.id) != null) ...[
               const SizedBox(height: TtSpace.s4),

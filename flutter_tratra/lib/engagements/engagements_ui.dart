@@ -361,7 +361,7 @@ class _ScheduleEditorState extends State<ScheduleEditor> {
 /// l'application (`EvidencePdfPage`, copie temporaire supprimée à la fermeture) — jamais confié à une application tierce.
 class EvidenceLink extends StatefulWidget {
   const EvidenceLink({super.key, required this.api, required this.evidence, this.pdfBodyBuilder});
-  final EngagementsApi api;
+  final PrivateDownloader api;
   final Json evidence;
 
   /// Remplaçable dans les tests (le moteur PDF natif n'existe pas hors appareil).

@@ -2,6 +2,7 @@
 // lib/core/base_api.dart ✅ (tel quel, juste petite sécurité sur initialize)
 // ===============================
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_tratra/core/api_exception.dart';
@@ -23,6 +24,17 @@ class BaseApi {
   }
 
   String get baseUrl => AppConstants.baseUrl;
+
+  /// Télécharge un document PRIVÉ (justificatif, reçu) avec la session. Le jeton n'est envoyé QU'À l'origine de l'API : une URL d'une
+  /// autre origine est refusée sans requête (jamais de fuite du jeton). L'URL renvoyée par l'API est relative à l'origine.
+  Future<Uint8List> downloadPrivate(String url) async {
+    final origin = Uri.parse(baseUrl).origin;
+    final uri = url.startsWith('http') ? Uri.parse(url) : Uri.parse('$origin$url');
+    if (uri.origin != origin) throw ApiException(0, 'Pièce jointe indisponible.');
+    final r = await client.get(uri, headers: await headers);
+    if (r.statusCode < 200 || r.statusCode >= 300) handleError(r);
+    return r.bodyBytes;
+  }
 
   Future<void> initialize() async {
     if (_didInit) return;

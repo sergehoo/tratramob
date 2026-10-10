@@ -8,8 +8,8 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
-import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/core/base_api.dart';
+import 'package:flutter_tratra/engagements/evidence_viewer.dart' show PrivateDownloader;
 
 /// Page de résultats `{count, next_offset, results}`.
 class EngPage {
@@ -19,7 +19,7 @@ class EngPage {
   final List<Map<String, dynamic>> results;
 }
 
-class EngagementsApi {
+class EngagementsApi implements PrivateDownloader {
   EngagementsApi(this._base);
   final BaseApi _base;
 
@@ -79,14 +79,7 @@ class EngagementsApi {
     return _base.extractResults(_base.decodeBody(r)).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
   }
 
-  /// Pièce justificative PRIVÉE (visible des deux parties seulement) : l'URL renvoyée par l'API est relative à l'origine.
-  /// Le jeton de session n'est envoyé QU'À l'origine de l'API : une URL d'une autre origine est refusée (jamais de fuite du jeton).
-  Future<Uint8List> download(String url) async {
-    final origin = Uri.parse(_base.baseUrl).origin;
-    final uri = url.startsWith('http') ? Uri.parse(url) : Uri.parse('$origin$url');
-    if (uri.origin != origin) throw ApiException(0, 'Pièce jointe indisponible.');
-    final r = await _base.client.get(uri, headers: await _base.headers);
-    if (r.statusCode < 200 || r.statusCode >= 300) _base.handleError(r);
-    return r.bodyBytes;
-  }
+  /// Pièce justificative PRIVÉE (visible des deux parties seulement) : voir `BaseApi.downloadPrivate` (jeton limité à l'origine de l'API).
+  @override
+  Future<Uint8List> download(String url) => _base.downloadPrivate(url);
 }

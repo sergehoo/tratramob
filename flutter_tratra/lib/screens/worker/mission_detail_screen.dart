@@ -13,6 +13,7 @@ import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/booking.dart';
 import 'package:flutter_tratra/screens/dashboard/messages_screen.dart' show openBookingConversation;
+import 'package:flutter_tratra/screens/detail_shared/cash_payment_card.dart';
 import 'package:flutter_tratra/screens/worker/dashboard/worker_ui.dart';
 import 'package:flutter_tratra/screens/live/live_cards.dart';
 import 'package:flutter_tratra/screens/trust/mission_qr_card.dart';
@@ -228,6 +229,10 @@ class _MissionDetailScreenState extends State<MissionDetailScreen> {
               if ((b.status == 'confirmed' || b.status == 'in_progress') && int.tryParse(b.id) != null) ...[
                 const SizedBox(height: TtSpace.s4),
                 MissionQrCard(bookingId: int.parse(b.id)),
+              ],
+              if (['confirmed', 'in_progress', 'completed'].contains(b.status) && int.tryParse(b.id) != null) ...[
+                const SizedBox(height: TtSpace.s4),
+                CashPaymentCard(bookingId: int.parse(b.id), bookingStatus: b.status),
               ],
               const SizedBox(height: TtSpace.s4),
               WorkerReveal(

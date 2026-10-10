@@ -14,6 +14,11 @@ import 'package:pdfx/pdfx.dart';
 
 import 'package:flutter_tratra/design/design.dart';
 
+/// Source d'un document privé téléchargé avec la session (justificatifs d'engagement, reçus d'espèces).
+abstract interface class PrivateDownloader {
+  Future<Uint8List> download(String url);
+}
+
 /// Contrôles et nettoyage des pièces ouvertes dans l'application.
 class EvidenceFiles {
   const EvidenceFiles._();
