@@ -21,6 +21,7 @@ import 'package:flutter_tratra/services/booking_api.dart';
 
 import 'booking_flow/booking_format.dart';
 import 'booking_flow/booking_widgets.dart';
+import 'booking_flow/transport_estimate.dart';
 
 class BookingScreen extends StatefulWidget {
   const BookingScreen({super.key})
@@ -69,6 +70,8 @@ class _BookingScreenState extends State<BookingScreen> {
   TimeOfDay _selectedTime = const TimeOfDay(hour: 9, minute: 0);
   final _addressController = TextEditingController();
   Position? _located; // position de l'appareil (facultative), envoyée avec la réservation
+  TransportQuoteData? _transport; // devis de déplacement vu par le client (recalculé par le serveur à la réservation)
+  String? _transportNotice; // le serveur a recalculé un autre montant : le client doit confirmer à nouveau
   final _cityController = TextEditingController();
   final _postalController = TextEditingController();
   final _notesController = TextEditingController();
@@ -329,6 +332,7 @@ class _BookingScreenState extends State<BookingScreen> {
         postalCode: _postalController.text.trim(),
         latitude: _located?.latitude,
         longitude: _located?.longitude,
+        expectedTransportFee: _transport?.amount,
       );
 
       if (!req.scheduledAt.isAfter(DateTime.now().toUtc())) {
@@ -346,7 +350,7 @@ class _BookingScreenState extends State<BookingScreen> {
       await _discardDraft();
       if (!mounted) return;
 
-      final priceToPay = _priceToPay(s);
+      final priceToPay = _priceToPay(s) + (_transport?.amount ?? 0);
 
       await Navigator.pushNamed(
         context,
@@ -367,6 +371,15 @@ class _BookingScreenState extends State<BookingScreen> {
       _showFailure('${e.message}'); // saisie invalide : rien n'a été envoyé
     } on ApiException catch (e) {
       if (!mounted) return;
+      final changed = changedTransportQuote(e);
+      if (changed != null) {
+        // Rien n'est réservé : le client confirme le nouveau montant.
+        setState(() {
+          _transport = changed;
+          _transportNotice = 'Les frais de déplacement ont changé : ${formatFcfa(changed.amount.toDouble())}. Vérifiez puis confirmez à nouveau.';
+        });
+        return;
+      }
       final existing = e.existingBookingId;
       if (existing != null) {
         // Doublon (double appui, renvoi) : la réservation existe déjà, on la montre au lieu d'en créer une autre.
@@ -532,8 +545,24 @@ class _BookingScreenState extends State<BookingScreen> {
                   cityController: _cityController,
                   postalController: _postalController,
                   located: _located,
-                  onLocated: (p) => setState(() => _located = p),
+                  onLocated: (p) => setState(() {
+                    _located = p;
+                    _transportNotice = null;
+                  }),
                 ),
+              ),
+              const SizedBox(height: TtSpace.s3),
+              TransportEstimateCard(
+                serviceId: widget.service!.id,
+                lat: _located?.latitude,
+                lng: _located?.longitude,
+                city: _cityController.text.trim(),
+                when: DateTime.utc(_selectedDate.year, _selectedDate.month, _selectedDate.day, _selectedTime.hour, _selectedTime.minute),
+                notice: _transportNotice,
+                current: _transport,
+                onQuote: (q) {
+                  if (_transport?.amount != q?.amount || (_transport == null) != (q == null)) setState(() => _transport = q);
+                },
               ),
               const SizedBox(height: TtSpace.s4),
               BookingReveal(
