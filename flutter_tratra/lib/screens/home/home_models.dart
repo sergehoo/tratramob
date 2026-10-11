@@ -2,6 +2,7 @@
 //
 // Données et formatage de l'accueil client. Aucune règle métier : uniquement la lecture
 // tolérante de la réponse de l'API et l'affichage (prix, distance, URL de média).
+import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/design/design.dart' show trustBadgeCodes;
 import 'package:flutter_tratra/models/service.dart';
 
@@ -9,14 +10,18 @@ import 'package:flutter_tratra/models/service.dart';
 String homeFixMediaUrl(String? raw) {
   if (raw == null || raw.isEmpty) return '';
   var url = raw.trim();
+  const media = AppConstants.mediaBase;
 
-  if (url.startsWith('/')) return 'https://minio.tratra.net$url';
+  if (url.startsWith('/')) return '$media$url';
 
-  url = url.replaceFirst('http://minio:9000', 'https://minio.tratra.net');
-  url = url.replaceFirst('https://minio:9000', 'https://minio.tratra.net');
+  url = url.replaceFirst('http://minio:9000', media);
+  url = url.replaceFirst('https://minio:9000', media);
 
-  url = url.replaceFirst('http://tratra.net', 'https://minio.tratra.net');
-  url = url.replaceFirst('https://tratra.net', 'https://minio.tratra.net');
+  // Anciennes URL de médias servies par l'hôte du site ou de l'API.
+  for (final legacy in const ['tratra.net', 'api.tratra.net']) {
+    url = url.replaceFirst('http://$legacy', media);
+    url = url.replaceFirst('https://$legacy', media);
+  }
 
   if (url.startsWith('http://')) url = 'https://${url.substring(7)}';
   return url;

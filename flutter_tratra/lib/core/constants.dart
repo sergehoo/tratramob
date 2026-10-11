@@ -31,7 +31,13 @@ class AppConstants {
   // (ex. http://10.0.2.2:8000/handy pour l'émulateur Android en local).
   static const String baseUrl = String.fromEnvironment(
     'TRATRA_API_BASE',
-    defaultValue: 'https://tratra.net/handy',
+    defaultValue: 'https://api.tratra.net/handy',
+  );
+
+  // Hôte public du stockage des médias (MinIO / S3), sans barre finale — surchargeable au build via --dart-define=TRATRA_MEDIA_BASE=...
+  static const String mediaBase = String.fromEnvironment(
+    'TRATRA_MEDIA_BASE',
+    defaultValue: 'https://minioapi.tratra.net',
   );
 
   // ----- Endpoints -----
