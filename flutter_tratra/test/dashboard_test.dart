@@ -134,7 +134,7 @@ void main() {
   });
 
   group('Accueil', () {
-    testWidgets('client seul : invitation à devenir artisan, pas de gains', (t) async {
+    testWidgets('client seul : invitation à proposer un service, pas de gains', (t) async {
       _tall(t);
       await t.pumpWidget(_host(DashData(_payload()), Scaffold(body: DashboardHome(onExplore: () {}, onMessages: () {}))));
       expect(find.textContaining('Bonjour, '), findsOneWidget);
@@ -143,7 +143,7 @@ void main() {
       expect(find.text('Réservations en cours'), findsOneWidget);
       expect(find.text('Avis à rédiger'), findsOneWidget);
       expect(find.text('Gains disponibles'), findsNothing);
-      expect(find.text('Devenir artisan sur Tratra'), findsOneWidget);
+      expect(find.text('Proposer un service'), findsOneWidget);
       expect(find.text('Donnez votre avis sur 1 prestation'), findsOneWidget);
     });
 
@@ -156,7 +156,7 @@ void main() {
       expect(find.text(formatFcfa(13350)), findsOneWidget);
       expect(find.text('Profil professionnel'), findsOneWidget);
       expect(find.text('Aucun document déposé'), findsOneWidget);
-      expect(find.text('Devenir artisan sur Tratra'), findsNothing);
+      expect(find.text('Proposer un service'), findsNothing);
       await t.tap(find.text('Missions'));
       await t.pump();
       expect(find.text('Installation électrique'), findsWidgets);
