@@ -152,6 +152,7 @@ class _MoreTab extends StatelessWidget {
       _Entry(Icons.notifications_none_rounded, 'Notifications', 'Réservations, missions, messages', () => openNotifications(context),
           badge: data?.unreadNotifications),
       _Entry(Icons.person_outline_rounded, 'Mon compte', 'Informations personnelles et sécurité', () => openAccount(context)),
+      _Entry(Icons.place_outlined, 'Mes adresses', 'Principale, secondaires et favorites', () => openAddresses(context)),
       if (isProvider) ...[
         _Entry(Icons.badge_outlined, 'Profil professionnel', 'Présentation, spécialités, zone', () => openProProfile(context)),
         _Entry(Icons.verified_user_outlined, 'Vérification d’identité (KYC)', 'Pièces d’identité et justificatifs', () => openKyc(context)),

@@ -11,6 +11,7 @@ import 'package:flutter_tratra/engagements/replacements_screen.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/business/business_screens.dart';
 import 'package:flutter_tratra/screens/auth/profile_screen.dart';
+import 'package:flutter_tratra/screens/dashboard/addresses_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/announcements_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/bookings_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
@@ -48,6 +49,7 @@ Future<void> openNotifications(BuildContext context) => pushPage(context, const 
 Future<void> openProvide(BuildContext context) => pushPage(context, const ProvideScreen());
 Future<void> openProProfile(BuildContext context) => pushPage(context, const ProProfileScreen());
 Future<void> openKyc(BuildContext context) => pushPage(context, const KycScreen());
+Future<void> openAddresses(BuildContext context) => pushPage(context, const AddressesScreen());
 Future<void> openAccount(BuildContext context) => pushPage(context, const ProfileScreen());
 
 /// Destination d'une « action à traiter » (cibles neutres renvoyées par l'API).
