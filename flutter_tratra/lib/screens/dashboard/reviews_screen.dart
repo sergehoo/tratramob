@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
+import 'package:flutter_tratra/screens/dashboard/mutual_evaluations.dart';
 
 const _criteria = <(String, String)>[
   ('quality', 'Qualité du travail'),
@@ -88,6 +89,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s8),
             children: [
+              MutualEvaluationsCard(onChanged: _refresh),
               Wrap(spacing: TtSpace.s2, children: [
                 TratraChip(label: 'À rédiger (${toWrite.length})', selected: tab == _Tab.write, onTap: () => setState(() => _tab = _Tab.write)),
                 if (isProvider) TratraChip(label: 'Reçus (${received.length})', selected: tab == _Tab.received, onTap: () => setState(() => _tab = _Tab.received)),
