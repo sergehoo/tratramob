@@ -39,10 +39,11 @@ class User {
     final f = (firstName ?? '').trim();
     final l = (lastName ?? '').trim();
     final join = [f, l].where((s) => s.isNotEmpty).join(' ');
-    // fallback: username ou email si pas de nom
+    // Jamais l'identifiant technique : e-mail, à défaut téléphone.
     if (join.isNotEmpty) return join;
-    if ((username ?? '').isNotEmpty) return username!;
-    return email;
+    if (email.trim().isNotEmpty) return email;
+    final p = (phoneNumber ?? '').trim();
+    return p.isNotEmpty ? p : 'Mon compte';
   }
 
   factory User.fromJson(Map<String, dynamic> json) {

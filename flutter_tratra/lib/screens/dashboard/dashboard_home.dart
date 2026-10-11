@@ -309,7 +309,7 @@ class _ProfileCard extends StatelessWidget {
             style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft),
           ),
           const SizedBox(height: TtSpace.s4),
-          TratraButton(label: 'Devenir artisan sur Tratra', block: true, onPressed: () => openProvide(context)),
+          TratraButton(label: 'Proposer un service', block: true, onPressed: () => openProvide(context)),
         ]),
       );
     }

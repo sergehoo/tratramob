@@ -102,7 +102,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildProfile(User u) {
     final phone = u.phoneNumber;
-    final username = u.username;
     final joined = u.dateJoined;
 
     return ListView(
@@ -198,20 +197,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
               ],
-              if (username != null) ...[
-                const Divider(),
-                _InfoRow(
-                  icon: Icons.alternate_email_outlined,
-                  label: 'Nom d’utilisateur',
-                  value: username,
-                ),
-              ],
-              const Divider(),
-              _InfoRow(
-                icon: Icons.badge_outlined,
-                label: 'Type de compte',
-                value: _roleLabel(u.userType),
-              ),
               if (joined != null) ...[
                 const Divider(),
                 _InfoRow(
@@ -253,11 +238,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// Libellé français du type de compte (affichage uniquement) ; valeur brute si inconnue.
+  /// Libellé du compte (affichage uniquement ; un même compte demande et propose des services) ; valeur brute si inconnue.
   static String _roleLabel(String userType) => switch (userType) {
-        AppConstants.roleClient => 'Client',
-        AppConstants.roleEmployer => 'Employeur',
-        AppConstants.roleHandyman => 'Artisan',
+        AppConstants.roleClient || AppConstants.roleEmployer || AppConstants.roleHandyman => 'Membre',
         AppConstants.roleCompany => 'Entreprise',
         AppConstants.roleAdmin => 'Administrateur',
         _ => userType,

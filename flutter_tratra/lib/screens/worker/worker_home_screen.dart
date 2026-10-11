@@ -148,7 +148,7 @@ class _MissionsTabState extends State<_MissionsTab> {
         children: [
           WorkerReveal(
             child: WorkerPageHeader(
-              eyebrow: 'Espace artisan',
+              eyebrow: 'Mes services',
               title: 'Mes missions',
               subtitle: firstName.isEmpty
                   ? 'Vos demandes et interventions.'
@@ -708,7 +708,7 @@ class _EarningsTabState extends State<_EarningsTab> {
         children: [
           const WorkerReveal(
             child:
-                WorkerPageHeader(eyebrow: 'Espace artisan', title: 'Mes gains'),
+                WorkerPageHeader(eyebrow: 'Mes services', title: 'Mes gains'),
           ),
           const SizedBox(height: TtSpace.s5),
           FutureBuilder<num>(
