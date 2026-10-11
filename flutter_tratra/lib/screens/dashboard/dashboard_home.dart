@@ -13,6 +13,7 @@ import 'package:flutter_tratra/screens/dashboard/announcements_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
+import 'package:flutter_tratra/screens/dashboard/recommended_card.dart';
 
 class DashboardHome extends StatefulWidget {
   const DashboardHome({super.key, required this.onExplore, required this.onMessages});
@@ -130,6 +131,7 @@ class _DashboardHomeState extends State<DashboardHome> {
           ),
           const SizedBox(height: TtSpace.s4),
           const AnnouncementsBanner(),
+          const RecommendedCard(),
           for (final k in kpis) ...[k, const SizedBox(height: TtSpace.s3)],
           if (data.actions.isNotEmpty) ...[
             const TratraSectionHeader(title: 'À traiter', subtitle: 'Ce qui demande votre attention.', padding: EdgeInsets.fromLTRB(0, 20, 0, 12)),
