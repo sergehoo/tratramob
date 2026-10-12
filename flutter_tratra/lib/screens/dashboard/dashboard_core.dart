@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:flutter_tratra/core/upload_file.dart';
 import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 
@@ -75,7 +76,7 @@ class DashboardApi {
     final h = await _base.headers;
     h.remove('Content-Type');
     req.headers.addAll(h);
-    req.files.add(await http.MultipartFile.fromPath(field, filePath));
+    req.files.add(await multipartFromPath(field, filePath));
     final r = await http.Response.fromStream(await _base.client.send(req));
     if (r.statusCode < 200 || r.statusCode >= 300) _base.handleError(r);
     final d = _base.decodeBody(r);
@@ -89,7 +90,7 @@ class DashboardApi {
     h.remove('Content-Type');
     req.headers.addAll(h);
     req.fields.addAll(fields);
-    req.files.add(await http.MultipartFile.fromPath(fileField, filePath));
+    req.files.add(await multipartFromPath(fileField, filePath));
     final r = await http.Response.fromStream(await _base.client.send(req));
     if (r.statusCode < 200 || r.statusCode >= 300) _base.handleError(r);
     final d = _base.decodeBody(r);
@@ -102,7 +103,7 @@ class DashboardApi {
     final h = await _base.headers;
     h.remove('Content-Type');
     req.headers.addAll(h);
-    req.files.add(await http.MultipartFile.fromPath(field, filePath));
+    req.files.add(await multipartFromPath(field, filePath));
     final r = await http.Response.fromStream(await _base.client.send(req));
     if (r.statusCode < 200 || r.statusCode >= 300) _base.handleError(r);
   }

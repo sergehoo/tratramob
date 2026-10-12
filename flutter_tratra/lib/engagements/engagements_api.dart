@@ -8,6 +8,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import 'package:flutter_tratra/core/upload_file.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/engagements/evidence_viewer.dart' show PrivateDownloader;
 
@@ -66,7 +67,7 @@ class EngagementsApi implements PrivateDownloader {
     h.remove('Content-Type');
     req.headers.addAll({...h, if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey});
     req.fields.addAll({for (final e in fields.entries) if (e.value.isNotEmpty) e.key: e.value});
-    if (filePath != null) req.files.add(await http.MultipartFile.fromPath('evidence', filePath));
+    if (filePath != null) req.files.add(await multipartFromPath('evidence', filePath));
     final r = await http.Response.fromStream(await _base.client.send(req));
     if (r.statusCode < 200 || r.statusCode >= 300) _base.handleError(r);
     return _map(_base.decodeBody(r));

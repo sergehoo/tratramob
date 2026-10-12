@@ -5,6 +5,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+import 'package:flutter_tratra/core/upload_file.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
 
@@ -110,7 +111,7 @@ class HandymanService extends BaseApi {
     if (description != null && description.isNotEmpty) {
       req.fields['description'] = description;
     }
-    req.files.add(await http.MultipartFile.fromPath('file', filePath));
+    req.files.add(await multipartFromPath('file', filePath));
 
     final streamed = await client.send(req);
     final r = await http.Response.fromStream(streamed);
