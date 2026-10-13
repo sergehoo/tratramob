@@ -3,6 +3,10 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Vérification faciale du KYC : caméra avant, uniquement pendant la capture guidée (jamais en arrière-plan). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
     <!-- Android 13+ : autorisation d'afficher les notifications (suivi de mission, réservations). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- image_picker utilise le sélecteur et la caméra système : aucune permission

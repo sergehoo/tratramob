@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/biometric/biometric_flow_screen.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/services/handyman_service.dart';
 
@@ -216,6 +217,23 @@ class _KycScreenState extends State<KycScreen> {
                   title: 'Pourquoi cette vérification ?',
                   message:
                       'Vos documents sont examinés par l’équipe Tratra avant que vous puissiez passer en ligne et recevoir des missions. Le badge « Vérifié » n’apparaît qu’une fois vos pièces réellement validées.',
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: TtSpace.s4),
+                  child: TratraCard(
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BiometricFlowScreen())),
+                    child: Row(children: [
+                      const Icon(Icons.face_retouching_natural_rounded, color: TtColors.primary),
+                      const SizedBox(width: TtSpace.s3),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('Vérification faciale', style: TratraTheme.style(TtType.title)),
+                          Text('Comparez votre visage à votre pièce d’identité, ou demandez une vérification par l’équipe.', style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
+                        ]),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: TtColors.ash),
+                    ]),
+                  ),
                 ),
                 TratraSectionHeader(
                   title: 'Mes documents',

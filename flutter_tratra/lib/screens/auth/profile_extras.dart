@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/biometric/biometric_flow_screen.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/user.dart';
 import 'package:flutter_tratra/routes.dart';
@@ -114,6 +115,7 @@ class AccountShortcuts extends StatelessWidget {
       (Icons.star_outline_rounded, 'Mes évaluations', 'Avis donnés et reçus, réputation', () => openReviews(context)),
       if (isProvider) (Icons.workspace_premium_outlined, 'Mes badges', 'Badges Trust et justificatifs', () => openReputation(context)),
       if (isProvider) (Icons.verified_user_outlined, 'Vérification d’identité (KYC)', 'Pièces et justificatifs', () => openKyc(context)),
+      if (isProvider) (Icons.face_retouching_natural_rounded, 'Vérification faciale', 'Visage et pièce d’identité, ou vérification par l’équipe', () => pushPage(context, const BiometricFlowScreen())),
       (Icons.notifications_none_rounded, 'Notifications et confidentialité', 'Alertes, communications promotionnelles', () => pushPage(context, const NotificationPreferencesScreen())),
       (Icons.lock_outline_rounded, 'Sécurité du compte', 'Changer mon mot de passe par code SMS', () => Navigator.pushNamed(context, RouteNames.forgotPassword)),
     ];
