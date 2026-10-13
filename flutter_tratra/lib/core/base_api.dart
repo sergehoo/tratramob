@@ -116,6 +116,60 @@ class BaseApi {
     return h;
   }
 
+  /// Envoi multipart AVEC progression (0..1) : le corps est transmis par morceaux et compté (le client à rafraîchissement automatique
+  /// met le corps en mémoire avant l'envoi, sans progression). Sur 401, UN rafraîchissement de session puis un nouvel essai.
+  /// Les envois de messages et de statuts portent un `client_id` : rejouer après une coupure réseau ne crée jamais de doublon.
+  Future<http.Response> uploadMultipart(
+    String path, {
+    Map<String, String> fields = const {},
+    List<Future<http.MultipartFile> Function()> files = const [],
+    void Function(double)? onProgress,
+    Duration timeout = const Duration(minutes: 5),
+  }) async {
+    Future<http.Response> attempt(String? access) async {
+      final req = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'))
+        ..fields.addAll(fields)
+        ..headers['Accept'] = 'application/json';
+      if (access != null && access.isNotEmpty) req.headers['Authorization'] = 'Bearer $access';
+      for (final f in files) {
+        req.files.add(await f());
+      }
+      final total = req.contentLength;
+      final streamed = http.StreamedRequest(req.method, req.url)
+        ..headers.addAll(req.headers)
+        ..contentLength = total;
+      var sent = 0;
+      req.finalize().listen(
+        (chunk) {
+          sent += chunk.length;
+          streamed.sink.add(chunk);
+          if (total > 0) onProgress?.call((sent / total).clamp(0.0, 1.0));
+        },
+        onDone: streamed.sink.close,
+        onError: (Object e, StackTrace st) {
+          streamed.sink.addError(e, st);
+          streamed.sink.close();
+        },
+        cancelOnError: true,
+      );
+      return http.Response.fromStream(await _raw.send(streamed).timeout(timeout));
+    }
+
+    await initialize();
+    String? access;
+    try {
+      access = await storage.read(key: AppConstants.authTokenKey);
+    } catch (_) {
+      access = _authToken;
+    }
+    var r = await attempt(access);
+    if (r.statusCode == 401) {
+      final fresh = await _refreshAccess();
+      if (fresh != null) r = await attempt(fresh);
+    }
+    return r;
+  }
+
   Future<Map<String, String>> getHeaders({bool withAuth = true}) async {
     final h = await headers;
     if (!withAuth) h.remove('Authorization');

@@ -49,6 +49,9 @@ import 'package:flutter_tratra/screens/service_detail_screen.dart';
 import 'package:flutter_tratra/screens/booking_screen.dart';
 import 'package:flutter_tratra/screens/artisan_profile_screen.dart';
 import 'package:flutter_tratra/screens/messaging_screen.dart';
+import 'package:flutter_tratra/messaging/inbox_controller.dart';
+import 'package:flutter_tratra/messaging/messaging_api.dart';
+import 'package:flutter_tratra/statuses/status_api.dart';
 import 'package:flutter_tratra/screens/tracking_screen.dart';
 import 'package:flutter_tratra/screens/payment_screen.dart';
 import 'package:flutter_tratra/screens/auth/profile_screen.dart';
@@ -141,6 +144,22 @@ void main() {
           // Engagements récurrents et de longue durée (API commune web/Flutter)
           ProxyProvider<BaseApi, EngagementsApi>(
             update: (_, api, __) => EngagementsApi(api),
+          ),
+
+          // Messagerie temps réel et statuts : une WebSocket par session (billet signé), rattrapage par l'API
+          ProxyProvider<BaseApi, MessagingApi>(
+            update: (_, api, __) => MessagingApi(api),
+          ),
+          ProxyProvider<BaseApi, StatusApi>(
+            update: (_, api, __) => StatusApi(api),
+          ),
+          ChangeNotifierProxyProvider3<BaseApi, MessagingApi, Session, InboxController>(
+            create: (ctx) => InboxController(ctx.read<BaseApi>(), ctx.read<MessagingApi>()),
+            update: (_, base, api, session, prev) {
+              final c = prev ?? InboxController(base, api);
+              unawaited(c.bindUser(session.user?.id));
+              return c;
+            },
           ),
 
           // Espace unifié : API bornée au compte courant + données partagées (purgées au changement de compte)

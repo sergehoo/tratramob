@@ -8,7 +8,9 @@ import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/design/design.dart';
+import 'package:flutter_tratra/messaging/inbox_controller.dart';
 import 'package:flutter_tratra/routes.dart';
+import 'package:flutter_tratra/statuses/statuses_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/bookings_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
@@ -74,6 +76,9 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   Widget build(BuildContext context) {
     final data = context.select<DashboardController, DashData?>((c) => c.data);
     final unreadNotifs = data?.unreadNotifications ?? 0;
+    // Non lus en temps réel (WebSocket) ; à défaut, le compteur du tableau de bord.
+    final live = context.select<InboxController, int>((c) => c.unread);
+    final unreadMessages = live > 0 ? live : (data?.unreadMessages ?? 0);
     return Scaffold(
       backgroundColor: TtColors.canvas,
       // L'onglet Explorer porte sa propre en-tête (catalogue).
@@ -96,6 +101,20 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
               ]),
               actions: [
                 IconButton(
+                  tooltip: 'Statuts',
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StatusesScreen())),
+                  icon: const Icon(Icons.motion_photos_on_outlined),
+                ),
+                IconButton(
+                  tooltip: 'Messages',
+                  onPressed: () => _go(3),
+                  icon: Badge(
+                    isLabelVisible: unreadMessages > 0,
+                    label: Text('$unreadMessages'),
+                    child: const Icon(Icons.chat_bubble_outline_rounded),
+                  ),
+                ),
+                IconButton(
                   tooltip: 'Notifications',
                   onPressed: () => openNotifications(context),
                   icon: Badge(
@@ -117,7 +136,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           const TratraNavItem(icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard_rounded, label: 'Accueil'),
           const TratraNavItem(icon: Icons.explore_outlined, activeIcon: Icons.explore, label: 'Explorer'),
           const TratraNavItem(icon: Icons.calendar_month_outlined, activeIcon: Icons.calendar_month, label: 'Réservations'),
-          TratraNavItem(icon: Icons.chat_bubble_outline_rounded, activeIcon: Icons.chat_bubble_rounded, label: 'Messages', badge: data?.unreadMessages),
+          TratraNavItem(icon: Icons.chat_bubble_outline_rounded, activeIcon: Icons.chat_bubble_rounded, label: 'Messages', badge: unreadMessages > 0 ? unreadMessages : null),
           TratraNavItem(icon: Icons.more_horiz_rounded, label: 'Plus', badge: (data?.reviewsToWrite ?? 0) > 0 ? data!.reviewsToWrite : null),
         ],
       ),

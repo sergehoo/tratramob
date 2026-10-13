@@ -3,12 +3,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/continuity/activities_controller.dart';
 import 'package:flutter_tratra/continuity/offline_queue.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/design/design.dart';
+import 'package:flutter_tratra/messaging/inbox_controller.dart';
+import 'package:flutter_tratra/messaging/messaging_api.dart';
+import 'package:flutter_tratra/statuses/status_api.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_home.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_screen.dart';
@@ -71,8 +76,14 @@ class _FakeController extends DashboardController {
   }
 }
 
+/// Messagerie et statuts : serveur injoignable dans ces scénarios (la barre des statuts reste masquée, l'accueil n'est pas dégradé).
+final _offlineBase = BaseApi(client: MockClient((_) async => http.Response('{}', 503)));
+
 Widget _host(DashData d, Widget child) => MultiProvider(
       providers: [
+        Provider<StatusApi>.value(value: StatusApi(_offlineBase)),
+        Provider<MessagingApi>.value(value: MessagingApi(_offlineBase)),
+        ChangeNotifierProvider<InboxController>.value(value: InboxController(_offlineBase, MessagingApi(_offlineBase))),
         ChangeNotifierProvider<DashboardController>.value(value: _FakeController(d)),
         // Continuité : aucune activité en cours dans ces scénarios (le bandeau reste masqué).
         ChangeNotifierProvider<ActivitiesController>.value(value: ActivitiesController(fetch: (_) async => {})),

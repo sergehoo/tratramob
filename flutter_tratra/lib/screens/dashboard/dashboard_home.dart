@@ -14,6 +14,7 @@ import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/recommended_card.dart';
+import 'package:flutter_tratra/statuses/status_bar.dart';
 
 class DashboardHome extends StatefulWidget {
   const DashboardHome({super.key, required this.onExplore, required this.onMessages});
@@ -120,6 +121,9 @@ class _DashboardHomeState extends State<DashboardHome> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s8),
         children: [
+          // Statuts : « Mon statut » d'abord, puis les contacts Tratra (non lus avant les consultés)
+          const StatusBar(horizontalPadding: 0),
+          const SizedBox(height: TtSpace.s3),
           const ActivityBanner(),
           _Hero(
             greeting: data.greeting,
