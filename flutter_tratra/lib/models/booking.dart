@@ -151,6 +151,9 @@ class BookingCreateRequest {
   /// Montant de déplacement que le client a vu : le serveur RECALCULE ; un écart donne un 409 `transport_changed`.
   final int? expectedTransportFee;
 
+  /// Quartier du lieu (zones de transport) ; facultatif.
+  final String? commune;
+
   BookingCreateRequest._({
     required this.serviceId,
     required this.handymanId,
@@ -162,6 +165,7 @@ class BookingCreateRequest {
     this.latitude,
     this.longitude,
     this.expectedTransportFee,
+    this.commune,
   });
 
   /// Transforme les sélecteurs date/heure de l'app en DateTime UTC : le
@@ -180,6 +184,7 @@ class BookingCreateRequest {
     double? latitude,
     double? longitude,
     int? expectedTransportFee,
+    String? commune,
   }) {
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
       throw ArgumentError('Heure de réservation invalide.');
@@ -207,6 +212,7 @@ class BookingCreateRequest {
       latitude: (latitude != null && longitude != null) ? latitude : null,
       longitude: (latitude != null && longitude != null) ? longitude : null,
       expectedTransportFee: (latitude != null && longitude != null) ? expectedTransportFee : null,
+      commune: (commune ?? '').trim().isEmpty ? null : commune!.trim(),
     );
   }
 
@@ -221,6 +227,7 @@ class BookingCreateRequest {
       'type': 'scheduled',
       if (latitude != null && longitude != null) ...{'lat': latitude, 'lng': longitude},
       if (expectedTransportFee != null) 'expected_transport_fee': expectedTransportFee,
+      if (commune != null) 'commune': commune,
       if (notes != null && notes!.isNotEmpty) "description": notes,
     };
   }

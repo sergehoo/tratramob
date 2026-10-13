@@ -7,6 +7,8 @@ import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/user.dart';
 import 'package:flutter_tratra/routes.dart';
+import 'package:flutter_tratra/screens/auth/profile_extras.dart';
+import 'package:flutter_tratra/screens/dashboard/dash_ui.dart' show showMessage;
 import 'package:flutter_tratra/services/auth_service.dart';
 import 'package:flutter_tratra/services/storage_service.dart';
 import 'package:provider/provider.dart';
@@ -50,6 +52,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
       debugPrint('Erreur: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _edit(User u) async {
+    final saved = await showTratraSheet<bool>(context, title: 'Modifier mon profil', child: ProfileEditForm(user: u));
+    if (saved == true && mounted) {
+      showMessage(context, 'Profil enregistré.');
+      _retry();
+    }
+  }
+
+  Future<void> _photo(User u) async {
+    if (await changeProfilePhoto(context, u) && mounted) {
+      showMessage(context, 'Photo mise à jour.');
+      _retry();
     }
   }
 
@@ -121,10 +138,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           child: Column(
             children: [
-              TratraAvatar(
-                name: u.fullName,
-                photoUrl: u.profileImage,
-                size: 96,
+              Semantics(
+                button: true,
+                label: 'Changer ma photo',
+                child: GestureDetector(
+                  onTap: () => _photo(u),
+                  child: Stack(alignment: Alignment.bottomRight, children: [
+                    TratraAvatar(name: u.fullName, photoUrl: u.profileImage, size: 96),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(color: TtColors.accent, shape: BoxShape.circle),
+                      child: const Icon(Icons.photo_camera_outlined, size: 16, color: TtColors.ink),
+                    ),
+                  ]),
+                ),
               ),
               const SizedBox(height: TtSpace.s4),
               Semantics(
@@ -153,6 +180,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _roleLabel(u.userType),
                 tone: TratraTone.accent,
                 dot: true,
+              ),
+              const SizedBox(height: TtSpace.s3),
+              TratraButton(
+                label: 'Modifier mon profil',
+                size: TratraButtonSize.sm,
+                variant: TratraButtonVariant.outline,
+                leading: const Icon(Icons.edit_outlined, size: 18),
+                onPressed: () => _edit(u),
               ),
             ],
           ),
@@ -208,6 +243,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
+        const SizedBox(height: TtSpace.s4),
+        const AccountShortcuts(),
         const SizedBox(height: TtSpace.s6),
         TratraButton(
           label: 'Déconnexion',

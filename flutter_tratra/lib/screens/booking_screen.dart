@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart' show DashboardApi;
 import 'package:flutter_tratra/continuity/drafts.dart';
 import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/core/base_api.dart';
@@ -70,6 +71,14 @@ class _BookingScreenState extends State<BookingScreen> {
   TimeOfDay _selectedTime = const TimeOfDay(hour: 9, minute: 0);
   final _addressController = TextEditingController();
   Position? _located; // position de l'appareil (facultative), envoyée avec la réservation
+  // Adresses enregistrées du compte (une différente par réservation) : le point et le quartier de l'adresse choisie servent au calcul du déplacement.
+  List<Map<String, dynamic>> _saved = const [];
+  int? _savedId;
+  double? _addrLat;
+  double? _addrLng;
+  String _commune = '';
+  double? get _lat => _located?.latitude ?? _addrLat;
+  double? get _lng => _located?.longitude ?? _addrLng;
   TransportQuoteData? _transport; // devis de déplacement vu par le client (recalculé par le serveur à la réservation)
   String? _transportNotice; // le serveur a recalculé un autre montant : le client doit confirmer à nouveau
   final _cityController = TextEditingController();
@@ -101,6 +110,7 @@ class _BookingScreenState extends State<BookingScreen> {
       _fetchMine();
     } else {
       _restoreDraft();
+      _loadSavedAddresses();
       for (final c in [_addressController, _cityController, _postalController, _notesController]) {
         c.addListener(_scheduleSave);
       }
@@ -118,6 +128,35 @@ class _BookingScreenState extends State<BookingScreen> {
         postalCode: _postalController.text,
         notes: _notesController.text,
       );
+
+  /// Adresses enregistrées du compte (facultatif : sans elles, la saisie manuelle reste possible).
+  Future<void> _loadSavedAddresses() async {
+    try {
+      final r = await context.read<DashboardApi>().getMap('/me/addresses/');
+      final rows = ((r['results'] as List?) ?? const []).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
+      if (mounted) setState(() => _saved = rows);
+    } catch (_) {
+      // hors ligne ou service indisponible : pas de liste, aucune erreur affichée
+    }
+  }
+
+  void _pickSaved(Map<String, dynamic>? a) {
+    setState(() {
+      _savedId = a == null ? null : (a['id'] as num).toInt();
+      if (a == null) {
+        _addrLat = _addrLng = null;
+        _commune = '';
+        return;
+      }
+      _addressController.text = [a['street'], a['commune']].where((x) => '${x ?? ''}'.isNotEmpty).join(', ');
+      _cityController.text = '${a['city'] ?? ''}';
+      _commune = '${a['commune'] ?? ''}';
+      _located = null; // le point de l'adresse choisie remplace une position de l'appareil précédente
+      _addrLat = (a['latitude'] as num?)?.toDouble();
+      _addrLng = (a['longitude'] as num?)?.toDouble();
+      _transportNotice = null;
+    });
+  }
 
   Future<void> _restoreDraft() async {
     final uid = _userId;
@@ -330,8 +369,9 @@ class _BookingScreenState extends State<BookingScreen> {
             : _notesController.text.trim(),
         city: _cityController.text.trim(),
         postalCode: _postalController.text.trim(),
-        latitude: _located?.latitude,
-        longitude: _located?.longitude,
+        latitude: _lat,
+        longitude: _lng,
+        commune: _commune.isEmpty ? null : _commune,
         expectedTransportFee: _transport?.amount,
       );
 
@@ -545,8 +585,14 @@ class _BookingScreenState extends State<BookingScreen> {
                   cityController: _cityController,
                   postalController: _postalController,
                   located: _located,
+                  saved: _saved,
+                  savedId: _savedId,
+                  onPickSaved: _pickSaved,
                   onLocated: (p) => setState(() {
                     _located = p;
+                    _savedId = null;
+                    _addrLat = _addrLng = null;
+                    _commune = '';
                     _transportNotice = null;
                   }),
                 ),
@@ -554,8 +600,8 @@ class _BookingScreenState extends State<BookingScreen> {
               const SizedBox(height: TtSpace.s3),
               TransportEstimateCard(
                 serviceId: widget.service!.id,
-                lat: _located?.latitude,
-                lng: _located?.longitude,
+                lat: _lat,
+                lng: _lng,
                 city: _cityController.text.trim(),
                 when: DateTime.utc(_selectedDate.year, _selectedDate.month, _selectedDate.day, _selectedTime.hour, _selectedTime.minute),
                 notice: _transportNotice,
@@ -992,6 +1038,9 @@ class _AddressSection extends StatelessWidget {
   final TextEditingController postalController;
   final Position? located;
   final ValueChanged<Position> onLocated;
+  final List<Map<String, dynamic>> saved;
+  final int? savedId;
+  final ValueChanged<Map<String, dynamic>?> onPickSaved;
 
   const _AddressSection({
     required this.addressController,
@@ -999,6 +1048,9 @@ class _AddressSection extends StatelessWidget {
     required this.postalController,
     required this.located,
     required this.onLocated,
+    this.saved = const [],
+    this.savedId,
+    required this.onPickSaved,
   });
 
   Future<void> _locate(BuildContext context) async {
@@ -1022,6 +1074,23 @@ class _AddressSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (saved.isNotEmpty) ...[
+            DropdownButtonFormField<int?>(
+              value: savedId,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Utiliser une de mes adresses'),
+              items: [
+                const DropdownMenuItem<int?>(value: null, child: Text('Saisir une autre adresse')),
+                for (final a in saved)
+                  DropdownMenuItem<int?>(
+                    value: (a['id'] as num).toInt(),
+                    child: Text('${'${a['label'] ?? ''}'.isEmpty ? 'Adresse' : a['label']}${a['is_primary'] == true ? ' (principale)' : ''} — ${[a['street'], a['commune'], a['city']].where((x) => '${x ?? ''}'.isNotEmpty).join(', ')}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: (id) => onPickSaved(id == null ? null : saved.firstWhere((a) => (a['id'] as num).toInt() == id)),
+            ),
+            const SizedBox(height: TtSpace.s4),
+          ],
           TratraInput(
             controller: addressController,
             label: 'Adresse complète',
