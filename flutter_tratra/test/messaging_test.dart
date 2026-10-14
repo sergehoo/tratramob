@@ -261,6 +261,18 @@ void main() {
       expect(server.requests.any((r) => r.url.path.endsWith('/messages/sync/') && r.url.queryParameters['after'] == '11'), isTrue);
     });
 
+    test('lecture sur un autre appareil : seul le compteur est synchronisé, aucun évènement « lu » ne touche mes propres messages', () async {
+      final got = <InboxEvent>[];
+      inbox.events.listen(got.add);
+      await inbox.bindUser('9');
+      await settle();
+      sockets.single.push({'type': 'read_self', 'conversation': 5, 'count': 2, 'unread_total': 0});
+      await settle();
+      expect(inbox.unread, 0);
+      expect(got.where((e) => e.type == 'read'), isEmpty);
+      expect(got.where((e) => e.type == 'resync'), isNotEmpty);
+    });
+
     test('accusés, lectures et évènements de statuts sont relayés ; changement de compte coupe la connexion', () async {
       final got = <InboxEvent>[];
       inbox.events.listen(got.add);

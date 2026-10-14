@@ -265,6 +265,14 @@ class InboxController extends ChangeNotifier with WidgetsBindingObserver {
       case 'read':
         refreshUnread();
         _emit(InboxEvent('read', conversationId: (m['conversation'] as num?)?.toInt(), upto: (m['upto'] as num?)?.toInt(), raw: m));
+      case 'read_self':
+        // Lu sur un autre appareil : seul le compteur est synchronisé (les messages du lecteur ne changent pas d'état).
+        final n = (m['unread_total'] as num?)?.toInt();
+        if (n != null && n != unread) {
+          unread = n;
+          _notify();
+        }
+        _emit(InboxEvent('resync'));
       case 'delivered':
         _emit(InboxEvent('delivered', ids: ((m['ids'] as List?) ?? const []).map((e) => (e as num).toInt()).toList(), raw: m));
       case 'status' || 'status_view':
