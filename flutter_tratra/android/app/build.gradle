@@ -14,8 +14,9 @@ if (file("google-services.json").exists()) {
 // Les identifiants de signature restent hors du dépôt dans android/key.properties.
 // Sans ce fichier, un build release reste volontairement non signé : il ne doit
 // jamais retomber sur la clé de débogage.
+// TRATRA_SIGNING_PROPERTIES : fichier de signature alternatif (clé d'UPLOAD Play Store, hors Git) ; sans lui, android/key.properties (clé pilote).
 def keystoreProperties = new Properties()
-def keystorePropertiesFile = rootProject.file('key.properties')
+def keystorePropertiesFile = System.getenv("TRATRA_SIGNING_PROPERTIES") ? new File(System.getenv("TRATRA_SIGNING_PROPERTIES")) : rootProject.file('key.properties')
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.withInputStream { stream ->
         keystoreProperties.load(stream)

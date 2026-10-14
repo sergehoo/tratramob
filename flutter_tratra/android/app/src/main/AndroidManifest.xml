@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <!-- Géolocalisation au premier plan uniquement (artisans à proximité). -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -9,6 +9,10 @@
     <uses-feature android:name="android.hardware.camera.front" android:required="false" />
     <!-- Android 13+ : autorisation d'afficher les notifications (suivi de mission, réservations). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Permissions ajoutées par des plugins mais inutiles ici : la caméra n'enregistre aucun son (enableAudio: false ; les vidéos de statut passent par
+         la caméra système) et image_picker n'a besoin d'aucun accès large au stockage. Les retirer garde la liste de permissions Play minimale. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
     <!-- image_picker utilise le sélecteur et la caméra système : aucune permission
          large de médiathèque, ni localisation en arrière-plan, n'est demandée. -->
     <application
