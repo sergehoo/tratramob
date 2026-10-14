@@ -7,6 +7,7 @@ import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/user.dart';
 import 'package:flutter_tratra/routes.dart';
+import 'package:flutter_tratra/screens/auth/delete_account_screen.dart';
 import 'package:flutter_tratra/screens/auth/profile_extras.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart' show showMessage;
 import 'package:flutter_tratra/services/auth_service.dart';
@@ -254,6 +255,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           loading: _isLoggingOut,
           leading: const Icon(Icons.logout_rounded),
           onPressed: _logout,
+        ),
+        const SizedBox(height: TtSpace.s2),
+        TratraButton(
+          label: 'Supprimer mon compte',
+          variant: TratraButtonVariant.ghost,
+          block: true,
+          leading: const Icon(Icons.delete_outline_rounded, color: TtColors.danger),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DeleteAccountScreen())),
         ),
       ],
     );
