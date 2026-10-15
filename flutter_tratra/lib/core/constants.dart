@@ -34,6 +34,11 @@ class AppConstants {
     defaultValue: 'https://api.tratra.net/handy',
   );
 
+  // Fonctions financières (portefeuille, gains, retraits, écran de paiement). DÉSACTIVÉES par défaut : la version publiée sur
+  // Google Play n'en propose aucune (Play réserve ces fonctions aux comptes organisation). Activables au build :
+  // --dart-define=TRATRA_FINANCIAL=true. Les réservations en espèces et leur suivi restent disponibles.
+  static const bool financialFeaturesEnabled = bool.fromEnvironment('TRATRA_FINANCIAL', defaultValue: false);
+
   // Hôte public du stockage des médias (MinIO / S3), sans barre finale — surchargeable au build via --dart-define=TRATRA_MEDIA_BASE=...
   static const String mediaBase = String.fromEnvironment(
     'TRATRA_MEDIA_BASE',

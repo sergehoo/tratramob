@@ -163,8 +163,8 @@ void main() {
       await t.pumpWidget(_host(DashData(_payload(provider: true)), Scaffold(body: DashboardHome(onExplore: () {}, onMessages: () {}))));
       expect(find.text('Gérer mes services'), findsOneWidget);
       expect(find.text('Missions à traiter'), findsOneWidget);
-      expect(find.text('Gains disponibles'), findsOneWidget);
-      expect(find.text(formatFcfa(13350)), findsOneWidget);
+      expect(find.text('Gains disponibles'), findsNothing); // fonctions financières désactivées (version Google Play)
+      expect(find.text(formatFcfa(13350)), findsNothing);
       expect(find.text('Profil professionnel'), findsOneWidget);
       expect(find.text('Aucun document déposé'), findsOneWidget);
       expect(find.text('Proposer un service'), findsNothing);
@@ -223,7 +223,7 @@ void main() {
       await t.tap(find.text('Plus'));
       await t.pumpAndSettle();
       expect(find.text('Proposer un service'), findsOneWidget);
-      expect(find.text('Portefeuille'), findsOneWidget);
+      expect(find.text('Portefeuille'), findsNothing); // fonctions financières désactivées (version Google Play)
       expect(find.text('Avis'), findsOneWidget);
       expect(find.text('Notifications'), findsWidgets);
       expect(find.text('Mes prestations'), findsNothing);

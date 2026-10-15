@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
@@ -65,7 +66,7 @@ class _ProvideScreenState extends State<ProvideScreen> {
         children: [
           Text('Devenez artisan avec votre compte actuel', style: TratraTheme.style(TtType.h1)),
           const SizedBox(height: TtSpace.s2),
-          Text('Aucun nouveau compte : vous gardez vos réservations, vos messages et votre portefeuille.',
+          Text('Aucun nouveau compte : vous gardez vos réservations et vos messages.',
               style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
           const SizedBox(height: TtSpace.s5),
           for (final s in steps) ...[
@@ -141,8 +142,10 @@ class _ProviderHubScreenState extends State<ProviderHubScreen> {
             children: [
               if (p != null) ...[
                 DashKpi(icon: Icons.handyman_outlined, tone: TratraTone.accent, label: 'Missions à traiter', value: '${p.pending}', hint: '${p.confirmed + p.inProgress} à venir'),
-                const SizedBox(height: TtSpace.s2),
-                DashKpi(icon: Icons.account_balance_wallet_outlined, tone: TratraTone.night, label: 'Gains disponibles', value: fcfaOrZero(p.earnings), onTap: () => openWallet(context)),
+                if (AppConstants.financialFeaturesEnabled) ...[
+                  const SizedBox(height: TtSpace.s2),
+                  DashKpi(icon: Icons.account_balance_wallet_outlined, tone: TratraTone.night, label: 'Gains disponibles', value: fcfaOrZero(p.earnings), onTap: () => openWallet(context)),
+                ],
                 const SizedBox(height: TtSpace.s3),
               ],
               TratraCard(

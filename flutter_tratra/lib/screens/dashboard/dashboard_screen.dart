@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/messaging/inbox_controller.dart';
@@ -158,7 +159,8 @@ class _MoreTab extends StatelessWidget {
       else
         _Entry(Icons.add_business_outlined, 'Proposer un service', 'Publiez vos prestations avec ce même compte', () => openProvide(context)),
       _Entry(Icons.description_outlined, 'Engagements', 'Contrats récurrents et de longue durée, offres et candidatures', () => openEngagements(context)),
-      _Entry(Icons.account_balance_wallet_outlined, 'Portefeuille', isProvider ? 'Paiements, gains et retraits' : 'Vos paiements', () => openWallet(context)),
+      if (AppConstants.financialFeaturesEnabled)
+        _Entry(Icons.account_balance_wallet_outlined, 'Portefeuille', isProvider ? 'Paiements, gains et retraits' : 'Vos paiements', () => openWallet(context)),
       if (isProvider) ...[
         _Entry(Icons.workspace_premium_outlined, 'Ma réputation', 'Badges, score de confiance et justificatifs', () => openReputation(context)),
         _Entry(Icons.badge_outlined, 'Mon badge Tratra ID', 'QR de vérification et badge imprimable', () => openMyBadge(context)),

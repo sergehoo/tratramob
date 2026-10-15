@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart' show DashboardApi;
 import 'package:flutter_tratra/continuity/drafts.dart';
 import 'package:flutter_tratra/core/api_exception.dart';
@@ -389,6 +390,13 @@ class _BookingScreenState extends State<BookingScreen> {
       _done = true; // confirmée par le serveur
       await _discardDraft();
       if (!mounted) return;
+
+      if (!AppConstants.financialFeaturesEnabled) {
+        // Pas d'écran de paiement : la demande est envoyée, le règlement se fait avec l'artisan (espèces).
+        _showSuccess('Réservation créée avec succès !');
+        Navigator.pushNamedAndRemoveUntil(context, RouteNames.booking, ModalRoute.withName(RouteNames.home));
+        return;
+      }
 
       final priceToPay = _priceToPay(s) + (_transport?.amount ?? 0);
 

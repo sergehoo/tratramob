@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/continuity/continuity_widgets.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/routes.dart';
@@ -87,13 +88,14 @@ class _DashboardHomeState extends State<DashboardHome> {
           hint: '${provider.completed} terminée${provider.completed > 1 ? 's' : ''}',
           onTap: () => openProviderHub(context),
         ),
-        DashKpi(
-          icon: Icons.account_balance_wallet_outlined,
-          tone: TratraTone.night,
-          label: 'Gains disponibles',
-          value: fcfaOrZero(provider.earnings),
-          onTap: () => openWallet(context),
-        ),
+        if (AppConstants.financialFeaturesEnabled)
+          DashKpi(
+            icon: Icons.account_balance_wallet_outlined,
+            tone: TratraTone.night,
+            label: 'Gains disponibles',
+            value: fcfaOrZero(provider.earnings),
+            onTap: () => openWallet(context),
+          ),
       ] else ...[
         DashKpi(
           icon: Icons.check_circle_outline_rounded,
