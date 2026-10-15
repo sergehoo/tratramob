@@ -38,3 +38,10 @@ Données collectées (toutes facultatives = non, sauf mention) : nom, téléphon
 
 ## Informations de connexion (à faire par le propriétaire)
 Compte de relecture : `python manage.py create_review_account` sur le serveur de production (après redéploiement de l'image). Saisir le numéro et le mot de passe affichés dans la console, avec la consigne « connexion par numéro de téléphone + mot de passe, aucun code SMS requis ».
+
+
+## Rejet Google Play du 15 oct. 2026 (« Play Console Requirements ») et correction
+Cause : déclaration « Fonctionnalités financières » = « Paiements mobiles et portefeuilles numériques » (réservée aux comptes ORGANISATION). Décision : retirer ces fonctions de la version Android plutôt que de changer de compte.
+- Code (commit `84f5fb1`) : portefeuille, gains disponibles, retraits et écran de paiement masqués ; drapeau `AppConstants.financialFeaturesEnabled` (`--dart-define=TRATRA_FINANCIAL=true` pour les réactiver), désactivé par défaut. Réservations en espèces inchangées.
+- AAB à publier : **build 3** (`tool/build_play_aab.sh --build 3`). Le build 1 et le build 2 contiennent encore le portefeuille : à retirer de toute release.
+- Console à mettre à jour APRÈS le téléversement du build 3 : Fonctionnalités financières → « Mon appli ne fournit aucune fonctionnalité financière » ; Sécurité des données → retirer « Informations de paiement de l'utilisateur » (garder « Historique des achats » = historique des réservations) ; description complète de la fiche (`description-complete.txt`, ligne « vos paiements » retirée) ; puis « Envoyer pour examen ».
