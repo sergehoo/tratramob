@@ -13,10 +13,12 @@ import 'package:flutter_tratra/models/conversation.dart';
 import 'package:flutter_tratra/models/message.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../core/constants.dart';
+import '../core/timeout_http_client.dart';
 
 class ApiService {
   final String baseUrl = AppConstants.baseUrl;
-  final http.Client client = http.Client();
+  // Délai maximal par requête : un serveur muet ne doit jamais figer l'écran (voir core/timeout_http_client.dart).
+  final http.Client client = TimeoutHttpClient(http.Client());
   String? authToken;
 
   // Méthode pour définir le token d'authentification

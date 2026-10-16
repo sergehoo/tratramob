@@ -1,4 +1,6 @@
 // Users/ogahserge/Documents/handy_tratra/flutter_tratra/lib/screens/auth/register_screen.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/routes.dart';
@@ -29,6 +31,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _acceptTerms = false;
   bool _showTermsWarning = false;
   String? _error;
+  bool _slow = false; // la requête dure : message d'attente
 
   final FocusNode _lastNameFocusNode = FocusNode();
   final FocusNode _phoneFocusNode = FocusNode();
@@ -67,6 +70,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() {
       _isLoading = true;
       _error = null;
+      _slow = false;
+    });
+    // Après 8 s sans réponse : l'utilisateur sait que ça avance, et que l'échec est signalé au bout de 20 s.
+    final slowTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted && _isLoading) setState(() => _slow = true);
     });
 
     try {
@@ -79,7 +87,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       final token = _apiService.authToken;
       if (token == null || token.isEmpty) {
-        throw Exception("Jeton d'authentification manquant");
+        // Le compte EST créé mais la connexion automatique a échoué (réseau) : retour à la connexion, sans refaire l'inscription.
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Compte créé. Connectez-vous avec votre numéro de téléphone et votre mot de passe.')));
+        Navigator.pushReplacementNamed(context, RouteNames.login);
+        return;
       }
       await _storageService.saveAuthToken(token);
       await _storageService.saveUserData(user);
@@ -92,7 +105,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
       setState(() => _error = authErrorMessage(e));
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      slowTimer.cancel();
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _slow = false;
+        });
+      }
     }
   }
 
@@ -241,6 +260,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 message: _showTermsWarning
                     ? 'Veuillez accepter les conditions d’utilisation'
                     : null,
+              ),
+              AuthNotice(
+                tone: TratraAlertTone.info,
+                message: _slow ? 'La connexion est lente… patientez quelques secondes.' : null,
               ),
               AuthNotice(
                 title: 'Erreur d’inscription',
