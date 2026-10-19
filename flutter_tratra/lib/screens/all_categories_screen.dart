@@ -1,22 +1,25 @@
 // lib/screens/all_categories_screen.dart
+//
+// « Tous les métiers » : le catalogue COMPLET, lu depuis le catalogue commun (`GET /handy/catalog/`, même réponse que le site). Un métier actif
+// est toujours affiché, avec ou sans offre ; ses prestations sont listées à l'ouverture de la carte.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/base_api.dart';
-import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/category.dart';
+import 'package:flutter_tratra/screens/all_services_screen.dart';
 import 'package:flutter_tratra/screens/browse/browse_parts.dart';
+import 'package:flutter_tratra/screens/home/home_icons.dart';
+import 'package:flutter_tratra/services/catalog_repository.dart';
 
-/// Valeurs `ordering` acceptées par l'API et leur libellé.
+/// Tris proposés : l'ordre du catalogue (réglé dans l'administration) ou l'ordre alphabétique.
 const List<(String, String)> _orderingOptions = [
+  ('order', 'Ordre du catalogue'),
   ('name', 'Nom A→Z'),
   ('-name', 'Nom Z→A'),
-  ('-created_at', 'Plus récentes'),
-  ('created_at', 'Plus anciennes'),
 ];
 
 /// Grille des cellules : 3 colonnes sur téléphone, davantage sur grand écran.
@@ -28,6 +31,19 @@ const SliverGridDelegateWithMaxCrossAxisExtent _tileGrid =
   childAspectRatio: .8,
 );
 
+/// Texte sans accents ni casse : « Élagage » se trouve en tapant « elag ».
+String _plain(String text) {
+  const from = 'àâäáãåçéèêëíìîïñóòôöõúùûüýÿœæ';
+  const to = 'aaaaaaceeeeiiiinooooouuuuyyoa';
+  final buffer = StringBuffer();
+  for (final rune in text.toLowerCase().runes) {
+    final ch = String.fromCharCode(rune);
+    final i = from.indexOf(ch);
+    buffer.write(i >= 0 ? to[i] : ch);
+  }
+  return buffer.toString();
+}
+
 class AllCategoriesScreen extends StatefulWidget {
   const AllCategoriesScreen({super.key});
 
@@ -38,167 +54,155 @@ class AllCategoriesScreen extends StatefulWidget {
 class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
   late final BaseApi _api;
 
-  // État chargement / pagination
+  // État chargement
   bool _loading = true;
-  bool _loadingMore = false;
   String? _error;
-  List<Category> _items = [];
-  int _currentPage = 1;
-  bool _hasMore = true;
+  Catalog? _catalog;
 
-  // Recherche & filtres
+  // Recherche & tri (côté application : le catalogue est léger et complet)
   final TextEditingController _search = TextEditingController();
-  Timer? _searchDebounce;
-  String _ordering = 'name'; // options: name, -name, -created_at, created_at
-  bool _onlyActive = true;
+  String _ordering = 'order';
 
   @override
   void initState() {
     super.initState();
     _api = context.read<BaseApi>();
-    _loadInitial();
+    final repo = CatalogRepository.shared(_api);
+    _catalog = repo.cached; // affichage immédiat si le catalogue est déjà connu
+    _loading = _catalog == null;
+    _load();
   }
 
   @override
   void dispose() {
-    _searchDebounce?.cancel();
     _search.dispose();
     super.dispose();
   }
 
-  // ============ API ============
+  // ============ DONNÉES ============
 
-  Future<void> _loadInitial() async {
-    if (!mounted) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-      _items.clear();
-      _currentPage = 1;
-      _hasMore = true;
-    });
-    await _load(reset: true);
-  }
-
-  Future<void> _loadMore() async {
-    if (_loadingMore || !_hasMore) return;
-    setState(() => _loadingMore = true);
-    await _load();
-  }
-
-  Future<void> _load({bool reset = false}) async {
+  Future<void> _load({bool force = false}) async {
     try {
-      final queryParams = <String, String>{
-        'page_size': '24',
-        'ordering': _ordering,
-        'page': reset ? '1' : (_currentPage + 1).toString(),
-        if (_search.text.trim().isNotEmpty) 'search': _search.text.trim(),
-        if (_onlyActive) 'is_active': 'true',
-      };
-
-      final uri =
-          Uri.parse('${_api.baseUrl}${AppConstants.categoriesEndpoint}/')
-              .replace(queryParameters: queryParams);
-
-      final r = await _getPublic(uri);
-      if (r.statusCode != 200) {
-        _api.handleError(r);
-      }
-
-      final decoded = _api.decodeBody(r);
-      final results = _api.extractResults(decoded);
-      final pagination = _api.extractPagination(decoded);
-
-      final newItems = results
-          .map<Category>((e) => Category.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
-
-      // Robustesse pagination (si extractPagination est null ou différent)
-      dynamic nextVal;
-      if (pagination['next'] != null) {
-        nextVal = pagination['next'];
-      } else if (decoded is Map && decoded['next'] != null) {
-        nextVal = decoded['next'];
-      } else if (decoded is Map &&
-          decoded['pagination'] is Map &&
-          (decoded['pagination'] as Map)['next'] != null) {
-        nextVal = (decoded['pagination'] as Map)['next'];
-      }
-
+      final catalog = await CatalogRepository.shared(_api).load(forceRefresh: force);
       if (!mounted) return;
       setState(() {
-        if (reset) {
-          _items = newItems;
-          _currentPage = 1;
-        } else {
-          _items.addAll(newItems);
-          _currentPage++;
-        }
-        _hasMore = nextVal != null && nextVal.toString().isNotEmpty;
+        _catalog = catalog;
+        _error = null;
         _loading = false;
-        _loadingMore = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.toString();
         _loading = false;
-        _loadingMore = false;
       });
     }
   }
 
-  Future<http.Response> _getPublic(Uri uri) async {
-    final c = _api.client;
-    var r = await c.get(uri, headers: await _api.getHeaders(withAuth: true));
-    if (r.statusCode == 401) {
-      r = await c.get(uri, headers: await _api.getHeaders(withAuth: false));
+  Future<void> _refresh() => _load(force: true);
+
+  /// Métiers visibles : recherche (métier, prestations, description) puis tri.
+  List<Category> get _items {
+    final catalog = _catalog;
+    if (catalog == null) return const [];
+    final q = _plain(_search.text.trim());
+    var trades = catalog.trades;
+    if (q.isNotEmpty) {
+      trades = [
+        for (final t in trades)
+          if (_plain(t.name).contains(q) ||
+              _plain(t.description ?? '').contains(q) ||
+              catalog.prestationsOf(t.id).any((p) => _plain(p.name).contains(q)))
+            t,
+      ];
     }
-    return r;
+    int byName(Category a, Category b) => _plain(a.name).compareTo(_plain(b.name));
+    final sorted = [...trades];
+    if (_ordering == 'name') sorted.sort(byName);
+    if (_ordering == '-name') sorted.sort((a, b) => byName(b, a));
+    return sorted;
   }
 
   // ============ ACTIONS ============
 
-  void _onSearchChanged(String value) {
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 500), () {
-      _loadInitial();
-    });
-  }
+  bool get _hasActiveFilters => _search.text.isNotEmpty || _ordering != 'order';
 
-  bool get _hasActiveFilters =>
-      _search.text.isNotEmpty || _ordering != 'name' || !_onlyActive;
-
-  void _clearFilters() {
-    setState(() {
-      _search.clear();
-      _ordering = 'name';
-      _onlyActive = true;
-    });
-    _loadInitial();
-  }
+  void _clearFilters() => setState(() {
+        _search.clear();
+        _ordering = 'order';
+      });
 
   void _setOrdering(String value) {
     if (_ordering == value) return;
     setState(() => _ordering = value);
-    _loadInitial();
   }
 
   void _showFilterDialog() {
     showTratraSheet<void>(
       context,
-      title: 'Filtres & tri',
+      title: 'Tri',
       child: _CategoryFiltersForm(
         ordering: _ordering,
-        onlyActive: _onlyActive,
-        onApply: (ordering, onlyActive) {
-          setState(() {
-            _ordering = ordering;
-            _onlyActive = onlyActive;
-          });
-          _loadInitial();
-        },
+        onApply: (ordering) => setState(() => _ordering = ordering),
         onClear: _clearFilters,
+      ),
+    );
+  }
+
+  /// Ouvre un métier : ses prestations (avec leurs offres) et l'accès aux offres.
+  void _openTrade(Category trade) {
+    final catalog = _catalog;
+    if (catalog == null) return;
+    final prestations = catalog.prestationsOf(trade.id);
+    showTratraSheet<void>(
+      context,
+      title: trade.name,
+      description: _offersLabel(trade.offersTotal),
+      child: Builder(
+        builder: (sheetContext) {
+          void browse(String name) {
+            Navigator.of(sheetContext).pop();
+            Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AllServicesScreen(initialCategory: name)));
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if ((trade.description ?? '').trim().isNotEmpty) ...[
+                Text(trade.description!.trim(), style: TratraTheme.style(TtType.body, color: TtColors.ash)),
+                const SizedBox(height: TtSpace.s3),
+              ],
+              if (prestations.isEmpty)
+                Text('Aucune prestation détaillée pour ce métier.', style: TratraTheme.style(TtType.body, color: TtColors.ash))
+              else
+                for (final p in prestations) ...[
+                  TratraCard(
+                    variant: TratraCardVariant.flat,
+                    radius: TtRadius.panel,
+                    padding: const EdgeInsets.symmetric(horizontal: TtSpace.s4, vertical: TtSpace.s3),
+                    semanticLabel: '${p.name}, ${_offersLabel(p.offersTotal)}',
+                    onTap: () => browse(p.name),
+                    child: Row(
+                      children: [
+                        homeCategoryIcon(p, color: TtColors.primaryDark, size: 18),
+                        const SizedBox(width: TtSpace.s3),
+                        Expanded(child: Text(p.name, style: TratraTheme.style(TtType.title).copyWith(fontSize: 14))),
+                        Text(_offersLabel(p.offersTotal), style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: TtSpace.s2),
+                ],
+              const SizedBox(height: TtSpace.s3),
+              TratraButton(
+                label: 'Voir les offres de ${trade.name}',
+                block: true,
+                trailing: const Icon(Icons.arrow_forward_rounded),
+                onPressed: () => browse(trade.name),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -210,7 +214,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
     return Scaffold(
       backgroundColor: TtColors.canvas,
       appBar: TratraAppBar(
-        title: 'Toutes les catégories',
+        title: 'Tous les métiers',
         actions: [
           if (_hasActiveFilters)
             IconButton(
@@ -226,7 +230,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
           _buildHeader(),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: _loadInitial,
+              onRefresh: _refresh,
               color: TtColors.primaryDark,
               backgroundColor: TtColors.surface,
               child: _buildContent(),
@@ -246,38 +250,28 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Barre de recherche (debounce)
           Padding(
-            padding: const EdgeInsets.fromLTRB(
-                TtSpace.s4, TtSpace.s3, TtSpace.s4, TtSpace.s2),
+            padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s3, TtSpace.s4, TtSpace.s2),
             child: ValueListenableBuilder<TextEditingValue>(
               valueListenable: _search,
               builder: (_, value, __) => TratraInput(
                 controller: _search,
-                hint: 'Rechercher une catégorie…',
+                hint: 'Rechercher un métier ou une prestation…',
                 leadingIcon: Icons.search_rounded,
                 textInputAction: TextInputAction.search,
-                onChanged: _onSearchChanged,
+                onChanged: (_) => setState(() {}),
                 suffix: value.text.isEmpty
                     ? null
                     : IconButton(
                         tooltip: 'Effacer la recherche',
                         icon: const Icon(Icons.close_rounded, size: 20),
-                        onPressed: () {
-                          _search.clear();
-                          _loadInitial();
-                        },
+                        onPressed: () => setState(_search.clear),
                       ),
               ),
             ),
           ),
-
-          // Filtres + tri
           _buildSortRow(),
-
-          // Filtres actifs (recherche, inactives)
           _buildActiveFilters(),
-
           const SizedBox(height: TtSpace.s2),
         ],
       ),
@@ -293,7 +287,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
         children: [
           Center(
             child: TratraButton(
-              label: 'Filtres',
+              label: 'Tri',
               variant: TratraButtonVariant.soft,
               size: TratraButtonSize.sm,
               leading: const Icon(Icons.tune_rounded),
@@ -323,44 +317,31 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
   }
 
   Widget _buildActiveFilters() {
-    final chips = <Widget>[
-      if (_search.text.isNotEmpty)
-        _RemovableChip(
-          label: 'Recherche : ${_search.text}',
-          onRemove: () {
-            _search.clear();
-            _loadInitial();
-          },
-        ),
-      if (!_onlyActive)
-        _RemovableChip(
-          label: 'Inclure inactives',
-          onRemove: () {
-            setState(() => _onlyActive = true);
-            _loadInitial();
-          },
-        ),
-    ];
-    if (chips.isEmpty) return const SizedBox.shrink();
-
+    if (_search.text.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       height: 44,
-      child: ListView.separated(
+      child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: TtSpace.s4),
-        itemCount: chips.length,
-        separatorBuilder: (_, __) => const SizedBox(width: TtSpace.s2),
-        itemBuilder: (_, i) => Center(child: chips[i]),
+        children: [
+          Center(
+            child: _RemovableChip(
+              label: 'Recherche : ${_search.text}',
+              onRemove: () => setState(_search.clear),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildContent() {
-    if (_loading && _items.isEmpty) {
+    final items = _items;
+    if (_loading && _catalog == null) {
       return const _CategoriesSkeleton();
     }
 
-    if (_error != null) {
+    if (_error != null && _catalog == null) {
       return BrowseCenteredScroll(
         key: const ValueKey('categories-error'),
         child: TratraEmptyState(
@@ -371,27 +352,27 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
             TratraButton(
               label: 'Réessayer',
               leading: const Icon(Icons.refresh_rounded),
-              onPressed: _loadInitial,
+              onPressed: _refresh,
             ),
           ],
         ),
       );
     }
 
-    if (_items.isEmpty) {
+    if (items.isEmpty) {
       final filtered = _hasActiveFilters;
       return BrowseCenteredScroll(
         key: const ValueKey('categories-empty'),
         child: TratraEmptyState(
           icon: Icons.category_outlined,
-          title: 'Aucune catégorie',
+          title: filtered ? 'Aucun métier' : 'Le catalogue des métiers arrive',
           description: filtered
-              ? 'Aucune catégorie ne correspond à votre recherche ou à vos filtres.'
-              : 'Aucune catégorie n’est disponible pour le moment.',
+              ? 'Aucun métier ni aucune prestation ne correspond à votre recherche.'
+              : 'Les métiers s’afficheront ici dès leur ouverture sur la plateforme.',
           actions: [
             if (filtered)
               TratraButton(
-                label: 'Réinitialiser les filtres',
+                label: 'Réinitialiser',
                 variant: TratraButtonVariant.soft,
                 onPressed: _clearFilters,
               )
@@ -400,7 +381,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
                 label: 'Actualiser',
                 variant: TratraButtonVariant.outline,
                 leading: const Icon(Icons.refresh_rounded),
-                onPressed: _loadInitial,
+                onPressed: _refresh,
               ),
           ],
         ),
@@ -409,119 +390,86 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
 
     return BrowseFadeIn(
       key: const ValueKey('categories-grid'),
-      child: NotificationListener<ScrollNotification>(
-        onNotification: (n) {
-          if (n is ScrollEndNotification &&
-              n.metrics.pixels == n.metrics.maxScrollExtent &&
-              _hasMore &&
-              !_loadingMore) {
-            _loadMore();
-          }
-          return false;
-        },
-        child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
-                  TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s2),
-              sliver: SliverGrid(
-                gridDelegate: _tileGrid,
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) {
-                    if (i == _items.length && _hasMore) {
-                      return const TratraShimmer(child: _CategoryTileSkeleton());
-                    }
-                    if (i >= _items.length) return null;
-                    return _CategoryTile(category: _items[i]);
-                  },
-                  childCount: _items.length + (_hasMore ? 1 : 0),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s2),
+            sliver: SliverGrid(
+              gridDelegate: _tileGrid,
+              delegate: SliverChildBuilderDelegate(
+                (context, i) => _CategoryTile(
+                  category: items[i],
+                  prestations: _catalog!.prestationsOf(items[i].id),
+                  onTap: () => _openTrade(items[i]),
                 ),
+                childCount: items.length,
               ),
             ),
-            if (_loadingMore)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: TtSpace.s3),
-                  child: Center(
-                    child: SizedBox.square(
-                      dimension: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2.4),
-                    ),
-                  ),
-                ),
-              ),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: TtSpace.s6 + MediaQuery.paddingOf(context).bottom,
-              ),
-            ),
-          ],
-        ),
+          ),
+          SliverToBoxAdapter(
+            child: SizedBox(height: TtSpace.s6 + MediaQuery.paddingOf(context).bottom),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ===== Cellule catégorie =====
+/// « 12 offres », « 1 offre » ou « Aucune offre » (un métier sans offre reste affiché).
+String _offersLabel(int? count) {
+  if (count == null) return '';
+  if (count <= 0) return 'Aucune offre';
+  return count == 1 ? '1 offre' : '$count offres';
+}
 
-/// Cellule d'information : l'application n'expose pas de destination filtrée par
-/// catégorie, la cellule n'est donc pas cliquable (pas de faux affordance).
+// ===== Cellule métier =====
+
+/// Carte d'un métier : icône du catalogue, nom, nombre d'offres publiées ; un appui ouvre ses prestations.
 class _CategoryTile extends StatelessWidget {
-  const _CategoryTile({required this.category});
+  const _CategoryTile({required this.category, required this.prestations, required this.onTap});
   final Category category;
+  final List<Category> prestations;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final c = category;
-    return Semantics(
-      container: true,
-      excludeSemantics: true,
-      label: c.isActive ? c.name : '${c.name}, inactive',
-      child: TratraCard(
-        variant: TratraCardVariant.flat,
-        padding: EdgeInsets.zero,
-        radius: TtRadius.panel,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  BrowseImage(
-                    url: c.imageUrl,
-                    fallbackIcon: Icons.handyman_outlined,
-                  ),
-                  if (!c.isActive)
-                    const Positioned(
-                      top: TtSpace.s2,
-                      left: TtSpace.s2,
-                      child: TratraBadge('Inactive', tone: TratraTone.gray),
-                    ),
-                ],
-              ),
-            ),
-            SizedBox(
-              height: 52,
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: TtSpace.s2),
-                  child: Text(
-                    c.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    textScaler:
-                        MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.15),
-                    style: TratraTheme.style(TtType.h3)
-                        .copyWith(fontSize: 13, height: 1.25),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+    final subtitle = prestations.isEmpty ? _offersLabel(c.offersTotal) : '${prestations.length} prestation${prestations.length > 1 ? 's' : ''}';
+    return TratraCard(
+      variant: TratraCardVariant.flat,
+      padding: const EdgeInsets.all(TtSpace.s2),
+      radius: TtRadius.panel,
+      semanticLabel: '${c.name}, $subtitle, ${_offersLabel(c.offersTotal)}',
+      onTap: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(color: TtColors.primarySoft, borderRadius: TtRadius.panelAll),
+            child: Center(child: homeCategoryIcon(c, color: TtColors.primaryDark)),
+          ),
+          const SizedBox(height: TtSpace.s2),
+          Text(
+            c.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.15),
+            style: TratraTheme.style(TtType.h3).copyWith(fontSize: 13, height: 1.25),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.1),
+            style: TratraTheme.style(TtType.caption, color: TtColors.ash),
+          ),
+        ],
       ),
     );
   }
@@ -567,7 +515,7 @@ class _CategoriesSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: 'Chargement des catégories',
+      label: 'Chargement des métiers',
       liveRegion: true,
       child: ExcludeSemantics(
         child: TratraShimmer(
@@ -650,33 +598,16 @@ class _RemovableChip extends StatelessWidget {
 
 // ===== Feuille de filtres =====
 
-/// Contenu de la feuille « Filtres & tri ». Le brouillon est local : rien n'est
-/// appliqué tant que l'utilisateur n'appuie pas sur « Appliquer ».
-class _CategoryFiltersForm extends StatefulWidget {
-  const _CategoryFiltersForm({
-    required this.ordering,
-    required this.onlyActive,
-    required this.onApply,
-    required this.onClear,
-  });
+class _CategoryFiltersForm extends StatelessWidget {
+  const _CategoryFiltersForm({required this.ordering, required this.onApply, required this.onClear});
 
   final String ordering;
-  final bool onlyActive;
-  final void Function(String ordering, bool onlyActive) onApply;
+  final void Function(String ordering) onApply;
   final VoidCallback onClear;
-
-  @override
-  State<_CategoryFiltersForm> createState() => _CategoryFiltersFormState();
-}
-
-class _CategoryFiltersFormState extends State<_CategoryFiltersForm> {
-  late String _ordering = widget.ordering;
-  late bool _onlyActive = widget.onlyActive;
 
   @override
   Widget build(BuildContext context) {
     final eyebrow = TratraTheme.style(TtType.eyebrow, color: TtColors.ash);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -689,59 +620,22 @@ class _CategoryFiltersFormState extends State<_CategoryFiltersForm> {
             for (final option in _orderingOptions)
               TratraChip(
                 label: option.$2,
-                selected: _ordering == option.$1,
-                onTap: () => setState(() => _ordering = option.$1),
-              ),
-          ],
-        ),
-        const SizedBox(height: TtSpace.s6),
-        Text('STATUT', style: eyebrow),
-        const SizedBox(height: TtSpace.s2),
-        TratraCard(
-          variant: TratraCardVariant.flat,
-          radius: TtRadius.panel,
-          padding: const EdgeInsets.symmetric(
-              horizontal: TtSpace.s4, vertical: TtSpace.s1),
-          child: SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              'Afficher uniquement les actives',
-              style: TratraTheme.style(TtType.body),
-            ),
-            value: _onlyActive,
-            onChanged: (v) => setState(() => _onlyActive = v),
-          ),
-        ),
-        const SizedBox(height: TtSpace.s6),
-        Row(
-          children: [
-            Expanded(
-              child: TratraButton(
-                label: 'Annuler',
-                variant: TratraButtonVariant.outline,
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-            const SizedBox(width: TtSpace.s3),
-            Expanded(
-              child: TratraButton(
-                label: 'Appliquer',
-                onPressed: () {
-                  widget.onApply(_ordering, _onlyActive);
+                selected: ordering == option.$1,
+                onTap: () {
+                  onApply(option.$1);
                   Navigator.of(context).pop();
                 },
               ),
-            ),
           ],
         ),
-        const SizedBox(height: TtSpace.s2),
+        const SizedBox(height: TtSpace.s4),
         Center(
           child: TratraButton(
             label: 'Tout effacer',
             variant: TratraButtonVariant.ghost,
             size: TratraButtonSize.sm,
             onPressed: () {
-              widget.onClear();
+              onClear();
               Navigator.of(context).pop();
             },
           ),

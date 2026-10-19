@@ -11,9 +11,13 @@ import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/service.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/service_list/service_list_kit.dart';
+import 'package:flutter_tratra/services/catalog_repository.dart';
 
 class AllServicesScreen extends StatefulWidget {
-  const AllServicesScreen({super.key});
+  /// Métier ou prestation présélectionné (depuis le catalogue) ; un métier couvre ses prestations côté serveur.
+  const AllServicesScreen({super.key, this.initialCategory});
+
+  final String? initialCategory;
 
   @override
   State<AllServicesScreen> createState() => _AllServicesScreenState();
@@ -47,6 +51,7 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
   void initState() {
     super.initState();
     _api = context.read<BaseApi>();
+    _selectedCategory = widget.initialCategory;
     _loadInitial();
     _loadCategories();
   }
@@ -64,27 +69,10 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
 
   Future<void> _loadCategories() async {
     try {
-      final uri =
-          Uri.parse('${_api.baseUrl}${AppConstants.categoriesEndpoint}/')
-              .replace(queryParameters: {
-        'page_size': '100',
-        'is_active': 'true',
-      });
-      final res = await _getPublic(uri);
-      if (res.statusCode == 200) {
-        final decoded = _api.decodeBody(res);
-        final results = _api.extractResults(decoded);
-        if (!mounted) return;
-        setState(() {
-          _categories = results
-              .map<String>((e) {
-                final m = e as Map<String, dynamic>;
-                return m['name']?.toString() ?? '';
-              })
-              .where((e) => e.isNotEmpty)
-              .toList();
-        });
-      }
+      // Catalogue COMMUN (même réponse que le site) : métiers puis prestations, dans l'ordre de l'administration.
+      final catalog = await CatalogRepository.shared(_api).load();
+      if (!mounted) return;
+      setState(() => _categories = catalog.names);
     } catch (_) {
       // Catégories optionnelles → silencieux
     }

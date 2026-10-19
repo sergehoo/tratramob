@@ -1,13 +1,27 @@
 // lib/models/category.dart
+/// Entrée du catalogue commun (`GET /handy/catalog/`) : un MÉTIER (catégorie racine, `parent == null`) ou une PRESTATION (sous-catégorie).
+/// Les offres des professionnels se rattachent à une catégorie ; `offersTotal` compte les offres du métier ET de ses prestations.
 class Category {
   final String id; // on force String pour éviter int/String mismatch
   final String name;
   final String slug;
   final String? description;
-  final String? icon; // nul dans ton payload
+  final String? icon; // saisie dans l'administration (« fa-solid fa-utensils »)
+  final String? iconKey; // clé normalisée par le serveur (« utensils ») : même icône que le site
   final bool isActive;
   final String? parent;
   final String imageUrl; // UI friendly (vide si pas d’image côté API)
+
+  /// Identifiant du métier (racine) auquel appartient l'entrée ; son propre identifiant pour un métier.
+  final String? trade;
+  final int position;
+
+  /// Rang dans l'arbre du catalogue (métier puis ses prestations) : l'ordre d'affichage commun au site et à l'application.
+  final int? order;
+  final bool isFeatured;
+  final int? offersCount;
+  final int? offersTotal;
+  final int prestationsCount;
 
   Category({
     required this.id,
@@ -15,12 +29,24 @@ class Category {
     required this.slug,
     this.description,
     this.icon,
+    this.iconKey,
     required this.isActive,
     this.parent,
     this.imageUrl = '',
+    this.trade,
+    this.position = 100,
+    this.order,
+    this.isFeatured = false,
+    this.offersCount,
+    this.offersTotal,
+    this.prestationsCount = 0,
   });
 
+  /// Métier (catégorie racine) ou prestation (sous-catégorie).
+  bool get isTrade => parent == null || parent!.isEmpty;
+
   factory Category.fromJson(Map<String, dynamic> json) {
+    int? asInt(Object? v) => v is int ? v : int.tryParse('${v ?? ''}');
     return Category(
       id: (json['id'] ?? '')
           .toString(), // <— évite “int is not a subtype of String”
@@ -28,11 +54,19 @@ class Category {
       slug: json['slug'] ?? '',
       description: json['description'],
       icon: json['icon'],
+      iconKey: json['icon_key']?.toString(),
       isActive: json['is_active'] ?? true,
       parent: json['parent']?.toString(),
       imageUrl: json['image'] ??
           json['image_url'] ??
           '', // si un jour tu ajoutes un champ image
+      trade: json['trade']?.toString(),
+      position: asInt(json['position']) ?? 100,
+      order: asInt(json['order']),
+      isFeatured: json['is_featured'] == true,
+      offersCount: asInt(json['offers_count']),
+      offersTotal: asInt(json['offers_total'] ?? json['services_count']),
+      prestationsCount: asInt(json['prestations_count']) ?? 0,
     );
   }
 
@@ -42,9 +76,17 @@ class Category {
         'slug': slug,
         'description': description,
         'icon': icon,
+        'icon_key': iconKey,
         'is_active': isActive,
         'parent': parent,
         'image_url': imageUrl,
+        'trade': trade,
+        'position': position,
+        'order': order,
+        'is_featured': isFeatured,
+        'offers_count': offersCount,
+        'offers_total': offersTotal,
+        'prestations_count': prestationsCount,
       };
 }
 

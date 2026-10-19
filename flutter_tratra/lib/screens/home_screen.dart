@@ -105,6 +105,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<List<HomeServiceEntry>> _fetchNearby(Position pos) =>
       _data.fetchNearby(pos, radiusKm: _nearbyRadiusKm, category: _selectedCategory);
 
+  /// Vrai après un premier chargement : les suivants (tirer pour actualiser, réessayer) redemandent le catalogue au serveur.
+  bool _loadedOnce = false;
+
   Future<void> _loadData() async {
     try {
       if (!mounted) return;
@@ -124,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final pos = _currentPosition;
       final results = await Future.wait<Object>([
-        _data.fetchCategories(),
+        _data.fetchCategories(refresh: _loadedOnce),
         _fetchServices(),
         if (pos != null) _fetchNearby(pos) else Future.value(<HomeServiceEntry>[]),
       ]);
@@ -137,6 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final slides = await _data.fetchSlides();
       if (!mounted) return;
 
+      _loadedOnce = true;
       setState(() {
         _categories = categories;
         _services = services;
@@ -204,11 +208,9 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (action) {
       case 'open_category':
         final id = params['category_id'];
-        if (id != null && _categories.isNotEmpty) {
-          final cat = _categories.firstWhere(
-            (c) => c.id == id.toString(),
-            orElse: () => _categories.first,
-          );
+        // Cible dans le catalogue complet (pas seulement les métiers mis en avant) ; introuvable → le catalogue entier plutôt qu'un autre métier.
+        final cat = id == null ? null : _data.catalogCategory(id.toString());
+        if (cat != null) {
           _onSelectCategory(cat);
         } else {
           _showAllCategories();
@@ -502,8 +504,8 @@ class _HomeScreenState extends State<HomeScreen> {
         'empty',
         HomeSectionEmpty(
           icon: Icons.category_outlined,
-          title: 'Aucune catégorie pour le moment',
-          description: 'Les catégories s’affichent dès qu’elles sont disponibles. Vérifiez votre connexion ou réessayez.',
+          title: 'Aucun métier pour le moment',
+          description: 'Les métiers s’affichent dès qu’ils sont disponibles. Vérifiez votre connexion ou réessayez.',
           actionLabel: 'Réessayer',
           onAction: _loadData,
         ),
@@ -528,7 +530,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return [
       SliverToBoxAdapter(
         child: TratraSectionHeader(
-          title: 'Catégories',
+          title: 'Métiers',
           subtitle: 'Choisissez un métier',
           actionLabel: 'Tout voir',
           onAction: _showAllCategories,

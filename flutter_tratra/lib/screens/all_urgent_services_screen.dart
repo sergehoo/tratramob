@@ -11,6 +11,7 @@ import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/service.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/service_list/service_list_kit.dart';
+import 'package:flutter_tratra/services/catalog_repository.dart';
 
 class AllUrgentServicesScreen extends StatefulWidget {
   const AllUrgentServicesScreen({super.key});
@@ -70,31 +71,12 @@ class _AllUrgentServicesScreenState extends State<AllUrgentServicesScreen> {
 
   Future<void> _loadCategories() async {
     try {
-      final uri =
-          Uri.parse('${_api.baseUrl}${AppConstants.categoriesEndpoint}/')
-              .replace(queryParameters: {
-        'page_size': '100',
-        'is_active': 'true',
-      });
-
-      final response = await _getPublic(uri);
-      if (response.statusCode == 200) {
-        final decoded = _api.decodeBody(response);
-        final results = _api.extractResults(decoded);
-
-        if (!mounted) return;
-        setState(() {
-          _categories = results
-              .map<String>((category) {
-                final data = category as Map<String, dynamic>;
-                return data['name']?.toString() ?? '';
-              })
-              .where((name) => name.isNotEmpty)
-              .toList();
-        });
-      }
+      // Catalogue COMMUN (même réponse que le site) : métiers puis prestations, dans l'ordre de l'administration.
+      final catalog = await CatalogRepository.shared(_api).load();
+      if (!mounted) return;
+      setState(() => _categories = catalog.names);
     } catch (_) {
-      // Les catégories sont optionnelles : on ignore silencieusement.
+      // Catégories optionnelles → silencieux
     }
   }
 

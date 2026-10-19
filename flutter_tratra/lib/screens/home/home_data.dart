@@ -7,6 +7,7 @@ import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/models/category.dart';
 import 'package:flutter_tratra/models/hero_slide_model.dart';
 import 'package:flutter_tratra/models/service.dart';
+import 'package:flutter_tratra/services/catalog_repository.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
@@ -17,17 +18,15 @@ class HomeDataSource {
 
   final BaseApi _api;
 
-  Future<List<Category>> fetchCategories() async {
-    final uri = Uri.parse('${_api.baseUrl}${AppConstants.categoriesEndpoint}/')
-        .replace(queryParameters: {'page_size': '100', 'is_active': 'true'});
-
-    final r = await _getPublic(uri);
-    if (r.statusCode != 200) _api.handleError(r);
-
-    final decoded = _api.decodeBody(r);
-    final list = _api.extractResults(decoded);
-    return list.map<Category>((e) => Category.fromJson(e)).toList();
+  /// Métiers mis en avant par l'administration, depuis le catalogue COMMUN (même réponse que le site) ; à défaut, les premiers du catalogue.
+  /// [refresh] : actualisation demandée (tirer pour actualiser, réessayer) ; sinon le cache frais du catalogue est servi.
+  Future<List<Category>> fetchCategories({bool refresh = false}) async {
+    final catalog = await CatalogRepository.shared(_api).load(forceRefresh: refresh);
+    return catalog.homeTrades();
   }
+
+  /// Entrée du catalogue (métier ou prestation) par identifiant : cibles des bannières, sans réseau si le catalogue est déjà connu.
+  Category? catalogCategory(String id) => CatalogRepository.shared(_api).cached?.byId(id);
 
   /// Services de la sélection (tri / catégorie / recherche), ou proches de [position]
   /// quand [onlyNearby] est actif et que la position est connue.
