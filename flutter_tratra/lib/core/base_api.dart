@@ -135,11 +135,14 @@ class BaseApi {
         req.files.add(await f());
       }
       final total = req.contentLength;
+      // finalize() pose l'en-tête « multipart/form-data; boundary=… » : il doit précéder la copie des en-têtes, sinon la requête part sans
+      // Content-Type et le serveur répond « Type de média « » non supporté ».
+      final body = req.finalize();
       final streamed = http.StreamedRequest(req.method, req.url)
         ..headers.addAll(req.headers)
         ..contentLength = total;
       var sent = 0;
-      req.finalize().listen(
+      body.listen(
         (chunk) {
           sent += chunk.length;
           streamed.sink.add(chunk);

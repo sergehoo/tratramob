@@ -139,6 +139,10 @@ void main() {
       final api = StatusApi(apiFor(s));
       await api.publish(text: 'Bonjour', audience: 'extended', allowReplies: false, background: 'sky', clientId: 'cid-1');
       var body = utf8.decode(s.requests.last.bodyBytes, allowMalformed: true);
+      // Sans cet en-tête, le serveur refuse la publication (« Type de média « » non supporté »).
+      final boundary = RegExp(r'^multipart/form-data; boundary=(.+)$').firstMatch(s.requests.last.headers['content-type'] ?? '');
+      expect(boundary, isNotNull);
+      expect(body, contains('--${boundary!.group(1)}'));
       for (final needle in ['name="text"', 'Bonjour', 'name="audience"', 'extended', 'name="allow_replies"', 'false', 'name="client_id"', 'cid-1', 'name="background"', 'sky']) {
         expect(body, contains(needle));
       }
