@@ -140,9 +140,10 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
       if (!mounted) return;
       final me = session.user?.id;
       _owner = me;
-      if (draft.owner != null && draft.owner != me) draft = OnbDraft(); // brouillon d'un autre compte : jamais montré
+      // Brouillon d'un autre compte, ou commencé sans compte avant la création de CE compte (téléphone partagé) : jamais montré.
+      if (!draft.belongsTo(me, session.user?.dateJoined)) draft = OnbDraft();
       try {
-        final server = await _api.sync(userId: me);
+        final server = await _api.sync(userId: me, joinedAt: session.user?.dateJoined);
         if (server.draft.started) draft = server.draft;
       } catch (_) {
         // hors ligne : le brouillon du téléphone suffit, il rejoindra le serveur plus tard

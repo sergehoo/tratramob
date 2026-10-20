@@ -138,6 +138,7 @@ class OnbDraft {
     this.firstName = '',
     this.lastName = '',
     this.owner,
+    this.startedAt,
   })  : prestations = prestations ?? [],
         answers = answers ?? {};
 
@@ -154,7 +155,18 @@ class OnbDraft {
   /// Compte auquel appartient un brouillon gardé sur le téléphone APRÈS la connexion (secours hors ligne) ; null = commencé sans compte.
   String? owner;
 
+  /// Début du brouillon sur ce téléphone : un brouillon commencé SANS compte ne rejoint qu'un compte créé APRÈS (même personne qui
+  /// passe à l'inscription classique), jamais le compte existant d'une autre personne qui se connecte sur un téléphone partagé.
+  DateTime? startedAt;
+
   bool get started => tradeId != null;
+
+  /// Ce brouillon peut-il être montré au compte `userId` (créé le `joinedAt`) et envoyé à son nom ?
+  bool belongsTo(String? userId, DateTime? joinedAt) {
+    if (owner != null) return owner == userId;
+    if (userId == null || joinedAt == null || startedAt == null) return false;
+    return !joinedAt.isBefore(startedAt!.subtract(const Duration(minutes: 5))); // marge : horloges du téléphone et du serveur
+  }
 
   Map<String, dynamic> toJson() => {
         'trade': tradeId,
@@ -167,6 +179,7 @@ class OnbDraft {
         'first_name': firstName,
         'last_name': lastName,
         if (owner != null) 'owner': owner,
+        if (startedAt != null) 'started_at': startedAt!.toUtc().toIso8601String(),
       };
 
   /// Ce que le serveur enregistre (les nom et prénom vont dans le compte, pas dans le brouillon serveur).
@@ -187,6 +200,7 @@ class OnbDraft {
         firstName: '${j['first_name'] ?? ''}',
         lastName: '${j['last_name'] ?? ''}',
         owner: j['owner']?.toString(),
+        startedAt: DateTime.tryParse('${j['started_at'] ?? ''}'),
       );
 
   /// Progression enregistrée sur le serveur (`GET /me/onboarding/`).
@@ -383,6 +397,7 @@ class OnboardingApi {
   }
 
   Future<void> saveLocal(OnbDraft d) async {
+    d.startedAt ??= DateTime.now();
     try {
       (await SharedPreferences.getInstance()).setString(_prefsKey, jsonEncode(d.toJson()));
     } catch (_) {}
@@ -400,11 +415,11 @@ class OnboardingApi {
   /// Compte connecté : le brouillon du téléphone (commencé sans compte, ou gardé hors ligne pour CE compte) rejoint le serveur s'il n'y
   /// a rien encore (rien n'est perdu, même après une inscription classique), puis quitte le téléphone. Le brouillon d'un AUTRE compte
   /// n'est jamais envoyé. Renvoie l'état serveur.
-  Future<OnbState> sync({String? userId}) async {
+  Future<OnbState> sync({String? userId, DateTime? joinedAt}) async {
     final server = await state();
     final local = await loadLocal();
     if (local == null || !local.started) return server;
-    if (local.owner != null && local.owner != userId) return server;
+    if (!local.belongsTo(userId, joinedAt)) return server;       // autre compte, ou compte existant d'une autre personne : jamais
     // Gardé hors ligne pour CE compte : plus récent que le serveur (il n'existe que si un envoi a échoué). Commencé sans compte : il
     // ne complète qu'un serveur vide.
     if (server.draft.started && local.owner == null) {

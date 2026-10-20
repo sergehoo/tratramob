@@ -35,8 +35,11 @@ class _OnboardingChoiceScreenState extends State<OnboardingChoiceScreen> {
   @override
   void initState() {
     super.initState();
+    final user = context.read<Session>().user;
     _api.loadLocal().then((d) {
-      if (mounted && d != null && d.started) setState(() => _draft = d);
+      // Seulement un brouillon de CETTE personne : sans compte, ou rattaché à ce compte (jamais celui d'un autre, même son métier).
+      final mine = d != null && (user == null ? d.owner == null : d.belongsTo(user.id, user.dateJoined));
+      if (mounted && d != null && d.started && mine) setState(() => _draft = d);
     });
   }
 
@@ -168,7 +171,8 @@ class _BeginnerProgressCardState extends State<BeginnerProgressCard> {
 
   Future<void> _load() async {
     try {
-      final s = await _api.sync(userId: context.read<Session>().user?.id); // un brouillon du téléphone rejoint le compte (rien n'est perdu)
+      final user = context.read<Session>().user;
+      final s = await _api.sync(userId: user?.id, joinedAt: user?.dateJoined); // un brouillon du téléphone rejoint le compte (rien n'est perdu)
       if (mounted) setState(() => _state = s);
     } catch (_) {
       // hors ligne : la carte réapparaîtra au prochain chargement

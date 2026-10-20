@@ -610,7 +610,7 @@ void main() {
       SharedPreferences.setMockInitialValues({
         'tratra.onboarding.draft.v1': jsonEncode({'trade': 12, 'trade_name': 'Nounou', 'step': 'commune'})
       });
-      await t.pumpWidget(_host(base, _Session(_awa), const OnboardingChoiceScreen(key: ValueKey('again'))));
+      await t.pumpWidget(_host(base, _Session(), const OnboardingChoiceScreen(key: ValueKey('again')))); // même personne, sans compte
       await t.pumpAndSettle();
       expect(find.text('Continuer mon inscription'), findsOneWidget);
       expect(find.textContaining('(Nounou)'), findsOneWidget);
@@ -651,16 +651,40 @@ void main() {
 
     testWidgets('après une inscription classique, le brouillon du téléphone rejoint le compte (rien n’est perdu)', (t) async {
       _size(t);
-      SharedPreferences.setMockInitialValues({
-        'tratra.onboarding.draft.v1': jsonEncode({'trade': 12, 'trade_name': 'Nounou', 'commune': 'Cocody', 'step': 'quartier'})
-      });
+      final draft = {
+        'trade': 12, 'trade_name': 'Nounou', 'commune': 'Cocody', 'step': 'quartier',
+        'started_at': DateTime.now().subtract(const Duration(minutes: 20)).toUtc().toIso8601String(),
+      };
+      SharedPreferences.setMockInitialValues({'tratra.onboarding.draft.v1': jsonEncode(draft)});
       final server = OnbServer();
       final base = _base(server.client);
-      await t.pumpWidget(_host(base, _Session(_awa), const Scaffold(body: BeginnerProgressCard())));
+      final newcomer = User(id: '9', email: '', firstName: 'Awa', userType: 'client', isActive: true, isVerified: true, dateJoined: DateTime.now());
+      await t.pumpWidget(_host(base, _Session(newcomer), const Scaffold(body: BeginnerProgressCard())));
       await t.pumpAndSettle();
       expect(server.puts, hasLength(1));
       expect(jsonDecode(server.puts.single.body)['commune'], 'Cocody');
       expect(find.byKey(const ValueKey('beginner-card')), findsOneWidget);
+    });
+
+    testWidgets('téléphone partagé : un brouillon commencé sans compte ne rejoint jamais le compte EXISTANT d’une autre personne', (t) async {
+      _size(t);
+      final draft = {'trade': 12, 'trade_name': 'Nounou', 'commune': 'Cocody', 'step': 'quartier', 'started_at': DateTime.now().toUtc().toIso8601String()};
+      SharedPreferences.setMockInitialValues({'tratra.onboarding.draft.v1': jsonEncode(draft)});
+      final server = OnbServer();
+      final base = _base(server.client);
+      final older = User(id: '10', email: '', firstName: 'Bob', userType: 'client', isActive: true, isVerified: true, dateJoined: DateTime(2026, 1, 5));
+      await t.pumpWidget(_host(base, _Session(older), const Scaffold(body: BeginnerProgressCard())));
+      await t.pumpAndSettle();
+      expect(server.puts, isEmpty);
+      expect(find.byKey(const ValueKey('beginner-card')), findsNothing);
+      await t.pumpWidget(_host(base, _Session(older), const OnboardingChoiceScreen()));
+      await t.pumpAndSettle();
+      expect(find.text('Continuer mon inscription'), findsNothing, reason: 'pas même le métier choisi par l’autre personne');
+      await t.pumpWidget(_host(base, _Session(older), const GuidedOnboardingScreen()));
+      await t.pumpAndSettle();
+      expect(find.text('Proposez vos services, pas à pas'), findsOneWidget);
+      expect(server.puts, isEmpty);
+      await t.pump(const Duration(seconds: 1));
     });
     testWidgets('le brouillon gardé pour un AUTRE compte n’est jamais envoyé ni montré', (t) async {
       _size(t);
