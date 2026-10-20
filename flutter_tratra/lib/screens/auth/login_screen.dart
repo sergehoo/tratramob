@@ -195,13 +195,6 @@ class _LoginScreenState extends State<LoginScreen> {
             onPressed: () => Navigator.pushNamed(context, RouteNames.register),
             child: const Text('Créer un compte'),
           ),
-          // Nounou, ménagère, jardinier… : inscription pas à pas, guidée à la voix (le formulaire classique reste disponible).
-          TextButton.icon(
-            key: const ValueKey('login-guided'),
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OnboardingChoiceScreen())),
-            icon: const Icon(Icons.record_voice_over_rounded, size: 20),
-            label: const Text('Je veux proposer mes services'),
-          ),
         ],
       ),
       child: AutofillGroup(
@@ -210,6 +203,31 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Nounou, ménagère, jardinier… : inscription pas à pas, guidée à la voix (le formulaire classique reste disponible).
+              Material(
+                key: const ValueKey('login-guided'),
+                color: TtColors.primarySoft,
+                borderRadius: BorderRadius.circular(TtRadius.panel),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(TtRadius.panel),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OnboardingChoiceScreen())),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: TtSpace.s3, vertical: TtSpace.s3),
+                    child: Row(children: [
+                      const Icon(Icons.record_voice_over_rounded, color: TtColors.primary),
+                      const SizedBox(width: TtSpace.s3),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('Je veux proposer mes services', style: TratraTheme.style(TtType.body).copyWith(fontWeight: FontWeight.w700)),
+                          Text('Inscription guidée, pas à pas', style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft)),
+                        ]),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: TtColors.primary),
+                    ]),
+                  ),
+                ),
+              ),
+              const SizedBox(height: TtSpace.s5),
               if (_byPhone)
                 TratraPhoneField(
                   key: const ValueKey('login-phone'),

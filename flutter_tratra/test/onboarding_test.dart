@@ -21,6 +21,7 @@ import 'package:flutter_tratra/kyc/identity_flow_screen.dart';
 import 'package:flutter_tratra/kyc/kyc_flow_api.dart';
 import 'package:flutter_tratra/models/user.dart';
 import 'package:flutter_tratra/onboarding/guided_onboarding_screen.dart';
+import 'package:flutter_tratra/onboarding/onboarding_api.dart';
 import 'package:flutter_tratra/onboarding/onboarding_entry.dart';
 import 'package:flutter_tratra/onboarding/voice_guide.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
@@ -75,10 +76,11 @@ final _config = {
       'text': 'Depuis combien de temps faites-vous ce travail ?',
       'help': '',
       'kind': 'single',
+      'target': 'experience',
       'required': true,
       'options': [
-        {'value': 'lt1', 'label': 'Moins d’un an', 'emoji': '🌱'},
-        {'value': '1_3', 'label': '1 à 3 ans', 'emoji': '👍'}
+        {'value': 'lt1', 'label': 'Moins d’un an', 'emoji': '🌱', 'years': 1},
+        {'value': '1_3', 'label': '1 à 3 ans', 'emoji': '👍', 'years': 2}
       ]
     },
     {
@@ -86,10 +88,11 @@ final _config = {
       'text': 'Quels jours pouvez-vous travailler ?',
       'help': '',
       'kind': 'multi',
+      'target': 'days',
       'required': true,
       'options': [
-        {'value': 'mon', 'label': 'Lundi'},
-        {'value': 'sat', 'label': 'Samedi'}
+        {'value': 'monday', 'label': 'Lundi'},
+        {'value': 'saturday', 'label': 'Samedi'}
       ]
     },
   ],
@@ -167,6 +170,8 @@ class _Session extends Session {
   User? get user => _u;
   @override
   bool get isAuthenticated => _u != null;
+  @override
+  Future<User?> refreshProfile() async => _u;
   @override
   Future<void> setUser(User user) async {
     _u = user;
@@ -263,8 +268,8 @@ Future<void> _answerAll(WidgetTester t) async {
   expect(find.text('Depuis combien de temps faites-vous ce travail ?'), findsOneWidget);
   await _tap(t, find.byKey(const ValueKey('onb-opt-experience-lt1')));
   await _continue(t);
-  await _tap(t, find.byKey(const ValueKey('onb-opt-days-mon')));
-  await _tap(t, find.byKey(const ValueKey('onb-opt-days-sat')));
+  await _tap(t, find.byKey(const ValueKey('onb-opt-days-monday')));
+  await _tap(t, find.byKey(const ValueKey('onb-opt-days-saturday')));
   await _continue(t);
   expect(find.byKey(const ValueKey('onb-offer')), findsOneWidget);
 }
@@ -314,8 +319,10 @@ void main() {
       expect(_spoken, hasLength(2), reason: '« Réécouter »');
 
       await _answerAll(t);
-      expect(find.textContaining('Je propose mes services de nounou à Cocody'), findsOneWidget);
-      expect(find.textContaining('moins d’un an'), findsOneWidget);
+      expect(find.text('Je propose mes services de nounou à Cocody.'), findsOneWidget);
+      expect(find.text('Disponible lundi et samedi.'), findsOneWidget);
+      expect(find.text('Je débute dans ce métier.'), findsOneWidget);
+      expect(_spoken.last, contains('Je propose mes services de nounou à Cocody.'), reason: 'la voix lit l’annonce');
       expect(server.applied, isFalse);
 
       await _continue(t); // « Mon annonce me convient »
@@ -326,7 +333,7 @@ void main() {
       expect(body['commune'], 'Cocody');
       expect(body['answers'], {
         'experience': 'lt1',
-        'days': ['mon', 'sat']
+        'days': ['monday', 'saturday']
       });
       expect(body.containsKey('password'), isFalse);
       expect(find.text('Votre photo'), findsOneWidget);
@@ -337,9 +344,11 @@ void main() {
       final upload = server.requests.where((r) => r.url.path.endsWith('/handymen/5/'));
       expect(upload, hasLength(1));
       expect(upload.single.method, 'PATCH');
+      server.states = {'photo': 'done'};
 
       await _tap(t, find.byKey(const ValueKey('onb-secondary'))); // identité : « Plus tard »
-      expect(find.text('Bravo, c’est presque fini !'), findsOneWidget);
+      expect(find.text('Votre annonce est enregistrée'), findsOneWidget, reason: 'fin honnête : la pièce n’a pas été envoyée');
+      expect(find.textContaining('Il vous reste à faire vérifier votre pièce d’identité.'), findsOneWidget);
       expect(await t.runAsync(_localDraft), isNull, reason: 'le brouillon local est vidé une fois l’annonce créée');
       await t.pump(const Duration(seconds: 1));
     });
@@ -390,7 +399,7 @@ void main() {
       expect(find.text('Dans quel quartier ?'), findsOneWidget);
       await _tap(t, find.byKey(const ValueKey('onb-secondary')));
       await _continue(t);
-      await _tap(t, find.byKey(const ValueKey('onb-opt-days-mon')));
+      await _tap(t, find.byKey(const ValueKey('onb-opt-days-monday')));
       await _continue(t);
       await _continue(t); // aperçu → compte
 
@@ -423,11 +432,59 @@ void main() {
       expect(server.puts, isNotEmpty, reason: 'le brouillon rejoint le compte dès sa création');
       expect(jsonDecode(server.puts.first.body)['answers'], {
         'experience': '1_3',
-        'days': ['mon']
+        'days': ['monday']
       });
       expect(server.applied, isTrue);
       expect(find.text('Votre photo'), findsOneWidget);
       expect(await t.runAsync(_localDraft), isNull);
+      await t.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('code SMS : « Plus tard » crée quand même l’annonce ; numéro vérifié entre-temps → aucun nouveau code', (t) async {
+      _size(t);
+      SharedPreferences.setMockInitialValues({
+        'tratra.onboarding.draft.v1': jsonEncode({
+          'trade': 12, 'trade_name': 'Nounou', 'prestations': [121], 'commune': 'Cocody', 'step': 'password',
+          'answers': {'experience': 'lt1', 'days': ['monday']}, 'first_name': 'Awa', 'last_name': 'Koné',
+        }),
+      });
+      final server = OnbServer();
+      final base = _base(server.client);
+      final session = _Session();
+      const unverified = User(id: '9', email: '', firstName: 'Awa', lastName: 'Koné', userType: 'client', isActive: true);
+      await t.pumpWidget(_host(
+          base,
+          session,
+          GuidedOnboardingScreen(signUp: (ctx, {required first, required last, required phone, required password}) async {
+            await session.setUser(unverified);
+            return true;
+          })));
+      await t.pumpAndSettle();
+      expect(find.text('Choisissez votre mot de passe'), findsOneWidget, reason: 'reprise à l’écran enregistré');
+      await t.enterText(_input('onb-password'), 'Essai2026x');
+      await t.enterText(_input('onb-confirm'), 'Essai2026x');
+      await t.pumpAndSettle();
+      await _continue(t);
+      expect(find.text('Confirmez votre numéro'), findsOneWidget);
+      expect(server.applied, isFalse);
+      await _tap(t, find.byKey(const ValueKey('onb-secondary')));             // « Plus tard »
+      expect(server.applied, isTrue, reason: 'l’annonce est créée ; le numéro sera confirmé depuis le tableau de bord');
+      expect(find.text('Votre photo'), findsOneWidget);
+      await t.pump(const Duration(seconds: 1));
+
+      // Reprise sur l'écran du code alors que le numéro a été vérifié ailleurs : pas de nouveau code, on avance.
+      server
+        ..applied = false
+        ..draft = {...server.draft, 'step': 'verify'};
+      await session.setUser(unverified);
+      await t.pumpWidget(_host(base, session, const GuidedOnboardingScreen(key: ValueKey('again'))));
+      await t.pumpAndSettle();
+      expect(find.text('Confirmez votre numéro'), findsOneWidget);
+      await session.setUser(const User(id: '9', email: '', firstName: 'Awa', lastName: 'Koné', userType: 'client', isActive: true, isVerified: true));
+      await _continue(t);
+      expect(find.text('Vérifiez votre téléphone'), findsNothing);
+      expect(server.applied, isTrue);
+      expect(find.text('Votre photo'), findsOneWidget);
       await t.pump(const Duration(seconds: 1));
     });
 
@@ -472,6 +529,52 @@ void main() {
       await _continue(t);
       expect(find.text('Quel est votre métier ?'), findsOneWidget);
     });
+  });
+
+  test('aperçu de l’annonce : mêmes phrases que le serveur (handy/test_onboarding.py), sans IA ni réseau', () {
+    Map<String, dynamic> o(String v, String l, {String phrase = '', int? years, int? amount, String? unit}) =>
+        {'value': v, 'label': l, 'phrase': phrase, 'years': years, 'amount': amount, 'unit': unit};
+    Map<String, dynamic> q(String key, String target, String kind, List<Map<String, dynamic>> options) =>
+        {'key': key, 'text': key, 'kind': kind, 'target': target, 'options': options};
+    final config = OnbConfig({
+      'trade': {'id': 1, 'name': 'Nousnou'},
+      'prestations': [
+        {'id': 11, 'name': 'Garde de nuit'},
+        {'id': 12, 'name': 'Sortie d’école'}
+      ],
+      'questions': [
+        q('experience', 'experience', 'single', [o('4', '3 à 5 ans', years: 4)]),
+        q('nanny_skills', 'strengths', 'multi', [
+          o('babies', 'M’occuper des bébés', phrase: 'soins des bébés'),
+          o('school', 'Les accompagner à l’école', phrase: 'accompagnement à l’école'),
+        ]),
+        q('nanny_lodging', 'info', 'single', [o('no', 'Non', phrase: 'sans hébergement')]),
+        q('nanny_price', 'price', 'single', [
+          o('m60000', '60 000 FCFA par mois', amount: 60000, unit: 'month'),
+          o('h', '2 000 FCFA de l’heure', amount: 2000, unit: 'hour'),
+        ]),
+        q('days', 'days', 'multi', [for (final d in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday']) o(d, d)]),
+        q('slots', 'slots', 'multi', [o('morning', 'Le matin'), o('afternoon', 'L’après-midi')]),
+      ],
+    });
+    final draft = OnbDraft(tradeId: 1, tradeName: 'Nousnou', prestations: [11], commune: 'Cocody', quartier: 'Riviera 2', answers: {
+      'experience': '4',
+      'nanny_skills': ['babies', 'school'],
+      'nanny_lodging': 'no',
+      'nanny_price': 'm60000',
+      'days': ['friday', 'monday', 'tuesday', 'wednesday', 'thursday'],
+      'slots': ['morning', 'afternoon'],
+    });
+    final (title, lines, price) = offerPreview(config, draft);
+    expect(title, 'Garde de nuit à Cocody');
+    expect(
+        lines.join(' '),
+        'Je propose mes services de nousnou à Cocody (Riviera 2). Ce que je fais : soins des bébés et accompagnement à l’école. '
+        'Sans hébergement. Disponible du lundi au vendredi le matin et l’après-midi. 4 ans d’expérience environ. '
+        'Tarif souhaité : 60 000 FCFA par mois (à discuter).');
+    expect(price, isNull, reason: 'salaire mensuel : à discuter, jamais un faux forfait');
+    draft.answers['nanny_price'] = 'h';
+    expect(offerPreview(config, draft).$3, '2 000 FCFA de l’heure');
   });
 
   group('entrées et tableau de bord débutant', () {

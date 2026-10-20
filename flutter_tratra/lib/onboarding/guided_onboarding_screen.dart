@@ -68,6 +68,7 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
   bool _otherTrades = false;
   bool _otherCity = false;
   Timer? _saveTimer;
+  OnbState? _final; // état serveur à la fin du parcours : ce qui reste vraiment à faire
 
   final _first = TextEditingController();
   final _last = TextEditingController();
@@ -105,8 +106,12 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
       _catalog = await CatalogRepository.shared(_base).load();
     } catch (_) {}
     OnbDraft draft = await _api.loadLocal() ?? OnbDraft();
-    if (_signedIn) {
-      final me = mounted ? context.read<Session>().user?.id : null;
+    if (_signedIn && mounted) {
+      // Téléphone vérifié entre-temps (autre appareil, inscription classique) : jamais de code SMS demandé pour rien.
+      final session = context.read<Session>();
+      if (!(session.user?.isVerified ?? false)) await session.refreshProfile();
+      if (!mounted) return;
+      final me = session.user?.id;
       if (draft.owner != null && draft.owner != me) draft = OnbDraft(); // brouillon d'un autre compte : jamais montré
       try {
         final server = await _api.sync(userId: me);
@@ -138,16 +143,21 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
     if (wanted == null || wanted.isEmpty) return steps.first;
     final aliases = {'zone': 'commune', 'questions': _firstQuestionStep, 'phone': 'verify', 'offer': 'preview', 'account': 'names'};
     final target = aliases[wanted] ?? wanted;
-    return steps.contains(target) ? target : steps.first;
+    // Écran déjà fait entre-temps (code SMS validé ailleurs…) : le suivant encore à faire.
+    final all = _stepsFor(account: true, verify: true);
+    return all.contains(target) ? all.skip(all.indexOf(target)).firstWhere(steps.contains, orElse: () => steps.first) : steps.first;
   }
 
   String get _firstQuestionStep => _config == null || _config!.questions.isEmpty ? 'preview' : 'q:${_config!.questions.first.key}';
 
   // ------------------------------------------------------------------ étapes
 
-  List<String> get _steps {
-    final session = context.read<Session>();
-    final user = session.user;
+  bool get _phoneVerified => context.read<Session>().user?.isVerified ?? false;
+
+  List<String> get _steps => _stepsFor(account: !_signedIn, verify: !_phoneVerified);
+
+  /// Ordre complet du parcours ; les écrans de compte et de code SMS n'y figurent que s'ils restent à faire.
+  List<String> _stepsFor({required bool account, required bool verify}) {
     return [
       'intro',
       'trade',
@@ -156,8 +166,8 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
       'quartier',
       for (final q in _config?.questions ?? const <OnbQuestion>[]) 'q:${q.key}',
       'preview',
-      if (!session.isAuthenticated) ...['names', 'phone', 'password'],
-      if (user == null || !user.isVerified) 'verify',
+      if (account) ...['names', 'phone', 'password'],
+      if (verify) 'verify',
       'photo',
       'identity',
       'done',
@@ -188,14 +198,15 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
       'prestations' => 'Que proposez-vous exactement ? Touchez une ou plusieurs réponses.',
       'commune' => 'Dans quelle commune travaillez-vous ?',
       'quartier' => 'Dans quel quartier ? Vous pouvez aussi passer cette question.',
-      'preview' => 'Voici votre annonce, écrite à partir de vos réponses. Si elle vous convient, touchez Continuer.',
+      'preview' => 'Voici votre annonce, écrite à partir de vos réponses. ${_offer.$1}. ${_offer.$2.join(' ')} '
+          'Si elle vous convient, touchez « Mon annonce me convient ». Sinon, touchez « Changer mes réponses ».',
       'names' => 'Écrivez votre prénom et votre nom.',
       'phone' => 'Écrivez votre numéro de téléphone. Vous recevrez un code par SMS.',
       'password' => 'Choisissez un mot de passe. Il doit avoir au moins 8 caractères, avec une majuscule, une minuscule et un chiffre. Gardez-le bien.',
       'verify' => 'Nous allons vous envoyer un code par SMS pour confirmer votre numéro.',
       'photo' => 'Prenez une photo de votre visage, bien éclairé. Les clients aiment voir à qui ils confient leur maison.',
       'identity' => 'Dernière étape : photographiez votre carte d’identité ou votre passeport. L’équipe Tratra la vérifie.',
-      'done' => 'Bravo ! Votre annonce est prête. Elle sera visible dès que l’équipe Tratra aura vérifié votre dossier.',
+      'done' => '${_doneTexts.$1} ${_doneTexts.$2}',
       _ => '',
     };
   }
@@ -235,7 +246,26 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
       _error = null;
     });
     _persist();
+    if (step == 'done' && _signedIn) {
+      // Fin honnête : ce qui reste (photo, pièce d'identité) vient du serveur, jamais « c'est fini » si rien n'a été envoyé.
+      _api.state().then((s) {
+        if (mounted) setState(() => _final = s);
+      }).catchError((_) {}).whenComplete(_speak);
+      return;
+    }
     _speak();
+  }
+
+  /// Titre et texte de la fin du parcours selon l'état serveur.
+  (String, String) get _doneTexts {
+    const todo = {'photo': 'ajouter votre photo', 'identity': 'faire vérifier votre pièce d’identité'};
+    final remaining = [for (final s in _final?.steps ?? const <OnbStep>[]) if (s.state == 'todo' && todo.containsKey(s.key)) todo[s.key]!];
+    if (remaining.isEmpty) {
+      return ('Bravo, c’est presque fini !', 'Votre annonce est prête. Elle sera visible dès que l’équipe Tratra aura vérifié votre dossier. '
+          'Vous recevrez une notification.');
+    }
+    return ('Votre annonce est enregistrée', 'Il vous reste à ${remaining.join(' et ')}. Votre annonce ne sera visible qu’après la '
+        'vérification de votre identité. Vous pourrez continuer depuis votre espace avec le bouton « Continuer ».');
   }
 
   void _back() {
@@ -266,7 +296,6 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
 
   Future<void> _next() async {
     if (_busy) return;
-    final steps = _steps;
     setState(() => _error = null);
     try {
       setState(() => _busy = true);
@@ -290,10 +319,11 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
             await _api.save(_draft);
           }
         case 'verify':
-          final verified =
-              await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (ctx) => OtpScreen(autoSend: true, onDone: () => Navigator.of(ctx).pop(true))));
-          if (!mounted) return;
-          if (verified != true) return;
+          // Vérifié = d'après le compte, quelle que soit la façon de quitter l'écran du code (bouton, retour du téléphone).
+          if (!_phoneVerified) {
+            await Navigator.of(context).push(MaterialPageRoute(builder: (ctx) => OtpScreen(autoSend: true, onDone: () => Navigator.of(ctx).pop())));
+            if (!mounted || !_phoneVerified) return; // pas de code validé : on reste ici (« Plus tard » reste possible)
+          }
           await _applyAnswers();
         case 'photo':
           break;
@@ -301,15 +331,30 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
           break;
       }
       if (!mounted) return;
-      // Étape suivante dans la NOUVELLE liste (le métier choisi ajoute ses prestations et ses questions) ; si l'écran courant en a
-      // disparu (écrans de compte une fois connecté, code SMS une fois vérifié), la suivante de l'ancienne liste encore présente.
+      // Étape suivante = la première, dans l'ordre complet du parcours, encore à faire (le métier choisi ajoute ses prestations et ses
+      // questions ; les écrans de compte et de code SMS disparaissent une fois faits).
       final now = _steps;
-      final j = now.indexOf(_step);
-      final i = steps.indexOf(_step);
-      final target = j >= 0 && j + 1 < now.length ? now[j + 1] : steps.skip(i + 1).firstWhere(now.contains, orElse: () => now.last);
+      final all = _stepsFor(account: true, verify: true);
+      final target = all.skip(all.indexOf(_step) + 1).firstWhere(now.contains, orElse: () => now.last);
       // Compte connecté et téléphone vérifié : l'annonce et le profil sont créés dès la fin des réponses.
       if (target == 'photo' && _step != 'verify') await _applyAnswers();
       _go(target);
+    } catch (e) {
+      if (mounted) setState(() => _error = authErrorMessage(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Code SMS remis à plus tard : l'annonce est quand même créée ; le tableau de bord proposera de confirmer le numéro.
+  Future<void> _verifyLater() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await _applyAnswers();
+      if (mounted) _go('photo');
     } catch (e) {
       if (mounted) setState(() => _error = authErrorMessage(e));
     } finally {
@@ -446,6 +491,7 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
                     },
               secondary: switch (_step) {
                 'quartier' => ('Passer', _next),
+                'verify' => ('Plus tard', _verifyLater),
                 'photo' => ('Plus tard', () => _go('identity')),
                 'identity' => ('Plus tard', () => _go('done')),
                 _ => null,
@@ -520,10 +566,11 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
           const _Reassurance('Vos papiers restent privés : seuls vous et l’équipe Tratra les voyez.'),
         ],
       'done' => [
-          _Title('Bravo, c’est presque fini !',
-              help: 'Votre annonce est prête. Elle sera visible dès que l’équipe Tratra aura vérifié votre dossier. '
-                  'Vous recevrez une notification.'),
-          const _Illustration(icon: Icons.celebration_rounded, color: TtColors.accentDark),
+          _Title(_doneTexts.$1, help: _doneTexts.$2),
+          _Illustration(
+            icon: _doneTexts.$1.startsWith('Bravo') ? Icons.celebration_rounded : Icons.bookmark_added_rounded,
+            color: _doneTexts.$1.startsWith('Bravo') ? TtColors.accentDark : TtColors.primary,
+          ),
         ],
       _ => const [],
     };
@@ -667,47 +714,29 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
           ),
       ];
 
+  (String, List<String>, String?) get _offer => offerPreview(_config, _draft..quartier = _quartier.text.trim());
+
   List<Widget> _preview() {
-    final offer = _localOffer();
+    final (title, lines, price) = _offer;
     return [
       const _Title('Votre annonce', help: 'Écrite à partir de vos réponses. Vous pourrez la modifier plus tard.'),
       TratraCard(
         key: const ValueKey('onb-offer'),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(offer.$1, style: TratraTheme.style(TtType.h3)),
+          Text(title, style: TratraTheme.style(TtType.h3)),
+          if (price != null) ...[const SizedBox(height: TtSpace.s2), TratraBadge(price, tone: TratraTone.primary)],
           const SizedBox(height: TtSpace.s2),
-          Text(offer.$2, style: TratraTheme.style(TtType.body, color: TtColors.inkSoft)),
+          for (final l in lines)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(l, style: TratraTheme.style(TtType.body, color: TtColors.inkSoft).copyWith(height: 1.4)),
+            ),
         ]),
       ),
       const SizedBox(height: TtSpace.s3),
       const _Reassurance('Elle sera visible des clients après la vérification de votre identité par l’équipe Tratra.'),
       TextButton(onPressed: () => _go(_firstQuestionStep), child: const Text('Changer mes réponses')),
     ];
-  }
-
-  /// Aperçu immédiat (même sans connexion) ; le serveur rédige la version définitive avec les mêmes réponses.
-  (String, String) _localOffer() {
-    final c = _config;
-    final prest = c == null
-        ? <String>[]
-        : [
-            for (final p in c.prestations)
-              if (_draft.prestations.contains(p.id)) p.name
-          ];
-    final label = prest.length == 1 ? prest.first : _draft.tradeName;
-    final place = _draft.commune.isEmpty ? '' : ' à ${_draft.commune}';
-    final lines = <String>[
-      'Je propose mes services de ${_draft.tradeName.toLowerCase()}$place${_quartier.text.trim().isEmpty ? '' : ' (${_quartier.text.trim()})'}.'
-    ];
-    for (final q in c?.questions ?? const <OnbQuestion>[]) {
-      final a = _draft.answers[q.key];
-      final labels = [
-        for (final o in q.options)
-          if (q.multi ? ((a as List?)?.contains(o.value) ?? false) : a == o.value) o.label
-      ];
-      if (labels.isNotEmpty) lines.add('${q.text.replaceAll('?', '').trim()} : ${labels.join(', ').toLowerCase()}.');
-    }
-    return ('$label$place', lines.join('\n'));
   }
 
   static final _rules = <(String, bool Function(String))>[

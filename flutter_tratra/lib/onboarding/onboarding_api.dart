@@ -14,10 +14,20 @@ class OnbOption {
   OnbOption(Map<String, dynamic> j)
       : value = '${j['value'] ?? ''}',
         label = '${j['label'] ?? ''}',
-        emoji = '${j['emoji'] ?? ''}';
+        emoji = '${j['emoji'] ?? ''}',
+        phrase = '${j['phrase'] ?? ''}',
+        years = (j['years'] as num?)?.toInt(),
+        amount = (j['amount'] as num?)?.toInt(),
+        unit = j['unit']?.toString();
   final String value;
   final String label;
   final String emoji;
+
+  /// Formulation dans l'annonce (« soins des bébés »), années d'expérience, tarif proposé (montant + unité).
+  final String phrase;
+  final int? years;
+  final int? amount;
+  final String? unit;
 }
 
 class OnbQuestion {
@@ -25,6 +35,7 @@ class OnbQuestion {
       : key = '${j['key'] ?? ''}',
         text = '${j['text'] ?? ''}',
         help = '${j['help'] ?? ''}',
+        target = '${j['target'] ?? ''}',
         multi = j['kind'] == 'multi',
         required = j['required'] != false,
         options = [
@@ -34,6 +45,9 @@ class OnbQuestion {
   final String key;
   final String text;
   final String help;
+
+  /// experience | days | slots | strengths | price | info (handy/models.py OnboardingQuestion.target)
+  final String target;
   final bool multi;
   final bool required;
   final List<OnbOption> options;
@@ -136,6 +150,78 @@ class OnbDraft {
         answers: (j['answers'] as Map?)?.cast<String, dynamic>() ?? {},
         step: '${j['step'] ?? ''}',
       );
+}
+
+// ------------------------------------------------------------------ aperçu de l'annonce (miroir de handy/onboarding.py offer_draft)
+
+const _dayLabels = {'monday': 'lundi', 'tuesday': 'mardi', 'wednesday': 'mercredi', 'thursday': 'jeudi', 'friday': 'vendredi',
+  'saturday': 'samedi', 'sunday': 'dimanche'};
+const _slotLabels = {'morning': 'le matin', 'afternoon': 'l’après-midi', 'evening': 'le soir'};
+const _unitLabels = {'hour': 'de l’heure', 'day': 'par jour', 'month': 'par mois', 'job': 'par intervention'};
+
+String _join(List<String> items) {
+  final l = items.where((i) => i.isNotEmpty).toList();
+  if (l.isEmpty) return '';
+  return l.length == 1 ? l.first : '${l.sublist(0, l.length - 1).join(', ')} et ${l.last}';
+}
+
+String _days(List<String> days) {
+  final order = _dayLabels.keys.toList();
+  final sorted = [...days]..sort((a, b) => order.indexOf(a).compareTo(order.indexOf(b)));
+  if (sorted.length == 7) return 'tous les jours';
+  if (sorted.join(',') == order.take(5).join(',')) return 'du lundi au vendredi';
+  if (sorted.join(',') == order.take(6).join(',')) return 'du lundi au samedi';
+  return _join([for (final d in sorted) _dayLabels[d]!]);
+}
+
+String _amount(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ' ');
+
+String _capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+/// Annonce rédigée à partir des réponses, SANS IA et sans réseau (aperçu avant le compte) : mêmes phrases que le serveur, qui rédige la
+/// version enregistrée. Renvoie (titre, phrases, tarif à l'heure ou à l'intervention : affiché à part, comme sur l'offre).
+(String, List<String>, String?) offerPreview(OnbConfig? config, OnbDraft draft) {
+  final trade = draft.tradeName.isEmpty ? 'Services' : draft.tradeName;
+  final prestations = [for (final p in config?.prestations ?? const <({int id, String name})>[]) if (draft.prestations.contains(p.id)) p.name];
+  final label = prestations.length == 1 ? prestations.first : trade;
+  final place = '${draft.commune}${draft.quartier.isEmpty ? '' : ' (${draft.quartier})'}';
+  final lines = [draft.commune.isEmpty ? 'Je propose mes services de ${trade.toLowerCase()}.' : 'Je propose mes services de ${trade.toLowerCase()} à $place.'];
+  if (prestations.length > 1) lines.add('Prestations : ${_join([for (final p in prestations) p.toLowerCase()])}.');
+  int? experience;
+  final days = <String>[], slots = <String>[], strengths = <String>[], infos = <String>[];
+  OnbOption? price;
+  for (final q in config?.questions ?? const <OnbQuestion>[]) {
+    final a = draft.answers[q.key];
+    final values = a is List ? a.map((e) => '$e').toList() : (a == null ? const <String>[] : ['$a']);
+    final chosen = [for (final o in q.options) if (values.contains(o.value)) o];
+    if (chosen.isEmpty) continue;
+    switch (q.target) {
+      case 'experience':
+        experience = chosen.first.years ?? int.tryParse(chosen.first.value) ?? 0;
+      case 'days':
+        days.addAll([for (final o in chosen) if (_dayLabels.containsKey(o.value)) o.value]);
+      case 'slots':
+        slots.addAll([for (final o in chosen) if (_slotLabels.containsKey(o.value)) o.value]);
+      case 'strengths':
+        strengths.addAll([for (final o in chosen) o.phrase.isNotEmpty ? o.phrase : o.label.toLowerCase()]);
+      case 'info':
+        infos.addAll([for (final o in chosen) o.phrase.isNotEmpty ? o.phrase : o.label]);
+      case 'price':
+        price = chosen.first;
+    }
+  }
+  if (strengths.isNotEmpty) lines.add('Ce que je fais : ${_join(strengths)}.');
+  if (infos.isNotEmpty) lines.add('${_capitalize(_join(infos))}.');
+  if (days.isNotEmpty || slots.isNotEmpty) {
+    final when = [if (days.isNotEmpty) _days(days), _join([for (final s in slots) _slotLabels[s]!])].where((x) => x.isNotEmpty).join(' ');
+    lines.add('Disponible $when.');
+  }
+  if (experience != null && experience > 0) lines.add(experience <= 1 ? 'Je débute dans ce métier.' : '$experience ans d’expérience environ.');
+  final unit = price?.unit, amount = price?.amount;
+  if ((unit == 'day' || unit == 'month') && amount != null && amount > 0) lines.add('Tarif souhaité : ${_amount(amount)} FCFA ${_unitLabels[unit]} (à discuter).');
+  if (unit == 'quote') lines.add('Prix à discuter ensemble.');
+  final fixed = (unit == 'hour' || unit == 'job') && amount != null && amount > 0 ? '${_amount(amount)} FCFA ${_unitLabels[unit]}' : null;
+  return (draft.commune.isEmpty ? label : '$label à ${draft.commune}', lines, fixed);
 }
 
 class OnbStep {
