@@ -57,9 +57,10 @@ class OnbConfig {
   OnbConfig(Map<String, dynamic> j)
       : tradeId = (j['trade'] as Map?)?['id'] as int?,
         tradeName = '${(j['trade'] as Map?)?['name'] ?? ''}',
+        minExperience = ((j['trade'] as Map?)?['min_experience_years'] as num?)?.toInt() ?? 0,
         prestations = [
           for (final p in (j['prestations'] as List? ?? const []))
-            if (p is Map) (id: (p['id'] as num).toInt(), name: '${p['name']}'),
+            if (p is Map) (id: (p['id'] as num).toInt(), name: '${p['name']}', minExperience: (p['min_experience_years'] as num?)?.toInt() ?? 0),
         ],
         questions = [
           for (final q in (j['questions'] as List? ?? const []))
@@ -68,9 +69,60 @@ class OnbConfig {
         communes = [for (final c in (j['communes'] as List? ?? const [])) '$c'];
   final int? tradeId;
   final String tradeName;
-  final List<({int id, String name})> prestations;
+
+  /// Expérience exigée par le métier pour publier (0 = débutants acceptés) : réglée dans l'administration Django.
+  final int minExperience;
+  final List<({int id, String name, int minExperience})> prestations;
   final List<OnbQuestion> questions;
   final List<String> communes;
+
+  /// Minimum du métier et des prestations choisies (même règle que handy/eligibility.py) : (années, nom du métier ou de la prestation).
+  (int, String) minimumFor(List<int> chosen) {
+    var best = (minExperience, minExperience > 0 ? tradeName : '');
+    for (final p in prestations) {
+      if (chosen.contains(p.id) && p.minExperience > best.$1) best = (p.minExperience, p.name);
+    }
+    return best;
+  }
+}
+
+/// Expérience déclarée : libellé EXACT choisi (« Moins d’un an ») et années = borne basse de la tranche (handy/onboarding.py).
+({int years, String label})? declaredExperience(OnbConfig? config, OnbDraft draft) {
+  for (final q in config?.questions ?? const <OnbQuestion>[]) {
+    if (q.target != 'experience') continue;
+    for (final o in q.options) {
+      if (draft.answers[q.key] == o.value) return (years: o.years ?? int.tryParse(o.value) ?? 0, label: o.label);
+    }
+  }
+  return null;
+}
+
+/// Les 9 étapes communes à l'application, au site et à Django (handy/onboarding.py JOURNEY) : même progression partout.
+const kJourney = [
+  ('trade', 'Votre métier'),
+  ('zone', 'Votre quartier'),
+  ('questions', 'Vos réponses'),
+  ('account', 'Votre compte'),
+  ('phone', 'Votre téléphone'),
+  ('offer', 'Votre annonce'),
+  ('photo', 'Votre photo'),
+  ('identity', 'Votre identité'),
+  ('approval', 'Validation par l’équipe Tratra'),
+];
+
+/// Étape commune d'un écran du parcours (le site utilise la même table : frontend/src/lib/onboarding.ts).
+String journeyOf(String screen) {
+  if (screen.startsWith('q:')) return 'questions';
+  return switch (screen) {
+    'intro' || 'trade' || 'prestations' => 'trade',
+    'commune' || 'quartier' => 'zone',
+    'preview' => 'questions',
+    'names' || 'phone' || 'password' => 'account',
+    'verify' => 'phone',
+    'photo' => 'photo',
+    'identity' => 'identity',
+    _ => 'approval',
+  };
 }
 
 /// Brouillon du parcours (téléphone puis serveur) : métier, prestations, quartier, réponses, écran atteint, identité saisie.
@@ -182,12 +234,12 @@ String _capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring
 /// version enregistrée. Renvoie (titre, phrases, tarif à l'heure ou à l'intervention : affiché à part, comme sur l'offre).
 (String, List<String>, String?) offerPreview(OnbConfig? config, OnbDraft draft) {
   final trade = draft.tradeName.isEmpty ? 'Services' : draft.tradeName;
-  final prestations = [for (final p in config?.prestations ?? const <({int id, String name})>[]) if (draft.prestations.contains(p.id)) p.name];
+  final prestations = [for (final p in config?.prestations ?? const <({int id, String name, int minExperience})>[]) if (draft.prestations.contains(p.id)) p.name];
   final label = prestations.length == 1 ? prestations.first : trade;
   final place = '${draft.commune}${draft.quartier.isEmpty ? '' : ' (${draft.quartier})'}';
   final lines = [draft.commune.isEmpty ? 'Je propose mes services de ${trade.toLowerCase()}.' : 'Je propose mes services de ${trade.toLowerCase()} à $place.'];
   if (prestations.length > 1) lines.add('Prestations : ${_join([for (final p in prestations) p.toLowerCase()])}.');
-  int? experience;
+  final experience = declaredExperience(config, draft);
   final days = <String>[], slots = <String>[], strengths = <String>[], infos = <String>[];
   OnbOption? price;
   for (final q in config?.questions ?? const <OnbQuestion>[]) {
@@ -196,8 +248,6 @@ String _capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring
     final chosen = [for (final o in q.options) if (values.contains(o.value)) o];
     if (chosen.isEmpty) continue;
     switch (q.target) {
-      case 'experience':
-        experience = chosen.first.years ?? int.tryParse(chosen.first.value) ?? 0;
       case 'days':
         days.addAll([for (final o in chosen) if (_dayLabels.containsKey(o.value)) o.value]);
       case 'slots':
@@ -216,7 +266,9 @@ String _capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring
     final when = [if (days.isNotEmpty) _days(days), _join([for (final s in slots) _slotLabels[s]!])].where((x) => x.isNotEmpty).join(' ');
     lines.add('Disponible $when.');
   }
-  if (experience != null && experience > 0) lines.add(experience <= 1 ? 'Je débute dans ce métier.' : '$experience ans d’expérience environ.');
+  if (experience != null && experience.label.isNotEmpty) {
+    lines.add('Expérience : ${experience.label[0].toLowerCase()}${experience.label.substring(1)}.'); // déclaration exacte, jamais arrondie
+  }
   final unit = price?.unit, amount = price?.amount;
   if ((unit == 'day' || unit == 'month') && amount != null && amount > 0) lines.add('Tarif souhaité : ${_amount(amount)} FCFA ${_unitLabels[unit]} (à discuter).');
   if (unit == 'quote') lines.add('Prix à discuter ensemble.');
@@ -250,6 +302,10 @@ class OnbState {
         published = j['published'] == true,
         offerTitle = (j['offer'] as Map?)?['title']?.toString(),
         offerDescription = (j['offer'] as Map?)?['description']?.toString(),
+        experienceOk = (j['experience'] as Map?)?['ok'] != false,
+        experienceTrade = '${(j['experience'] as Map?)?['trade'] ?? ''}',
+        experienceMinimum = ((j['experience'] as Map?)?['minimum'] as num?)?.toInt() ?? 0,
+        experienceDeclared = '${(j['experience'] as Map?)?['declared'] ?? ''}',
         draft = OnbDraft.fromServer(j);
   final List<OnbStep> steps;
   final int done;
@@ -260,7 +316,19 @@ class OnbState {
   final bool published;
   final String? offerTitle;
   final String? offerDescription;
+
+  /// Expérience déclarée au moins égale au minimum des métiers exercés (sinon publication bloquée : `next_action.code == 'blocked'`).
+  final bool experienceOk;
+  final String experienceTrade;
+  final int experienceMinimum;
+  final String experienceDeclared;
   final OnbDraft draft;
+
+  /// Message honnête quand l'expérience déclarée est sous le minimum d'un métier exercé (null sinon).
+  String? get experienceWarning => experienceOk
+      ? null
+      : '$experienceTrade demande au moins $experienceMinimum an${experienceMinimum > 1 ? 's' : ''} d’expérience pour publier. '
+          'Votre déclaration${experienceDeclared.isEmpty ? '' : ' (« $experienceDeclared »)'} est gardée telle quelle.';
 }
 
 class OnboardingApi {
@@ -277,7 +345,28 @@ class OnboardingApi {
   }
 
   Future<OnbState> state() async => OnbState(await _dash.getMap('/me/onboarding/'));
-  Future<OnbState> save(OnbDraft d) async => OnbState(await _dash.put('/me/onboarding/', d.toServer()));
+  Future<OnbState>? _saving;
+
+  /// Enregistrements envoyés UN PAR UN, dans l'ordre (réseau lent : une ancienne réponse n'écrase jamais une plus récente). Le corps est
+  /// figé à l'appel. Réussi : le serveur a la dernière version, le brouillon gardé sur le téléphone n'a plus lieu d'être.
+  Future<OnbState> save(OnbDraft d) {
+    final body = d.toServer();
+    final previous = _saving;
+    final run = () async {
+      if (previous != null) {
+        try {
+          await previous;
+        } catch (_) {
+          // l'échec du précédent est traité par son appelant ; celui-ci part quand même
+        }
+      }
+      final s = OnbState(await _dash.put('/me/onboarding/', body));
+      await clearLocal();
+      return s;
+    }();
+    _saving = run;
+    return run;
+  }
   Future<OnbState> apply() async => OnbState(await _dash.post('/me/onboarding/apply/'));
 
   // --------------------------------------------------------------- brouillon local (avant le compte)
@@ -316,12 +405,12 @@ class OnboardingApi {
     final local = await loadLocal();
     if (local == null || !local.started) return server;
     if (local.owner != null && local.owner != userId) return server;
-    if (server.draft.started) {
+    // Gardé hors ligne pour CE compte : plus récent que le serveur (il n'existe que si un envoi a échoué). Commencé sans compte : il
+    // ne complète qu'un serveur vide.
+    if (server.draft.started && local.owner == null) {
       await clearLocal();
       return server;
     }
-    final saved = await save(local);
-    await clearLocal();
-    return saved;
+    return save(local..owner = null);
   }
 }

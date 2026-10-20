@@ -15,6 +15,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/phone/phone_value.dart';
 import 'package:flutter_tratra/core/session.dart';
@@ -70,6 +71,15 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
   Timer? _saveTimer;
   OnbState? _final; // état serveur à la fin du parcours : ce qui reste vraiment à faire
 
+  /// Compte auquel appartient ce parcours (null : commencé sans compte). Si la session change ou expire, plus rien n'est envoyé au
+  /// serveur : les réponses restent sur le téléphone, rattachées à CE compte, et ne sont jamais montrées ni envoyées à un autre.
+  String? _owner;
+  late final Session _session = context.read<Session>();
+  bool _sessionChanged = false;
+
+  /// Dernier enregistrement impossible (réseau coupé, session expirée) : les réponses sont gardées sur le téléphone.
+  String? _keptLocally;
+
   final _first = TextEditingController();
   final _last = TextEditingController();
   final _quartier = TextEditingController();
@@ -85,11 +95,27 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
   @override
   void initState() {
     super.initState();
+    _session.addListener(_onSession);
     _start();
+  }
+
+  void _onSession() {
+    final id = _session.user?.id;
+    if (_owner == null) {
+      _owner = id; // compte créé (ou connexion) pendant le parcours : il devient le propriétaire
+      return;
+    }
+    if (id == _owner || _sessionChanged) return;
+    // Autre compte ou déconnexion : on garde les réponses pour LEUR compte, sur le téléphone, et on arrête d'envoyer quoi que ce soit.
+    _saveTimer?.cancel();
+    unawaited(_api.saveLocal(_draft..owner = _owner));
+    unawaited(_voice.stop());
+    if (mounted) setState(() => _sessionChanged = true);
   }
 
   @override
   void dispose() {
+    _session.removeListener(_onSession);
     _saveTimer?.cancel();
     _voice.stop();
     for (final c in [_first, _last, _quartier, _city, _password, _confirm]) {
@@ -106,12 +132,14 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
       _catalog = await CatalogRepository.shared(_base).load();
     } catch (_) {}
     OnbDraft draft = await _api.loadLocal() ?? OnbDraft();
+    if (!_signedIn && draft.owner != null) draft = OnbDraft(); // brouillon d'un compte (session terminée) : jamais montré sans lui
     if (_signedIn && mounted) {
       // Téléphone vérifié entre-temps (autre appareil, inscription classique) : jamais de code SMS demandé pour rien.
       final session = context.read<Session>();
       if (!(session.user?.isVerified ?? false)) await session.refreshProfile();
       if (!mounted) return;
       final me = session.user?.id;
+      _owner = me;
       if (draft.owner != null && draft.owner != me) draft = OnbDraft(); // brouillon d'un autre compte : jamais montré
       try {
         final server = await _api.sync(userId: me);
@@ -226,15 +254,31 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
       ..firstName = _first.text.trim()
       ..lastName = _last.text.trim()
       ..quartier = _quartier.text.trim();
+    if (_sessionChanged) return;
     if (!_signedIn) {
       unawaited(_api.saveLocal(_draft));
       return;
     }
-    final me = context.read<Session>().user?.id;
     _saveTimer?.cancel();
-    _saveTimer = Timer(const Duration(milliseconds: 600), () {
-      _api.save(_draft).then((_) => _api.clearLocal(), onError: (_) => _api.saveLocal(_draft..owner = me));
+    _saveTimer = Timer(const Duration(milliseconds: 600), () async {
+      if (_sessionChanged) return;
+      try {
+        await _api.save(_draft);
+        if (mounted && _keptLocally != null) setState(() => _keptLocally = null);
+      } catch (e) {
+        await _keepLocally(e);
+      }
     });
+  }
+
+  /// Envoi impossible : les réponses restent sur le téléphone, rattachées au compte, et partiront au prochain enregistrement réussi.
+  Future<void> _keepLocally(Object error) async {
+    await _api.saveLocal(_draft..owner = _owner);
+    if (!mounted) return;
+    final expired = error is ApiException && error.statusCode == 401;
+    setState(() => _keptLocally = expired
+        ? 'Votre session a expiré : vos réponses sont gardées sur ce téléphone. Reconnectez-vous pour continuer.'
+        : 'Pas de connexion pour l’instant : vos réponses sont gardées sur ce téléphone et seront envoyées dès le retour du réseau.');
   }
 
   // ------------------------------------------------------------------ navigation
@@ -260,6 +304,10 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
   (String, String) get _doneTexts {
     const todo = {'photo': 'ajouter votre photo', 'identity': 'faire vérifier votre pièce d’identité'};
     final remaining = [for (final s in _final?.steps ?? const <OnbStep>[]) if (s.state == 'todo' && todo.containsKey(s.key)) todo[s.key]!];
+    if (remaining.isEmpty && _final?.experienceOk == false) {
+      return ('Votre annonce est enregistrée', 'Elle ne pourra pas être publiée tant que votre expérience n’atteint pas le minimum demandé '
+          'pour ce métier. Votre réponse est gardée telle quelle ; le détail est dans votre espace.');
+    }
     if (remaining.isEmpty) {
       return ('Bravo, c’est presque fini !', 'Votre annonce est prête. Elle sera visible dès que l’équipe Tratra aura vérifié votre dossier. '
           'Vous recevrez une notification.');
@@ -295,7 +343,7 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
   }
 
   Future<void> _next() async {
-    if (_busy) return;
+    if (_busy || _sessionChanged) return;
     setState(() => _error = null);
     try {
       setState(() => _busy = true);
@@ -340,14 +388,20 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
       if (target == 'photo' && _step != 'verify') await _applyAnswers();
       _go(target);
     } catch (e) {
-      if (mounted) setState(() => _error = authErrorMessage(e));
+      if (_signedIn && _draft.started) await _keepLocally(e);
+      if (mounted) setState(() => _error = _failure(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  String _failure(Object e) => e is ApiException && e.statusCode == 401
+      ? 'Votre session a expiré. Vos réponses sont gardées sur ce téléphone : reconnectez-vous pour continuer.'
+      : authErrorMessage(e);
+
   /// Code SMS remis à plus tard : l'annonce est quand même créée ; le tableau de bord proposera de confirmer le numéro.
   Future<void> _verifyLater() async {
+    if (_busy || _sessionChanged) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -356,7 +410,7 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
       await _applyAnswers();
       if (mounted) _go('photo');
     } catch (e) {
-      if (mounted) setState(() => _error = authErrorMessage(e));
+      if (mounted) setState(() => _error = _failure(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -386,6 +440,7 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
   }
 
   Future<void> _takePhoto() async {
+    if (_busy || _sessionChanged) return;
     setState(() => _error = null);
     String? path;
     try {
@@ -440,8 +495,16 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(backgroundColor: TtColors.canvas, body: SafeArea(child: TratraSkeletonList(count: 4)));
+    if (_sessionChanged) return _sessionChangedView();
+    // Progression : les 9 étapes communes à l'application, au site et à Django ; à l'intérieur d'une étape, l'avancement des écrans.
     final steps = _steps;
-    final index = steps.indexOf(_step).clamp(0, steps.length - 1);
+    final milestone = journeyOf(_step);
+    final mi = kJourney.indexWhere((j) => j.$1 == milestone);
+    final group = [for (final st in steps) if (journeyOf(st) == milestone) st];
+    final within = group.isEmpty ? 1.0 : (group.indexOf(_step) + 1).clamp(1, group.length) / group.length;
+    final questions = [for (final st in steps) if (st.startsWith('q:')) st];
+    final title = 'Étape ${mi + 1} sur ${kJourney.length} · ${kJourney[mi].$2}'
+        '${_step.startsWith('q:') ? ' (${questions.indexOf(_step) + 1}/${questions.length})' : ''}';
     return ChangeNotifierProvider<VoiceGuide>.value(
       value: _voice,
       child: Scaffold(
@@ -449,8 +512,8 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
         body: SafeArea(
           child: Column(children: [
             _TopBar(
-              index: index,
-              total: steps.length,
+              title: title,
+              progress: ((mi + within) / kJourney.length).clamp(0.0, 1.0),
               onBack: _busy ? null : _back,
               onReplay: () => _voice.say(_speech(_step)),
               onClassic: _step == 'done' ? null : _toClassic,
@@ -461,6 +524,10 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s3, TtSpace.s4, TtSpace.s6),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  if (_keptLocally != null) ...[
+                    TratraAlert(key: const ValueKey('onb-kept-locally'), tone: TratraAlertTone.warning, message: _keptLocally!),
+                    const SizedBox(height: TtSpace.s3),
+                  ],
                   ..._content(_step),
                   if (_error != null) ...[
                     const SizedBox(height: TtSpace.s3),
@@ -690,8 +757,25 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
     ];
   }
 
+  /// Expérience : la réponse est enregistrée telle quelle (jamais arrondie) ; le minimum du métier est annoncé AVANT de répondre.
+  Widget _experienceNote() {
+    final (min, what) = _config?.minimumFor(_draft.prestations) ?? (0, '');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: TtSpace.s3),
+      child: TratraAlert(
+        key: const ValueKey('onb-experience-note'),
+        tone: TratraAlertTone.info,
+        message: min > 0
+            ? 'Pour $what, Tratra demande au moins $min an${min > 1 ? 's' : ''} d’expérience pour publier une offre. '
+                'Répondez selon la vérité : votre réponse est enregistrée telle quelle.'
+            : 'Vous débutez ? C’est accepté pour ce métier. Répondez selon la vérité : votre réponse est enregistrée telle quelle.',
+      ),
+    );
+  }
+
   List<Widget> _questionView(OnbQuestion q) => [
         _Title(q.text, help: q.help.isEmpty ? (q.multi ? 'Vous pouvez en choisir plusieurs.' : null) : q.help),
+        if (q.target == 'experience') _experienceNote(),
         for (final o in q.options)
           _Choice(
             key: ValueKey('onb-opt-${q.key}-${o.value}'),
@@ -734,9 +818,49 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
         ]),
       ),
       const SizedBox(height: TtSpace.s3),
+      if (_belowMinimum != null) ...[
+        TratraAlert(key: const ValueKey('onb-experience-warning'), tone: TratraAlertTone.warning, message: _belowMinimum!),
+        const SizedBox(height: TtSpace.s3),
+      ],
       const _Reassurance('Elle sera visible des clients après la vérification de votre identité par l’équipe Tratra.'),
       TextButton(onPressed: () => _go(_firstQuestionStep), child: const Text('Changer mes réponses')),
     ];
+  }
+
+  /// Expérience déclarée sous le minimum du métier : dit AVANT de valider, sans jamais modifier la réponse.
+  String? get _belowMinimum {
+    final declared = declaredExperience(_config, _draft);
+    final (min, what) = _config?.minimumFor(_draft.prestations) ?? (0, '');
+    if (declared == null || declared.years >= min) return null;
+    return 'Avec « ${declared.label} », votre annonce ne pourra pas être publiée : $what demande au moins $min an${min > 1 ? 's' : ''} '
+        'd’expérience. Vos réponses sont gardées telles quelles ; vous pourrez la publier quand vous aurez l’expérience requise.';
+  }
+
+  Widget _sessionChangedView() {
+    final signedIn = _signedIn;
+    return Scaffold(
+      backgroundColor: TtColors.canvas,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(TtSpace.s4),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const Spacer(),
+            const _Illustration(icon: Icons.lock_person_outlined),
+            const _Title('Votre session a changé',
+                help: 'Vos réponses sont gardées sur ce téléphone pour le compte avec lequel vous aviez commencé. Elles ne sont ni montrées '
+                    'ni envoyées à un autre compte. Reconnectez-vous avec ce compte pour continuer.'),
+            const Spacer(),
+            TratraButton(
+              key: const ValueKey('onb-session-close'),
+              label: signedIn ? 'Aller à mon espace' : 'Me reconnecter',
+              size: TratraButtonSize.lg,
+              block: true,
+              onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil(signedIn ? RouteNames.home : RouteNames.login, (r) => false),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
   static final _rules = <(String, bool Function(String))>[
@@ -783,9 +907,9 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
 // ------------------------------------------------------------------ éléments visuels
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.index, required this.total, required this.onBack, required this.onReplay, required this.onClassic});
-  final int index;
-  final int total;
+  const _TopBar({required this.title, required this.progress, required this.onBack, required this.onReplay, required this.onClassic});
+  final String title;
+  final double progress;
   final VoidCallback? onBack;
   final VoidCallback onReplay;
   final VoidCallback? onClassic;
@@ -799,8 +923,11 @@ class _TopBar extends StatelessWidget {
         Row(children: [
           IconButton(tooltip: 'Retour', onPressed: onBack, icon: const Icon(Icons.arrow_back_rounded)),
           Expanded(
-            child: Text('Étape ${index + 1} sur $total',
-                key: const ValueKey('onb-progress'), style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft).copyWith(fontWeight: FontWeight.w600)),
+            child: Text(title,
+                key: const ValueKey('onb-progress'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft).copyWith(fontWeight: FontWeight.w600)),
           ),
           if (voice.available) ...[
             IconButton(
@@ -828,7 +955,7 @@ class _TopBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: TtSpace.s3),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(TtRadius.pill),
-            child: LinearProgressIndicator(value: (index + 1) / total, minHeight: 8, backgroundColor: TtColors.lineSoft, color: TtColors.primary),
+            child: LinearProgressIndicator(value: progress, minHeight: 8, backgroundColor: TtColors.lineSoft, color: TtColors.primary),
           ),
         ),
       ]),

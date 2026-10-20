@@ -180,7 +180,7 @@ class _BeginnerProgressCardState extends State<BeginnerProgressCard> {
     switch (s.nextCode) {
       case 'verify_identity':
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IdentityFlowScreen(simplified: true)));
-      case 'wait' || 'done':
+      case 'wait' || 'done' || 'blocked':
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProProfileScreen()));
       case 'verify_phone':
         await openGuidedOnboarding(context, startAt: 'phone');
@@ -195,7 +195,7 @@ class _BeginnerProgressCardState extends State<BeginnerProgressCard> {
     _follow(context.select<DashboardController?, Object?>((c) => c?.data));
     final s = _state;
     if (s == null || s.published || !s.draft.started) return const SizedBox.shrink();
-    final waiting = s.nextCode == 'wait';
+    final waiting = s.nextCode == 'wait' || s.nextCode == 'blocked';
     final card = TratraCard(
       key: const ValueKey('beginner-card'),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -223,7 +223,13 @@ class _BeginnerProgressCardState extends State<BeginnerProgressCard> {
             ]),
         ]),
         const SizedBox(height: TtSpace.s3),
-        if (waiting)
+        if (s.experienceWarning != null) ...[
+          TratraAlert(key: const ValueKey('beginner-blocked'), tone: TratraAlertTone.warning, message: s.experienceWarning!),
+          const SizedBox(height: TtSpace.s2),
+        ],
+        if (s.nextCode == 'blocked')
+          const SizedBox.shrink()
+        else if (waiting)
           Text('L’équipe Tratra vérifie votre dossier. Vous serez prévenu(e) par notification.',
               style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft)),
         if (!waiting) Text('Prochaine étape : ${s.nextLabel}', style: TratraTheme.style(TtType.body).copyWith(fontWeight: FontWeight.w600)),

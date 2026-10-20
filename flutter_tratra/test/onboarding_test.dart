@@ -79,8 +79,8 @@ final _config = {
       'target': 'experience',
       'required': true,
       'options': [
-        {'value': 'lt1', 'label': 'Moins d’un an', 'emoji': '🌱', 'years': 1},
-        {'value': '1_3', 'label': '1 à 3 ans', 'emoji': '👍', 'years': 2}
+        {'value': 'lt1', 'label': 'Moins d’un an', 'emoji': '🌱', 'years': 0},
+        {'value': '1_3', 'label': '1 à 3 ans', 'emoji': '👍', 'years': 1}
       ]
     },
     {
@@ -120,6 +120,15 @@ class OnbServer {
   bool published = false;
   final requests = <http.Request>[];
 
+  /// Minimum d'expérience du métier (administration Django).
+  int minExperience = 0;
+
+  /// Réseau lent (envois retardés), coupé (`offline`) ou session expirée (`expired`) pour les enregistrements.
+  Duration delay = Duration.zero;
+  String? putFailure;
+  int applyCount = 0;
+  bool experienceOk = true;
+
   Map<String, dynamic> state() {
     final steps = [
       for (final (k, l) in _journey) {'key': k, 'label': l, 'state': states[k] ?? (k == 'offer' && applied ? 'done' : 'todo')}
@@ -138,6 +147,7 @@ class OnbServer {
       'total': steps.length,
       'next_action': next ?? {'code': 'resume', 'label': 'Répondre aux questions', 'step': 'questions'},
       'published': published,
+      'experience': {'ok': experienceOk, 'trade': 'Nounou', 'minimum': experienceOk ? 0 : 2, 'declared': experienceOk ? '' : 'Moins d’un an'},
     };
   }
 
@@ -148,13 +158,20 @@ class OnbServer {
     requests.add(r);
     final p = r.url.path;
     if (p.endsWith('/catalog/')) return _json(_catalog);
-    if (p.endsWith('/onboarding/config/')) return _json(_config);
+    if (p.endsWith('/onboarding/config/')) {
+      return _json({..._config, 'trade': {'id': 12, 'name': 'Nounou', 'min_experience_years': minExperience}});
+    }
     if (p.endsWith('/me/onboarding/') && r.method == 'GET') return _json(state());
     if (p.endsWith('/me/onboarding/') && r.method == 'PUT') {
+      if (delay > Duration.zero) await Future<void>.delayed(delay);
+      if (putFailure == 'offline') throw http.ClientException('réseau coupé');
+      if (putFailure == 'expired') return _json({'code': 'token_not_valid', 'detail': 'Session expirée.'}, 401);
       draft = (jsonDecode(r.body) as Map).cast<String, dynamic>();
       return _json(state());
     }
     if (p.endsWith('/me/onboarding/apply/')) {
+      if (delay > Duration.zero) await Future<void>.delayed(delay);
+      applyCount++;
       applied = true;
       return _json(state());
     }
@@ -321,7 +338,7 @@ void main() {
       await _answerAll(t);
       expect(find.text('Je propose mes services de nounou à Cocody.'), findsOneWidget);
       expect(find.text('Disponible lundi et samedi.'), findsOneWidget);
-      expect(find.text('Je débute dans ce métier.'), findsOneWidget);
+      expect(find.text('Expérience : moins d’un an.'), findsOneWidget, reason: 'déclaration exacte, jamais « 1 an »');
       expect(_spoken.last, contains('Je propose mes services de nounou à Cocody.'), reason: 'la voix lit l’annonce');
       expect(server.applied, isFalse);
 
@@ -543,7 +560,7 @@ void main() {
         {'id': 12, 'name': 'Sortie d’école'}
       ],
       'questions': [
-        q('experience', 'experience', 'single', [o('4', '3 à 5 ans', years: 4)]),
+        q('experience', 'experience', 'single', [o('4', '3 à 5 ans', years: 3)]),
         q('nanny_skills', 'strengths', 'multi', [
           o('babies', 'M’occuper des bébés', phrase: 'soins des bébés'),
           o('school', 'Les accompagner à l’école', phrase: 'accompagnement à l’école'),
@@ -570,7 +587,7 @@ void main() {
     expect(
         lines.join(' '),
         'Je propose mes services de nousnou à Cocody (Riviera 2). Ce que je fais : soins des bébés et accompagnement à l’école. '
-        'Sans hébergement. Disponible du lundi au vendredi le matin et l’après-midi. 4 ans d’expérience environ. '
+        'Sans hébergement. Disponible du lundi au vendredi le matin et l’après-midi. Expérience : 3 à 5 ans. '
         'Tarif souhaité : 60 000 FCFA par mois (à discuter).');
     expect(price, isNull, reason: 'salaire mensuel : à discuter, jamais un faux forfait');
     draft.answers['nanny_price'] = 'h';
@@ -731,4 +748,216 @@ void main() {
       });
     }
   });
+
+  group('robustesse et cohérence', () {
+    const bob = User(id: '10', email: '', firstName: 'Bob', lastName: 'Yao', userType: 'client', isActive: true, isVerified: true);
+    final fullDraft = {
+      'trade': 12, 'prestations': [121], 'commune': 'Cocody', 'answers': {'experience': '1_3', 'days': ['monday']}, 'step': 'preview',
+    };
+
+    test('mêmes 9 étapes et même table écran → étape que le site (frontend/src/lib/onboarding.ts) et Django', () {
+      expect([for (final j in kJourney) j.$1], ['trade', 'zone', 'questions', 'account', 'phone', 'offer', 'photo', 'identity', 'approval']);
+      const table = {
+        'intro': 'trade', 'trade': 'trade', 'prestations': 'trade', 'commune': 'zone', 'quartier': 'zone', 'q:experience': 'questions',
+        'preview': 'questions', 'names': 'account', 'phone': 'account', 'password': 'account', 'verify': 'phone', 'photo': 'photo',
+        'identity': 'identity', 'done': 'approval',
+      };
+      table.forEach((screen, step) => expect(journeyOf(screen), step, reason: screen));
+    });
+
+    testWidgets('progression affichée : « Étape x sur 9 » et l’avancement des questions', (t) async {
+      _size(t);
+      final base = _base(OnbServer().client);
+      await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen()));
+      await t.pumpAndSettle();
+      expect(find.text('Étape 1 sur 9 · Votre métier'), findsOneWidget);
+      await _continue(t);
+      await _tap(t, find.text('Nounou'));
+      await _continue(t);
+      await _tap(t, find.byKey(const ValueKey('onb-prest-121')));
+      await _continue(t);
+      expect(find.text('Étape 2 sur 9 · Votre quartier'), findsOneWidget);
+      await _tap(t, find.byKey(const ValueKey('onb-commune-Cocody')));
+      await _continue(t);
+      await _tap(t, find.byKey(const ValueKey('onb-secondary')));
+      expect(find.text('Étape 3 sur 9 · Vos réponses (1/2)'), findsOneWidget);
+      await t.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('expérience : minimum du métier annoncé AVANT de répondre, réponse gardée telle quelle', (t) async {
+      _size(t);
+      final server = OnbServer()..minExperience = 2;
+      final base = _base(server.client);
+      await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen()));
+      await t.pumpAndSettle();
+      await _continue(t);
+      await _tap(t, find.text('Nounou'));
+      await _continue(t);
+      await _tap(t, find.byKey(const ValueKey('onb-prest-121')));
+      await _continue(t);
+      await _tap(t, find.byKey(const ValueKey('onb-commune-Cocody')));
+      await _continue(t);
+      await _tap(t, find.byKey(const ValueKey('onb-secondary')));
+      expect(find.textContaining('Tratra demande au moins 2 ans d’expérience pour publier'), findsOneWidget);
+      await _tap(t, find.byKey(const ValueKey('onb-opt-experience-lt1')));
+      await _continue(t);
+      await _tap(t, find.byKey(const ValueKey('onb-opt-days-monday')));
+      await _continue(t);
+      expect(find.textContaining('Avec « Moins d’un an », votre annonce ne pourra pas être publiée'), findsOneWidget);
+      expect(find.text('Expérience : moins d’un an.'), findsOneWidget);
+      await _continue(t);
+      expect(jsonDecode(server.puts.last.body)['answers']['experience'], 'lt1', reason: 'jamais modifiée pour passer le seuil');
+      await t.pump(const Duration(seconds: 1));
+
+      server.minExperience = 0;
+      await t.pumpWidget(_host(_base(OnbServer().client), _Session(_awa), const GuidedOnboardingScreen(key: ValueKey('debutant'))));
+      await t.pumpAndSettle();
+      await _continue(t);
+      await _tap(t, find.text('Nounou'));
+      await _continue(t);
+      await _tap(t, find.byKey(const ValueKey('onb-prest-121')));
+      await _continue(t);
+      await _tap(t, find.byKey(const ValueKey('onb-commune-Cocody')));
+      await _continue(t);
+      await _tap(t, find.byKey(const ValueKey('onb-secondary')));
+      expect(find.textContaining('Vous débutez ? C’est accepté pour ce métier.'), findsOneWidget);
+      await t.pump(const Duration(seconds: 1));
+    });
+
+    test('minimum d’une prestation choisie compté comme sur le serveur', () {
+      final config = OnbConfig({
+        'trade': {'id': 12, 'name': 'Nounou', 'min_experience_years': 1},
+        'prestations': [{'id': 121, 'name': 'Garde de nuit', 'min_experience_years': 3}, {'id': 122, 'name': 'Sortie d’école'}],
+      });
+      expect(config.minimumFor([122]), (1, 'Nounou'));
+      expect(config.minimumFor([121, 122]), (3, 'Garde de nuit'));
+    });
+
+    test('réseau lent : les enregistrements partent un par un, dans l’ordre (une ancienne réponse n’écrase jamais une récente)', () async {
+      SharedPreferences.setMockInitialValues({});
+      final bodies = <String>[];
+      var first = true;
+      final base = _base(MockClient((r) async {
+        if (r.method == 'PUT') {
+          if (first) {
+            first = false;
+            await Future<void>.delayed(const Duration(milliseconds: 300)); // le premier envoi est lent
+          }
+          bodies.add('${(jsonDecode(r.body) as Map)['step']}');
+        }
+        return _json({'steps': []});
+      }));
+      final api = OnboardingApi(base);
+      final a = api.save(OnbDraft(tradeId: 12, step: 'q:experience'));
+      final b = api.save(OnbDraft(tradeId: 12, step: 'preview'));
+      await Future.wait([a, b]);
+      expect(bodies, ['q:experience', 'preview']);
+    });
+
+    testWidgets('réseau lent : deux appuis sur « Mon annonce me convient » = une seule annonce', (t) async {
+      _size(t);
+      final server = OnbServer()
+        ..draft = Map<String, dynamic>.from(fullDraft)
+        ..delay = const Duration(seconds: 2);
+      final base = _base(server.client);
+      await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen()));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('onb-offer')), findsOneWidget, reason: 'reprise à l’aperçu enregistré');
+      await t.tap(find.byKey(const ValueKey('onb-continue')));
+      await t.pump(const Duration(milliseconds: 100));
+      await t.tap(find.byKey(const ValueKey('onb-continue')), warnIfMissed: false);
+      await t.pump(const Duration(seconds: 10));
+      await t.pumpAndSettle();
+      expect(server.applyCount, 1);
+      expect(find.text('Votre photo'), findsOneWidget);
+      await t.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('réseau coupé : réponses gardées sur le téléphone pour CE compte, envoyées au retour du réseau', (t) async {
+      _size(t);
+      final server = OnbServer()
+        ..draft = {'trade': 12, 'step': 'trade'}
+        ..putFailure = 'offline';
+      final base = _base(server.client);
+      await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen()));
+      await t.pumpAndSettle();
+      await _continue(t);                                                    // métier → prestations
+      await _tap(t, find.byKey(const ValueKey('onb-prest-121')));
+      await t.pump(const Duration(seconds: 1));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Pas de connexion pour l’instant : vos réponses sont gardées sur ce téléphone'), findsOneWidget);
+      final local = await t.runAsync(_localDraft);
+      expect((local!['owner'], '${local['prestations']}', local['step']), ('9', '[121]', 'prestations'));
+
+      server.putFailure = null;                                              // le réseau revient ; l'application est rouverte
+      await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen(key: ValueKey('retour'))));
+      await t.pumpAndSettle();
+      expect(server.draft['prestations'], [121], reason: 'le brouillon gardé (plus récent) remplace l’ancien côté serveur');
+      expect(find.text('Que proposez-vous exactement ?'), findsOneWidget);
+      expect(await t.runAsync(_localDraft), isNull);
+      await t.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('session expirée : réponses gardées, message clair, rien de perdu', (t) async {
+      _size(t);
+      final server = OnbServer()
+        ..draft = {'trade': 12, 'step': 'trade'}
+        ..putFailure = 'expired';
+      final base = _base(server.client);
+      await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen()));
+      await t.pumpAndSettle();
+      await _continue(t);
+      await _tap(t, find.byKey(const ValueKey('onb-prest-122')));
+      await t.pump(const Duration(seconds: 1));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Votre session a expiré : vos réponses sont gardées sur ce téléphone'), findsOneWidget);
+      expect((await t.runAsync(_localDraft))!['prestations'], [122]);
+    });
+
+    testWidgets('changement de compte pendant le parcours : rien n’est envoyé ni montré à l’autre compte', (t) async {
+      _size(t);
+      final server = OnbServer()..draft = {'trade': 12, 'step': 'trade'};
+      final base = _base(server.client);
+      final session = _Session(_awa);
+      await t.pumpWidget(_host(base, session, const GuidedOnboardingScreen()));
+      await t.pumpAndSettle();
+      await _continue(t);
+      await _tap(t, find.byKey(const ValueKey('onb-prest-121')));
+      final sent = server.puts.length;                                       // réponse pas encore partie (enregistrement différé)
+      await session.setUser(bob);
+      await t.pump(const Duration(seconds: 2));
+      await t.pumpAndSettle();
+      expect(find.text('Votre session a changé'), findsOneWidget);
+      expect(server.puts.length, sent, reason: 'aucun envoi avec la session de l’autre compte');
+      final local = await t.runAsync(_localDraft);
+      expect((local!['owner'], '${local['prestations']}'), ('9', '[121]'), reason: 'gardé pour le compte d’origine');
+
+      final api = OnboardingApi(base);
+      await t.runAsync(() => api.sync(userId: '10'));
+      expect(server.puts.length, sent, reason: 'jamais envoyé à un autre compte');
+      await t.runAsync(() => api.sync(userId: '9'));
+      expect(jsonDecode(server.puts.last.body)['prestations'], [121], reason: 'retrouvé par son compte');
+    });
+
+    testWidgets('tableau de bord : expérience sous le minimum = publication bloquée, dit clairement (pas « en attente »)', (t) async {
+      _size(t);
+      final server = OnbServer()
+        ..draft = {'trade': 12, 'step': 'done'}
+        ..experienceOk = false
+        ..next = {'code': 'blocked', 'label': 'Nounou demande au moins 2 ans d’expérience pour publier', 'step': 'approval'};
+      await t.pumpWidget(_host(_base(server.client), _Session(_awa), const Scaffold(body: BeginnerProgressCard())));
+      await t.pumpAndSettle();
+      expect(find.textContaining('Nounou demande au moins 2 ans d’expérience pour publier. Votre déclaration (« Moins d’un an ») est gardée telle quelle.'),
+          findsOneWidget);
+      expect(find.text('Voir mon dossier'), findsOneWidget);
+      expect(find.textContaining('vérifie votre dossier'), findsNothing);
+
+      server.next = {'code': 'photo', 'label': 'Ajouter ma photo', 'step': 'photo'};   // une autre étape reste à faire : averti quand même
+      await t.pumpWidget(_host(_base(server.client), _Session(_awa), const Scaffold(body: BeginnerProgressCard(key: ValueKey('photo')))));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('beginner-blocked')), findsOneWidget);
+      expect(find.text('Prochaine étape : Ajouter ma photo'), findsOneWidget);
+    });
+  });
 }
+
