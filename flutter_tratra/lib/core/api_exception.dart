@@ -85,6 +85,30 @@ class ApiException implements Exception {
     }
   }
 
+  /// Délai (secondes) avant un nouvel essai, quand le serveur l'indique (blocage de connexion).
+  int? get retryAfterSeconds {
+    try {
+      final data = json.decode(body);
+      final v = data is Map ? data['retry_after'] : null;
+      return v is int ? v : int.tryParse('${v ?? ''}');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Adresse du support à contacter, quand le serveur la fournit.
+  String? get supportEmail {
+    try {
+      final data = json.decode(body);
+      return data is Map && data['support_email'] is String ? data['support_email'] as String : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Connexion temporairement bloquée après trop de tentatives (réponse 429 `login_locked`, avec le temps restant).
+  bool get isLoginLocked => statusCode == 429 && code == 'login_locked' && (retryAfterSeconds ?? 0) > 0;
+
   /// Écriture concurrente : l'objet a été modifié ailleurs (autre appareil, autre acteur) depuis le dernier chargement.
   bool get isVersionConflict => statusCode == 409 && code == 'version_conflict';
 

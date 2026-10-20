@@ -1,15 +1,35 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/auth/widgets/auth_frame.dart';
+import 'package:flutter_tratra/screens/auth/widgets/login_lock_notice.dart';
 import 'package:flutter_tratra/services/api_service.dart';
 import 'package:flutter_tratra/services/storage_service.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+/// Fin du blocage connue (le serveur reste l'autorité) : revenir sur l'écran de connexion garde le décompte, sans nouvel essai.
+DateTime? _rememberedLockEnd;
+String _rememberedSupport = defaultSupportEmail;
+
+/// Tests : oublie le blocage mémorisé entre deux scénarios.
+@visibleForTesting
+void resetRememberedLoginLock() {
+  _rememberedLockEnd = null;
+  _rememberedSupport = defaultSupportEmail;
+}
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  /// [now] : horloge injectable (tests) ; par défaut l'heure réelle.
+  const LoginScreen({super.key, this.now});
+
+  final DateTime Function()? now;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -27,15 +47,67 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
   final FocusNode _passwordFocusNode = FocusNode();
 
+  // Blocage après trop de tentatives : fin du blocage + minuteur d'affichage (1 s).
+  DateTime? _lockedUntil;
+  int _secondsLeft = 0;
+  Timer? _lockTimer;
+  String _supportEmail = defaultSupportEmail;
+
+  bool get _locked => _secondsLeft > 0;
+
+  DateTime _now() => (widget.now ?? DateTime.now)();
+
   @override
   void initState() {
     super.initState();
     _apiService = context.read<ApiService>();
     _storageService = context.read<StorageService>();
+    final remembered = _rememberedLockEnd;
+    if (remembered != null && remembered.isAfter(_now())) {
+      _supportEmail = _rememberedSupport;
+      _startLock(remembered, announce: false);
+    }
+  }
+
+  /// Démarre (ou met à jour) le compte à rebours jusqu'à [until].
+  void _startLock(DateTime until, {bool announce = true}) {
+    _lockTimer?.cancel();
+    _lockedUntil = until;
+    _error = null;
+    _tick();
+    if (!_locked) return;
+    if (announce) {
+      SemanticsService.announce('Connexion bloquée après trop de tentatives. Consultez le support ou patientez ${formatCountdown(_secondsLeft)}.', TextDirection.ltr);
+    }
+    _lockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(_tick);
+      if (!_locked) _lockTimer?.cancel();
+    });
+  }
+
+  void _tick() {
+    final until = _lockedUntil;
+    final left = until == null ? 0 : (until.difference(_now()).inMilliseconds / 1000).ceil();
+    _secondsLeft = left > 0 ? left : 0;
+    if (_secondsLeft == 0) {
+      _lockedUntil = null;
+      _rememberedLockEnd = null;
+    }
+  }
+
+  Future<void> _contactSupport() async {
+    final uri = Uri(scheme: 'mailto', path: _supportEmail, queryParameters: {'subject': 'Connexion bloquée'});
+    try {
+      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+    } catch (_) {/* aucune application de messagerie */}
+    if (!mounted) return;
+    setState(() => _error = 'Écrivez-nous à $_supportEmail.');
   }
 
   @override
   void dispose() {
+    _lockTimer?.cancel();
     _usernameController.dispose();
     _passwordController.dispose();
     _passwordFocusNode.dispose();
@@ -43,7 +115,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
-    if (_isLoading) return;
+    if (_isLoading || _locked) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _isLoading = true;
@@ -72,6 +144,17 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.pushReplacementNamed(context, route);
     } catch (e) {
       if (!mounted) return;
+      if (e is ApiException && e.isLoginLocked) {
+        // Bloqué : jamais « mot de passe incorrect » ; temps restant donné par le serveur.
+        final until = _now().add(Duration(seconds: e.retryAfterSeconds!));
+        _rememberedLockEnd = until;
+        _rememberedSupport = e.supportEmail ?? defaultSupportEmail;
+        setState(() {
+          _supportEmail = _rememberedSupport;
+          _startLock(until);
+        });
+        return;
+      }
       setState(() {
         _error = (e is ApiException && (e.statusCode == 400 || e.statusCode == 401))
             ? 'Téléphone ou mot de passe incorrect.' // même message que le web
@@ -140,6 +223,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: const Text('Mot de passe oublié ?'),
                 ),
               ),
+              if (_locked)
+                Padding(
+                  padding: const EdgeInsets.only(top: TtSpace.s4),
+                  child: LoginLockNotice(secondsLeft: _secondsLeft, onContactSupport: _contactSupport),
+                ),
               AuthNotice(
                 title: 'Erreur de connexion',
                 message: _error,
@@ -147,12 +235,12 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: TtSpace.s6),
               TratraButton(
-                label: _isLoading ? 'Connexion…' : 'Se connecter',
+                label: _locked ? 'Réessayer dans ${formatCountdown(_secondsLeft)}' : (_isLoading ? 'Connexion…' : 'Se connecter'),
                 size: TratraButtonSize.lg,
                 block: true,
                 loading: _isLoading,
-                trailing: const Icon(Icons.arrow_forward_rounded),
-                onPressed: _login,
+                trailing: Icon(_locked ? Icons.lock_clock_outlined : Icons.arrow_forward_rounded),
+                onPressed: _locked ? null : _login,
               ),
             ],
           ),
