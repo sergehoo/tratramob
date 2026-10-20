@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_tratra/core/phone/phone_value.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/auth/widgets/auth_frame.dart';
@@ -20,7 +21,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
-  final _phoneController = TextEditingController(text: '+225 '); // +225 par défaut (E.164)
+  PhoneValue _phone = PhoneValue.empty; // pays + numéro national (jamais d'indicatif à taper)
+  String? _phoneError;
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
@@ -49,7 +51,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
-    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _lastNameFocusNode.dispose();
@@ -61,7 +62,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _register() async {
     if (_isLoading) return;
-    if (!_formKey.currentState!.validate()) return;
+    final phoneProblem = _phone.error(empty: 'Indiquez votre numéro de téléphone.');
+    setState(() => _phoneError = phoneProblem);
+    if (!_formKey.currentState!.validate() || phoneProblem != null) return;
     if (!_acceptTerms) {
       setState(() => _showTermsWarning = true);
       return;
@@ -81,7 +84,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final user = await _apiService.register(
         firstName: _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim(),
-        phone: _phoneController.text.trim(),
+        phone: _phone.e164!,
+        phoneCountry: _phone.iso.name,
         password: _passwordController.text,
       );
 
@@ -197,18 +201,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 onSubmitted: (_) => _phoneFocusNode.requestFocus(),
               ),
               const SizedBox(height: TtSpace.s4),
-              TratraInput(
-                label: 'Téléphone',
-                controller: _phoneController,
+              TratraPhoneField(
+                key: const ValueKey('register-phone'),
+                value: _phone,
                 focusNode: _phoneFocusNode,
-                keyboardType: TextInputType.phone,
-                leadingIcon: Icons.phone_outlined,
-                autofillHints: const [AutofillHints.telephoneNumber],
-                helper: 'Avec l’indicatif du pays : +225 pour la Côte d’Ivoire.',
-                validator: (v) {
-                  final digits = (v ?? '').replaceAll(RegExp(r'\D'), '');
-                  return digits.length < 8 ? 'Numéro de téléphone invalide' : null;
-                },
+                onChanged: (v) => setState(() {
+                  _phone = v;
+                  _phoneError = null;
+                }),
+                errorText: _phoneError,
                 textInputAction: TextInputAction.next,
                 onSubmitted: (_) => _passwordFocusNode.requestFocus(),
               ),

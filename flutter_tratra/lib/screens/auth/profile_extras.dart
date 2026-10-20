@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/core/phone/phone_value.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/user.dart';
 import 'package:flutter_tratra/routes.dart';
@@ -15,10 +16,12 @@ import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/notification_preferences_screen.dart';
 
-/// Modifie nom, prénom et e-mail (facultatif). Renvoie `true` si le serveur a enregistré le changement.
+/// Modifie nom, prénom, téléphone et e-mail (facultatif). Renvoie `true` si le serveur a enregistré le changement, ou
+/// [ProfileEditForm.phoneChanged] si le numéro a changé (il doit alors être confirmé par SMS : OTP inchangé).
 class ProfileEditForm extends StatefulWidget {
   const ProfileEditForm({super.key, required this.user});
   final User user;
+  static const phoneChanged = 'phone';
   @override
   State<ProfileEditForm> createState() => _ProfileEditFormState();
 }
@@ -27,6 +30,8 @@ class _ProfileEditFormState extends State<ProfileEditForm> {
   late final TextEditingController _first = TextEditingController(text: widget.user.firstName ?? '');
   late final TextEditingController _last = TextEditingController(text: widget.user.lastName ?? '');
   late final TextEditingController _email = TextEditingController(text: widget.user.email);
+  late PhoneValue _phone = PhoneValue.fromE164(widget.user.phoneNumber);
+  String? _phoneError;
   bool _busy = false;
   String? _error;
 
@@ -41,17 +46,28 @@ class _ProfileEditFormState extends State<ProfileEditForm> {
   bool get _valid => _first.text.trim().isNotEmpty && _last.text.trim().isNotEmpty;
 
   Future<void> _save() async {
+    final current = widget.user.phoneNumber ?? '';
+    final number = _phone.e164;
+    // Numéro inchangé (y compris un ancien numéro hors norme) : rien à valider ni à envoyer.
+    final changed = !_phone.isEmpty && number != current && !(number == null && PhoneValue.fromE164(current).national == _phone.national);
+    if (changed && number == null) {
+      setState(() => _phoneError = _phone.error());
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
+      _phoneError = null;
     });
     try {
       await context.read<DashboardApi>().patch('/users/${widget.user.id}/', {
         'first_name': _first.text.trim(),
         'last_name': _last.text.trim(),
         'email': _email.text.trim().isEmpty ? null : _email.text.trim(),
+        if (changed) 'phone': number,
+        if (changed) 'phone_country': _phone.iso.name,
       });
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) Navigator.of(context).pop(changed ? ProfileEditForm.phoneChanged : true);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -67,6 +83,18 @@ class _ProfileEditFormState extends State<ProfileEditForm> {
         TratraInput(label: 'Prénom', controller: _first, required: true, onChanged: (_) => setState(() {})),
         const SizedBox(height: TtSpace.s3),
         TratraInput(label: 'Nom', controller: _last, required: true, onChanged: (_) => setState(() {})),
+        const SizedBox(height: TtSpace.s3),
+        TratraPhoneField(
+          key: const ValueKey('profile-phone'),
+          value: _phone,
+          autoCountry: (widget.user.phoneNumber ?? '').isEmpty,
+          helper: 'Un nouveau numéro sert à vous connecter : il devra être confirmé par un code SMS.',
+          errorText: _phoneError,
+          onChanged: (v) => setState(() {
+            _phone = v;
+            _phoneError = null;
+          }),
+        ),
         const SizedBox(height: TtSpace.s3),
         TratraInput(label: 'Adresse e-mail', controller: _email, keyboardType: TextInputType.emailAddress, helper: 'Facultative : vous vous connectez avec votre numéro de téléphone.'),
         if (_error != null) ...[const SizedBox(height: TtSpace.s3), TratraAlert(tone: TratraAlertTone.danger, message: _error!)],

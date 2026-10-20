@@ -2,14 +2,37 @@ package com.tratra
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import android.telephony.TelephonyManager
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         createNotificationChannels()
+    }
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        // Pays de la carte SIM (puis du réseau) pour présélectionner l'indicatif téléphonique. Aucune permission requise ;
+        // aucun numéro n'est lu.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tratra/device").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "simCountry" -> result.success(simCountry())
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun simCountry(): String? = try {
+        val tm = getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+        listOf(tm?.simCountryIso, tm?.networkCountryIso).firstOrNull { !it.isNullOrBlank() && it.length == 2 }?.uppercase()
+    } catch (e: Exception) {
+        null
     }
 
     /**

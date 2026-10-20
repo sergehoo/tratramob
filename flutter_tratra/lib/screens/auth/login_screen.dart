@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/core/api_exception.dart';
+import 'package:flutter_tratra/core/phone/phone_value.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/auth/widgets/auth_frame.dart';
@@ -37,6 +38,10 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
+  // Connexion par téléphone (pays + numéro national) ; « identifiant ou e-mail » reste possible pour les anciens comptes.
+  bool _byPhone = true;
+  PhoneValue _phone = PhoneValue.empty;
+  String? _phoneError;
   final _passwordController = TextEditingController();
 
   late final ApiService _apiService;
@@ -116,14 +121,21 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     if (_isLoading || _locked) return;
     if (!_formKey.currentState!.validate()) return;
+    // Numéro à rechercher : tolérant, un ancien numéro hors norme est retrouvé par le serveur.
+    final identifier = _byPhone ? _phone.lookupE164 : _usernameController.text.trim();
+    if (identifier == null) {
+      setState(() => _phoneError = _phone.error() ?? 'Saisissez votre numéro de téléphone.');
+      return;
+    }
     setState(() {
+      _phoneError = null;
       _isLoading = true;
       _error = null;
     });
 
     try {
       final user = await _apiService.loginWithUsername(
-        _usernameController.text.trim(),
+        identifier,
         _passwordController.text,
       );
 
@@ -190,17 +202,41 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TratraInput(
-                label: 'Téléphone',
-                helper: 'Avec l’indicatif (+225…). Ancien compte : identifiant ou e-mail.',
-                controller: _usernameController,
-                leadingIcon: Icons.person_outline,
-                autofillHints: const [AutofillHints.username],
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? 'Téléphone requis'
-                    : null,
-                textInputAction: TextInputAction.next,
-                onSubmitted: (_) => _passwordFocusNode.requestFocus(),
+              if (_byPhone)
+                TratraPhoneField(
+                  key: const ValueKey('login-phone'),
+                  value: _phone,
+                  onChanged: (v) => setState(() {
+                    _phone = v;
+                    _phoneError = null;
+                  }),
+                  errorText: _phoneError,
+                  autofillHints: const [AutofillHints.username, AutofillHints.telephoneNumberNational],
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => _passwordFocusNode.requestFocus(),
+                )
+              else
+                TratraInput(
+                  key: const ValueKey('login-identifier'),
+                  label: 'Identifiant ou e-mail',
+                  controller: _usernameController,
+                  leadingIcon: Icons.person_outline,
+                  autofillHints: const [AutofillHints.username],
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Identifiant requis' : null,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => _passwordFocusNode.requestFocus(),
+                ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  key: const ValueKey('login-mode'),
+                  onPressed: () => setState(() {
+                    _byPhone = !_byPhone;
+                    _phoneError = null;
+                    _error = null;
+                  }),
+                  child: Text(_byPhone ? 'Ancien compte : identifiant ou e-mail' : 'Se connecter avec mon numéro de téléphone'),
+                ),
               ),
               const SizedBox(height: TtSpace.s5),
               TratraInput(

@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/core/phone/phone_value.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/screens/auth/otp_screen.dart' show kOtpResendSeconds, maskPhone;
 import 'package:flutter_tratra/screens/auth/widgets/auth_frame.dart';
@@ -20,7 +21,8 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
-  final _phone = TextEditingController(text: '+225 ');
+  PhoneValue _phone = PhoneValue.empty; // pays + numéro national
+  String? _sentTo; // numéro (E.164) auquel le code a été demandé
   final _password = TextEditingController();
   final _confirm = TextEditingController();
   String _code = '';
@@ -34,7 +36,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   void dispose() {
     _timer?.cancel();
-    _phone.dispose();
     _password.dispose();
     _confirm.dispose();
     super.dispose();
@@ -50,11 +51,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
   }
 
-  bool get _phoneOk => _phone.text.replaceAll(RegExp(r'\D'), '').length >= 8;
-
   Future<void> _request() async {
-    if (!_phoneOk) {
-      setState(() => _error = 'Numéro de téléphone invalide.');
+    // Recherche tolérante : un compte enregistré avant libphonenumber est retrouvé par le serveur.
+    final number = _sentTo ?? _phone.lookupE164;
+    if (number == null) {
+      setState(() => _error = _phone.error() ?? 'Saisissez votre numéro de téléphone.');
       return;
     }
     setState(() {
@@ -62,10 +63,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _error = null;
     });
     try {
-      final r = await context.read<AuthService>().requestPasswordReset(_phone.text.trim());
+      final r = await context.read<AuthService>().requestPasswordReset(number);
       if (!mounted) return;
       setState(() {
         _sent = true;
+        _sentTo = number;
         _code = '';
         _attempt++;
       });
@@ -93,7 +95,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     });
     try {
       await context.read<AuthService>().confirmPasswordReset(
-            phone: _phone.text.trim(),
+            phone: _sentTo!,
             code: _code,
             password: _password.text,
           );
@@ -132,17 +134,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               style: TratraTheme.style(TtType.body, color: TtColors.inkSoft),
             ),
             const SizedBox(height: TtSpace.s4),
-            TratraInput(
-              label: 'Téléphone',
-              controller: _phone,
-              keyboardType: TextInputType.phone,
-              leadingIcon: Icons.phone_outlined,
-              helper: 'Avec l’indicatif du pays : +225 pour la Côte d’Ivoire.',
+            TratraPhoneField(
+              key: const ValueKey('forgot-phone'),
+              label: 'Numéro de votre compte',
+              value: _phone,
+              onChanged: (v) => setState(() {
+                _phone = v;
+                _error = null;
+              }),
+              textInputAction: TextInputAction.send,
               onSubmitted: (_) => _request(),
             ),
           ] else ...[
             Text(
-              'Si ce numéro correspond à un compte, un code à 6 chiffres vient d’être envoyé au ${maskPhone(_phone.text.trim())}.',
+              'Si ce numéro correspond à un compte, un code à 6 chiffres vient d’être envoyé au ${maskPhone(_sentTo ?? '')}.',
               style: TratraTheme.style(TtType.body, color: TtColors.inkSoft),
             ),
             const SizedBox(height: TtSpace.s4),
@@ -184,6 +189,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             TextButton(
               onPressed: _busy ? null : () => setState(() {
                 _sent = false;
+                _sentTo = null;
                 _error = null;
               }),
               child: const Text('Changer de numéro'),

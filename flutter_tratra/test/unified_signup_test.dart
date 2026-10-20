@@ -28,7 +28,7 @@ void _tall(WidgetTester t) {
 }
 
 void main() {
-  testWidgets('l’inscription demande prénom, nom, téléphone (+225 par défaut), mot de passe et conditions', (t) async {
+  testWidgets('l’inscription demande prénom, nom, téléphone (pays + numéro national, Côte d’Ivoire par défaut), mot de passe et conditions', (t) async {
     _tall(t);
     await t.pumpWidget(_host(const RegisterScreen()));
     for (final label in ['Prénom', 'Nom', 'Téléphone', 'Mot de passe', 'Confirmer le mot de passe']) {
@@ -39,7 +39,8 @@ void main() {
     for (final gone in ['Adresse email', "Nom d'utilisateur", 'Artisan', 'Entreprise', 'Client']) {
       expect(find.text(gone), findsNothing, reason: gone);
     }
-    expect(find.widgetWithText(TextField, '+225 '), findsOneWidget);
+    expect(find.text('+225'), findsOneWidget);                                          // indicatif affiché, jamais à taper
+    expect(find.byKey(const ValueKey('phone-country')), findsOneWidget);
   });
 
   testWidgets('la connexion se fait par téléphone et propose la récupération du compte', (t) async {
@@ -54,7 +55,8 @@ void main() {
     _tall(t);
     await t.pumpWidget(_host(const ForgotPasswordScreen()));
     expect(find.text('Recevoir le code'), findsOneWidget);
-    expect(find.widgetWithText(TextField, '+225 '), findsOneWidget);
+    expect(find.text('+225'), findsOneWidget);                                          // indicatif affiché, jamais à taper
+    expect(find.byKey(const ValueKey('phone-country')), findsOneWidget);
     expect(find.text('Nouveau mot de passe'), findsNothing); // seulement après l'envoi du code
   });
 }

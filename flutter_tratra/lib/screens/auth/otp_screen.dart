@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/core/phone/phone_value.dart';
 import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/routes.dart';
@@ -16,11 +17,12 @@ import 'package:flutter_tratra/services/auth_service.dart';
 /// Délai minimal entre deux envois de code (secondes).
 const int kOtpResendSeconds = 60;
 
-/// « +2250700000002 » -> « +225 •• •• •• 02 » (le numéro complet n'est jamais affiché).
+/// « +2250700000002 » -> « +225 •• •• •• 02 », « +33612345678 » -> « +33 •• •• •• 78 » (le numéro complet n'est jamais affiché).
 String maskPhone(String phone) {
   final p = phone.replaceAll(RegExp(r'\s+'), '');
   if (p.length < 6) return p;
-  final prefix = p.startsWith('+') ? p.substring(0, 4) : '';
+  final v = PhoneValue.splitInternational(p);
+  final prefix = v != null ? '+${dialOf(v.iso)}' : (p.startsWith('+') ? p.substring(0, 4) : '');
   return '${prefix.isEmpty ? '' : '$prefix '}•• •• •• ${p.substring(p.length - 2)}';
 }
 

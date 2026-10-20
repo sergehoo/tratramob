@@ -57,8 +57,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _edit(User u) async {
-    final saved = await showTratraSheet<bool>(context, title: 'Modifier mon profil', child: ProfileEditForm(user: u));
-    if (saved == true && mounted) {
+    final saved = await showTratraSheet<Object>(context, title: 'Modifier mon profil', child: ProfileEditForm(user: u));
+    if (!mounted) return;
+    if (saved == ProfileEditForm.phoneChanged) {
+      showMessage(context, 'Numéro enregistré : confirmez-le avec le code reçu par SMS.');
+      _retry();
+      Navigator.pushNamed(context, RouteNames.verifyPhone, arguments: const OtpArgs(nextRoute: RouteNames.profile, autoSend: true));
+    } else if (saved == true) {
       showMessage(context, 'Profil enregistré.');
       _retry();
     }

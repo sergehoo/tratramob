@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/session.dart';
+import 'package:flutter_tratra/core/phone/phone_value.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/booking.dart';
 import 'package:flutter_tratra/screens/worker/dashboard/worker_ui.dart';
@@ -765,7 +766,8 @@ class _PayoutAccountForm extends StatefulWidget {
 
 class _PayoutAccountFormState extends State<_PayoutAccountForm> {
   String _provider = 'om';
-  final _ref = TextEditingController();
+  final _ref = TextEditingController();      // IBAN (banque)
+  PhoneValue _wallet = PhoneValue.empty;     // numéro Mobile Money : pays + numéro national
   String? _error;
 
   @override
@@ -775,9 +777,18 @@ class _PayoutAccountFormState extends State<_PayoutAccountForm> {
   }
 
   void _submit() {
+    if (_provider != 'bank') {
+      final number = _wallet.e164;
+      if (number == null) {
+        setState(() => _error = _wallet.error(empty: 'Saisissez le numéro du compte Mobile Money.'));
+        return;
+      }
+      Navigator.of(context).pop({'provider': _provider, 'account_ref': number});
+      return;
+    }
     final ref = _ref.text.trim();
     if (ref.isEmpty) {
-      setState(() => _error = 'Saisissez un numéro ou un IBAN.');
+      setState(() => _error = 'Saisissez l’IBAN du compte.');
       return;
     }
     Navigator.of(context).pop({'provider': _provider, 'account_ref': ref});
@@ -811,20 +822,32 @@ class _PayoutAccountFormState extends State<_PayoutAccountForm> {
           ],
         ),
         const SizedBox(height: TtSpace.s4),
-        TratraInput(
-          label: 'Numéro / IBAN',
-          hint: '+225 0X XX XX XX XX',
-          required: true,
-          controller: _ref,
-          keyboardType:
-              _provider == 'bank' ? TextInputType.text : TextInputType.phone,
-          textInputAction: TextInputAction.done,
-          errorText: _error,
-          onChanged: (_) {
-            if (_error != null) setState(() => _error = null);
-          },
-          onSubmitted: (_) => _submit(),
-        ),
+        if (_provider == 'bank')
+          TratraInput(
+            label: 'IBAN',
+            required: true,
+            controller: _ref,
+            keyboardType: TextInputType.text,
+            textInputAction: TextInputAction.done,
+            errorText: _error,
+            onChanged: (_) {
+              if (_error != null) setState(() => _error = null);
+            },
+            onSubmitted: (_) => _submit(),
+          )
+        else
+          TratraPhoneField(
+            label: 'Numéro Mobile Money',
+            helper: 'Le numéro du compte qui recevra vos versements, sans l’indicatif.',
+            value: _wallet,
+            errorText: _error,
+            onChanged: (v) => setState(() {
+              _wallet = v;
+              _error = null;
+            }),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _submit(),
+          ),
         const SizedBox(height: TtSpace.s5),
         TratraButton(
           label: 'Enregistrer',

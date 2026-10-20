@@ -512,12 +512,14 @@ class ApiService {
     required String lastName,
     required String phone,
     required String password,
+    String? phoneCountry,
   }) async {
     authToken = null; // point d'accès public : jamais le jeton d'une session précédente
     final userData = {
       'first_name': firstName,
       'last_name': lastName,
       'phone': phone,
+      if (phoneCountry != null) 'phone_country': phoneCountry,
       'password': password,
       'accept_terms': true,
     };
@@ -595,12 +597,14 @@ class ApiService {
     required String lastName,
     required String phone,
     required String password,
+    String? phoneCountry,
   }) async {
     final result = await registerWithDetails(
       firstName: firstName,
       lastName: lastName,
       phone: phone,
       password: password,
+      phoneCountry: phoneCountry,
     );
 
     final user = result['user'] as User;
