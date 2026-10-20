@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/constants.dart';
+import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/continuity/continuity_widgets.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/routes.dart';
@@ -41,12 +42,30 @@ class _DashboardHomeState extends State<DashboardHome> {
           children: [
             const Padding(padding: EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s4, TtSpace.s4, 0), child: ActivityBanner()),
             Expanded(
-              child: TratraEmptyState(
-                icon: Icons.cloud_off_rounded,
-                title: 'Tableau de bord indisponible',
-                description: c.error,
-                actions: [TratraButton(label: 'Réessayer', variant: TratraButtonVariant.outline, onPressed: c.load)],
-              ),
+              child: c.sessionExpired
+                  ? TratraEmptyState(
+                      icon: Icons.lock_clock_outlined,
+                      title: 'Session expirée',
+                      description: c.error,
+                      actions: [
+                        TratraButton(
+                          key: const ValueKey('relogin'),
+                          label: 'Se reconnecter',
+                          leading: const Icon(Icons.login_rounded),
+                          onPressed: () async {
+                            final nav = Navigator.of(context);
+                            await context.read<Session>().logout();
+                            nav.pushNamedAndRemoveUntil(RouteNames.login, (r) => false);
+                          },
+                        ),
+                      ],
+                    )
+                  : TratraEmptyState(
+                      icon: Icons.cloud_off_rounded,
+                      title: 'Tableau de bord indisponible',
+                      description: c.error,
+                      actions: [TratraButton(label: 'Réessayer', variant: TratraButtonVariant.outline, onPressed: c.load)],
+                    ),
             ),
           ],
         );
@@ -238,7 +257,7 @@ class _Hero extends StatelessWidget {
           Wrap(spacing: TtSpace.s3, runSpacing: TtSpace.s3, children: [
             TratraButton(label: 'Trouver un artisan', leading: const Icon(Icons.explore_outlined, size: 18), onPressed: onExplore),
             TratraButton(
-              label: isProvider ? 'Gérer mes services' : 'Proposer mes services',
+              label: isProvider ? 'Gérer mes offres' : 'Proposer mes services',
               variant: TratraButtonVariant.accent,
               leading: const Icon(Icons.handyman_outlined, size: 18),
               onPressed: onProvide,

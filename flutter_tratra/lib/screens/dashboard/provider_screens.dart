@@ -12,6 +12,7 @@ import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/category.dart';
+import 'package:flutter_tratra/screens/dashboard/catalog_pickers.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
@@ -346,6 +347,22 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
   /// Catégorie enregistrée : la prestation choisie, sinon le métier lui-même (métier sans prestation).
   String? get _categoryId => _prestation ?? _trade;
 
+  /// Choix dans le champ « Métier » : un métier, ou directement une prestation (son métier est alors déduit).
+  void _onCatalog(Category? c) {
+    setState(() {
+      if (c == null) {
+        _trade = null;
+        _prestation = null;
+      } else if (c.isTrade) {
+        _trade = c.id;
+        _prestation = null;
+      } else {
+        _trade = c.trade;
+      }
+    });
+    if (c != null && !c.isTrade) _onPrestation(c.id);
+  }
+
   void _onPrestation(String? id) {
     setState(() {
       _prestation = id;
@@ -357,7 +374,7 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
   Future<void> _submit() async {
     final prestations = _trade == null ? const <Category>[] : _catalog!.prestationsOf(_trade!);
     final errs = <String, String>{
-      if (_trade == null) 'trade': 'Choisissez votre métier.',
+      if (_trade == null) 'trade': 'Choisissez votre métier dans la liste proposée.',
       if (_trade != null && prestations.isNotEmpty && _prestation == null) 'prestation': 'Choisissez la prestation proposée.',
       if (_title.text.trim().isEmpty) 'title': 'Donnez un titre à votre offre.',
       if (_description.text.trim().length < 10) 'description': 'Décrivez votre offre (au moins 10 caractères).',
@@ -404,6 +421,8 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
     final catalog = _catalog;
     final e = context.watch<DashboardController>().data?.provider?.eligibility;
     final prestations = catalog == null || _trade == null ? const <Category>[] : catalog.prestationsOf(_trade!);
+    // Prestation à choisir seulement si le métier en a et qu'aucune n'a été trouvée directement dans le champ « Métier ».
+    final askPrestation = _trade != null && _prestation == null && prestations.isNotEmpty;
     return DashPage(
       title: 'Nouvelle offre',
       body: catalog == null && _error == null
@@ -427,33 +446,29 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
                   TratraButton(label: 'Réessayer', variant: TratraButtonVariant.outline, onPressed: _loadCatalog),
                 ] else ...[
                   _StepLabel(n: 1, text: 'Votre métier'),
-                  _LabeledDropdown<String>(
+                  CatalogAutocomplete(
                     key: const ValueKey('new-trade'),
+                    catalog: catalog,
                     label: 'Métier',
-                    required: true,
-                    value: _trade,
+                    hint: 'Tapez un métier ou une prestation (ex. plomberie, fuite)',
                     error: _errors['trade'],
-                    items: [for (final t in catalog.trades) DropdownMenuItem(value: t.id, child: Text(t.name, overflow: TextOverflow.ellipsis))],
-                    onChanged: (v) => setState(() {
-                      _trade = v;
-                      _prestation = null;
-                    }),
+                    onSelected: _onCatalog,
                   ),
-                  if (_trade != null && prestations.isNotEmpty) ...[
+                  if (askPrestation) ...[
                     const SizedBox(height: TtSpace.s4),
                     _StepLabel(n: 2, text: 'La prestation proposée'),
-                    _LabeledDropdown<String>(
+                    CatalogAutocomplete(
                       key: ValueKey('new-prestation-$_trade'),
+                      catalog: catalog,
+                      tradeId: _trade,
                       label: 'Prestation',
-                      required: true,
-                      value: _prestation,
+                      hint: 'Tapez ou choisissez la prestation',
                       error: _errors['prestation'],
-                      items: [for (final c in prestations) DropdownMenuItem(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis))],
-                      onChanged: _onPrestation,
+                      onSelected: (c) => _onPrestation(c?.id),
                     ),
                   ],
                   const SizedBox(height: TtSpace.s4),
-                  _StepLabel(n: prestations.isEmpty ? 2 : 3, text: 'Description'),
+                  _StepLabel(n: askPrestation ? 3 : 2, text: 'Description'),
                   TratraInput(
                     controller: _title,
                     label: 'Titre de l’offre',
@@ -473,7 +488,7 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
                     errorText: _errors['description'],
                   ),
                   const SizedBox(height: TtSpace.s4),
-                  _StepLabel(n: prestations.isEmpty ? 3 : 4, text: 'Tarif'),
+                  _StepLabel(n: askPrestation ? 4 : 3, text: 'Tarif'),
                   _LabeledDropdown<String>(
                     label: 'Type de tarif',
                     value: _priceType,
@@ -573,7 +588,7 @@ class _ProProfileScreenState extends State<ProProfileScreen> {
   final _commune = TextEditingController();
   final _quartier = TextEditingController();
   final _rate = TextEditingController();
-  List<Category> _trades = const [];
+  Catalog? _catalog;
   final _skills = <int>{};
   final _formKey = GlobalKey();
   String? _photoUrl;
@@ -610,10 +625,8 @@ class _ProProfileScreenState extends State<ProProfileScreen> {
       if (!mounted) return;
       setState(() {
         _profileId = id;
-        // Spécialités = métiers du catalogue commun (mêmes noms que le site) ; une spécialité déjà choisie hors de cette liste reste affichée.
-        final c = results[1] as Catalog;
-        final skillIds = ((p['skills'] as List?) ?? const []).whereType<num>().map((e) => '${e.toInt()}').toSet();
-        _trades = [...c.trades, for (final x in c.items) if (!x.isTrade && skillIds.contains(x.id)) x];
+        // Spécialités = métiers et prestations du catalogue commun (mêmes noms que le site).
+        _catalog = results[1] as Catalog;
         _bio.text = '${p['bio'] ?? ''}';
         _experience.text = (p['experience_years'] ?? 0) == 0 ? '' : '${p['experience_years']}';
         _commune.text = '${p['commune'] ?? ''}';
@@ -712,20 +725,17 @@ class _ProProfileScreenState extends State<ProProfileScreen> {
                     const SizedBox(height: TtSpace.s4),
                     TratraInput(controller: _bio, label: 'Présentation', helper: 'Votre activité, votre expérience, ce qui vous distingue.', maxLines: 5, minLines: 4),
                     const SizedBox(height: TtSpace.s3),
-                    Text('Spécialités', style: TratraTheme.style(TtType.bodySm).copyWith(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 6),
-                    Wrap(spacing: TtSpace.s2, runSpacing: TtSpace.s2, children: [
-                      for (final c in _trades)
-                        TratraChip(
-                          label: c.name,
-                          selected: _skills.contains(int.parse(c.id)),
-                          onTap: () => setState(() {
-                            final id = int.parse(c.id);
-                            _skills.contains(id) ? _skills.remove(id) : _skills.add(id);
-                            _saved = false;
-                          }),
-                        ),
-                    ]),
+                    if (_catalog != null)
+                      SkillsPicker(
+                        catalog: _catalog!,
+                        selected: _skills,
+                        onChanged: (next) => setState(() {
+                          _skills
+                            ..clear()
+                            ..addAll(next);
+                          _saved = false;
+                        }),
+                      ),
                     const SizedBox(height: TtSpace.s3),
                     TratraInput(controller: _experience, label: 'Années d’expérience', keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
                     const SizedBox(height: TtSpace.s3),

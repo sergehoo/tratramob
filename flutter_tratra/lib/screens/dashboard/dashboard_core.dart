@@ -357,6 +357,9 @@ class DashboardController extends ChangeNotifier {
   DashData? data;
   bool loading = false;
   String? error;
+
+  /// Session refusée par le serveur (jeton expiré ou révoqué, renouvellement impossible) : réessayer ne sert à rien, il faut se reconnecter.
+  bool sessionExpired = false;
   String? _userKey;
 
   /// À appeler quand la session change : purge si le compte n'est plus le même.
@@ -382,7 +385,10 @@ class DashboardController extends ChangeNotifier {
       data = DashData(raw);
     } catch (e) {
       if (key != _userKey) return;
-      error = friendlyError(e, 'Le tableau de bord n’a pas pu être chargé.');
+      sessionExpired = e is ApiException && e.statusCode == 401;
+      error = sessionExpired
+          ? 'Votre session a expiré. Reconnectez-vous pour retrouver votre espace.'
+          : friendlyError(e, 'Le tableau de bord n’a pas pu être chargé.');
     } finally {
       if (key == _userKey) {
         loading = false;

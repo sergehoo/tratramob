@@ -371,73 +371,99 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      body: RefreshIndicator(
-        color: TtColors.primaryDark,
-        backgroundColor: TtColors.surface,
-        onRefresh: _onRefresh,
-        child: CustomScrollView(
-          controller: _scroll,
-          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-          slivers: [
-            SliverToBoxAdapter(
-              child: HomeHero(
-                greetingName: firstName,
-                locationLabel: _currentPosition == null ? 'Position inactive' : 'Autour de moi',
-                locationActive: _currentPosition != null,
-                onLocationTap: _onChangeLocation,
-                onProfileTap: _openProfile,
-                searchController: _searchCtrl,
-                onSearchChanged: _onSearchChanged,
-                actions: [
-                  HomeHeroAction(
-                    icon: Icons.bolt_rounded,
-                    label: 'Urgence',
-                    accent: true,
-                    onTap: _showAllUrgentServices,
+      body: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light,              // icônes claires : sur le haut sombre du bandeau d'accueil comme sur le bandeau de défilement
+        child: Stack(children: [
+          RefreshIndicator(
+            color: TtColors.primaryDark,
+            backgroundColor: TtColors.surface,
+            onRefresh: _onRefresh,
+            child: CustomScrollView(
+              controller: _scroll,
+              physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: HomeHero(
+                    greetingName: firstName,
+                    locationLabel: _currentPosition == null ? 'Position inactive' : 'Autour de moi',
+                    locationActive: _currentPosition != null,
+                    onLocationTap: _onChangeLocation,
+                    onProfileTap: _openProfile,
+                    searchController: _searchCtrl,
+                    onSearchChanged: _onSearchChanged,
+                    actions: [
+                      HomeHeroAction(
+                        icon: Icons.bolt_rounded,
+                        label: 'Urgence',
+                        accent: true,
+                        onTap: _showAllUrgentServices,
+                      ),
+                      HomeHeroAction(icon: Icons.handyman_outlined, label: 'Services', onTap: _showAllServices),
+                      HomeHeroAction(icon: Icons.near_me_rounded, label: 'Proches', onTap: _showAllArtisans),
+                      HomeHeroAction(icon: Icons.grid_view_rounded, label: 'Catégories', onTap: _showAllCategories),
+                    ],
                   ),
-                  HomeHeroAction(icon: Icons.handyman_outlined, label: 'Services', onTap: _showAllServices),
-                  HomeHeroAction(icon: Icons.near_me_rounded, label: 'Proches', onTap: _showAllArtisans),
-                  HomeHeroAction(icon: Icons.grid_view_rounded, label: 'Catégories', onTap: _showAllCategories),
-                ],
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: TtSpace.s4),
+                    child: HomeFilterPanel(
+                      categories: _categories,
+                      selected: _selectedCategory,
+                      onlyNearby: _onlyNearby,
+                      canNearby: _currentPosition != null,
+                      ordering: _ordering,
+                      onSelectCategory: _onSelectCategory,
+                      onToggleNearby: _onToggleNearby,
+                      onChangeOrdering: _onChangeOrdering,
+                      onRetryLocation: _loadData,
+                    ),
+                  ),
+                ),
+                if (_isLoading && !_slidesLoaded)
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: TtSpace.s5),
+                      child: HomeSlidesSkeleton(),
+                    ),
+                  )
+                else if (slides.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: TtSpace.s5),
+                      child: HomeSlides(key: ValueKey(slides.length), slides: slides),
+                    ),
+                  ),
+                SliverToBoxAdapter(child: HomeUrgentBanner(onTap: _showAllUrgentServices)),
+                ..._categoriesSection(),
+                ..._nearbySection(),
+                ..._servicesSection(),
+                const SliverToBoxAdapter(child: SizedBox(height: 96)),
+              ],
+            ),
+          ),
+          // Pas de barre d'application ici : dès que la page défile, un bandeau sombre occupe la zone de la barre d'état, sinon les
+          // filtres et les cartes passent sous l'heure et les icônes du téléphone.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: MediaQuery.paddingOf(context).top,
+            child: IgnorePointer(
+              child: ListenableBuilder(
+                listenable: _scroll,
+                builder: (context, _) {
+                  final scrolled = _scroll.hasClients && _scroll.offset > 4;
+                  return AnimatedContainer(
+                    key: const ValueKey('status-bar-scrim'),
+                    duration: TtMotion.fast,
+                    color: scrolled ? TtColors.night : TtColors.night.withValues(alpha: 0),
+                  );
+                },
               ),
             ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(top: TtSpace.s4),
-                child: HomeFilterPanel(
-                  categories: _categories,
-                  selected: _selectedCategory,
-                  onlyNearby: _onlyNearby,
-                  canNearby: _currentPosition != null,
-                  ordering: _ordering,
-                  onSelectCategory: _onSelectCategory,
-                  onToggleNearby: _onToggleNearby,
-                  onChangeOrdering: _onChangeOrdering,
-                  onRetryLocation: _loadData,
-                ),
-              ),
-            ),
-            if (_isLoading && !_slidesLoaded)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.only(top: TtSpace.s5),
-                  child: HomeSlidesSkeleton(),
-                ),
-              )
-            else if (slides.isNotEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: TtSpace.s5),
-                  child: HomeSlides(key: ValueKey(slides.length), slides: slides),
-                ),
-              ),
-            SliverToBoxAdapter(child: HomeUrgentBanner(onTap: _showAllUrgentServices)),
-            ..._categoriesSection(),
-            ..._nearbySection(),
-            ..._servicesSection(),
-            const SliverToBoxAdapter(child: SizedBox(height: 96)),
-          ],
-        ),
+          ),
+        ]),
       ),
       bottomNavigationBar: widget.embedded
           ? null

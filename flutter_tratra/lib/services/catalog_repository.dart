@@ -24,6 +24,20 @@ const int catalogFallbackFeatured = 10;
 
 const String _prefsKey = 'tratra.catalog.v1';
 
+const Map<String, String> _accents = {
+  'à': 'a', 'â': 'a', 'ä': 'a', 'á': 'a', 'ã': 'a', 'ç': 'c', 'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e', 'î': 'i', 'ï': 'i', 'í': 'i', 'ì': 'i',
+  'ô': 'o', 'ö': 'o', 'ó': 'o', 'ò': 'o', 'õ': 'o', 'ù': 'u', 'û': 'u', 'ü': 'u', 'ú': 'u', 'ÿ': 'y', 'ñ': 'n', 'œ': 'oe', 'æ': 'ae',
+};
+
+/// Texte comparable pour la recherche : minuscules, sans accents, ponctuation et espaces multiples réduits à un espace.
+String catalogFold(String s) {
+  final b = StringBuffer();
+  for (final ch in s.toLowerCase().split('')) {
+    b.write(_accents[ch] ?? ch);
+  }
+  return b.toString().replaceAll(RegExp(r"[^a-z0-9]+"), ' ').trim();
+}
+
 class Catalog {
   Catalog(this.items, {this.version = ''});
 
@@ -52,6 +66,32 @@ class Catalog {
 
   /// Noms de toutes les catégories (métiers puis prestations) : listes de filtres.
   List<String> get names => [for (final c in items) if (c.name.isNotEmpty) c.name];
+
+  /// Autocomplétion : métiers et prestations dont le nom contient la saisie, sans tenir compte des accents ni des majuscules
+  /// (« electri » → Électricité, « fuite » → Réparation de fuite). Débuts de mot d'abord, puis ordre du catalogue ; saisie vide = tous
+  /// les métiers. `tradeId` restreint aux prestations d'un métier.
+  List<Category> search(String query, {String? tradeId, int limit = 40}) {
+    final pool = tradeId == null ? items : prestationsOf(tradeId);
+    final q = catalogFold(query);
+    if (q.isEmpty) return (tradeId == null ? trades : pool).take(limit).toList();
+    final starts = <Category>[], contains = <Category>[];
+    for (final c in pool) {
+      final name = catalogFold(c.name);
+      if (name.startsWith(q) || name.contains(' $q')) {
+        starts.add(c);
+      } else if (name.contains(q)) {
+        contains.add(c);
+      }
+    }
+    return [...starts, ...contains].take(limit).toList();
+  }
+
+  /// « Plomberie » pour un métier, « Plomberie › Réparation de fuite » pour une prestation.
+  String pathOf(Category c) {
+    if (c.isTrade) return c.name;
+    final trade = c.trade == null ? null : byId(c.trade!);
+    return trade == null ? c.name : '${trade.name} › ${c.name}';
+  }
 
   factory Catalog.fromJson(Map<String, dynamic> json) {
     final results = json['results'];

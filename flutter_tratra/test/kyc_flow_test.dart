@@ -20,7 +20,10 @@ import 'package:flutter_tratra/kyc/kyc_flow_api.dart';
 import 'package:flutter_tratra/screens/auth/profile_extras.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/eligibility_panel.dart';
+import 'package:flutter_tratra/models/category.dart';
+import 'package:flutter_tratra/screens/dashboard/catalog_pickers.dart';
 import 'package:flutter_tratra/screens/dashboard/provider_screens.dart';
+import 'package:flutter_tratra/services/catalog_repository.dart';
 
 http.Response _json(Object body, [int status = 200]) =>
     http.Response.bytes(utf8.encode(jsonEncode(body)), status, headers: const {'content-type': 'application/json; charset=utf-8'});
@@ -192,10 +195,12 @@ BaseApi _base(http.Client client) {
 }
 
 /// Laisse les lectures de fichier réelles (envoi multipart) se terminer, puis stabilise l'affichage.
+/// L'attente dure tant que l'envoi est en cours (quelle que soit la charge de la machine), au plus 15 s.
 Future<void> _io(WidgetTester t) async {
-  for (var i = 0; i < 20; i++) {
+  for (var i = 0; i < 300; i++) {
     await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await t.pump(const Duration(milliseconds: 50));
+    if (i >= 2 && find.textContaining('Envoi et contrôle').evaluate().isEmpty) break;
   }
   await t.pumpAndSettle();
 }
@@ -322,6 +327,18 @@ void main() {
       expect(find.text('Nouvelle pièce demandée'), findsWidgets);
     });
 
+    testWidgets('nouvelle tentative : le motif précédent est rappelé en avertissement ; étapes comptées sans l’étape non requise', (t) async {
+      _size(t);
+      final server = KycServer(kycState(current: 'capture', birth: '1990-04-12', kind: 'cni', previous: 'Verso flou.', captures: [side('front', present: true, quality: 'ok'), side('back')]));
+      final base = _base(server.client);
+      await t.pumpWidget(_host(base, IdentityFlowScreen(api: KycFlowApi(base))));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('kyc-previous')), findsOneWidget);
+      expect(find.text('Motif du refus précédent'), findsOneWidget);
+      expect(find.byKey(const ValueKey('kyc-rejection')), findsNothing);
+      expect(find.text('2 sur 6 terminées'), findsOneWidget);        // la vérification faciale « non requise » n'est pas comptée
+    });
+
     testWidgets('vérification faciale : absente si désactivée (« Non requise »), proposée avec alternative humaine si activée', (t) async {
       _size(t);
       var server = KycServer(kycState(status: 'in_review', current: 'review', birth: '1990-04-12', kind: 'cni', review: 'pending', sentAt: '2026-10-20T10:00:00Z', states: {'review': 'waiting'}));
@@ -376,6 +393,24 @@ void main() {
       });
     }
 
+    testWidgets('nouvelle offre, suggestions ouvertes et clavier (320×568, texte ×1,3)', (t) async {
+      _size(t, size: const Size(320, 568), text: 1.3);
+      final base = _base(MockClient((r) async => r.url.path.endsWith('/catalog/')
+          ? _json({'version': 'v1', 'results': [
+              for (var i = 1; i <= 12; i++) {'id': i, 'name': 'Métier numéro $i au nom assez long pour passer à la ligne', 'slug': 'm$i', 'parent': null, 'trade': i, 'kind': 'trade', 'is_active': true},
+            ]})
+          : _json({})));
+      await t.pumpWidget(_host(base, const NewServiceScreen(), dash: DashData(_dashPayload())));
+      await t.pumpAndSettle();
+      await t.tap(_field('Métier'));
+      await t.enterText(_field('Métier'), 'metier');
+      t.view.viewInsets = const FakeViewPadding(bottom: 260);           // clavier ouvert
+      addTearDown(t.view.resetViewInsets);
+      await t.pumpAndSettle();
+      expect(find.byType(ListTile), findsWidgets);
+      expect(t.takeException(), isNull);
+    });
+
     testWidgets('« Mes offres » vide : état vide sans hauteur imposée, action « Créer ma première offre »', (t) async {
       _size(t, size: const Size(320, 568), text: 1.3);
       final base = _base(MockClient((r) async => r.url.path.endsWith('/me/services/') ? _json({'publishable': false, 'eligibility': eligibility(), 'results': []}) : _json({})));
@@ -425,49 +460,198 @@ void main() {
       expect(find.textContaining('Plomberie › Réparation de fuite'), findsOneWidget);
     });
 
-    testWidgets('nouvelle offre : métier → prestation (catalogue commun) → description → tarif ; la prestation est enregistrée', (t) async {
-      _size(t);
-      Map<String, dynamic>? posted;
-      final base = _base(MockClient((r) async {
-        if (r.url.path.endsWith('/catalog/')) {
-          return _json({'version': 'v1', 'results': [
-            {'id': 7, 'name': 'Plomberie', 'slug': 'plomberie', 'parent': null, 'trade': 7, 'kind': 'trade', 'is_active': true},
-            {'id': 8, 'name': 'Réparation de fuite', 'slug': 'fuite', 'parent': 7, 'trade': 7, 'kind': 'prestation', 'is_active': true},
-            {'id': 9, 'name': 'Nounou', 'slug': 'nounou', 'parent': null, 'trade': 9, 'kind': 'trade', 'is_active': true},
-          ]});
-        }
-        if (r.url.path.endsWith('/services/') && r.method == 'POST') {
-          posted = jsonDecode(r.body) as Map<String, dynamic>;
-          return _json({'id': 3}, 201);
-        }
-        return _json({});
-      }));
-      await t.pumpWidget(_host(base, const Scaffold(body: _Opener()), dash: DashData(_dashPayload())));
-      await t.tap(find.text('ouvrir'));
-      await t.pumpAndSettle();
-      expect(find.byKey(const ValueKey('new-waiting')), findsOneWidget);       // publication pas encore autorisée : annoncé avant la création
-      await t.tap(find.byKey(const ValueKey('new-submit')));
-      await t.pumpAndSettle();
-      expect(find.text('Choisissez votre métier.'), findsOneWidget);
-      await t.tap(find.byKey(const ValueKey('new-trade')));
-      await t.pumpAndSettle();
-      await t.tap(find.text('Plomberie').last);
-      await t.pumpAndSettle();
-      await t.tap(find.byKey(const ValueKey('new-prestation-7')));
-      await t.pumpAndSettle();
-      await t.tap(find.text('Réparation de fuite').last);
-      await t.pumpAndSettle();
-      expect(find.widgetWithText(TextField, 'Réparation de fuite'), findsOneWidget);   // titre proposé, modifiable
+    BaseApi offerApi(void Function(Map<String, dynamic>) onPost) => _base(MockClient((r) async {
+          if (r.url.path.endsWith('/catalog/')) {
+            return _json({'version': 'v1', 'results': [
+              {'id': 7, 'name': 'Plomberie', 'slug': 'plomberie', 'parent': null, 'trade': 7, 'kind': 'trade', 'is_active': true},
+              {'id': 8, 'name': 'Réparation de fuite', 'slug': 'fuite', 'parent': 7, 'trade': 7, 'kind': 'prestation', 'is_active': true},
+              {'id': 11, 'name': 'Débouchage', 'slug': 'debouchage', 'parent': 7, 'trade': 7, 'kind': 'prestation', 'is_active': true},
+              {'id': 9, 'name': 'Nounou', 'slug': 'nounou', 'parent': null, 'trade': 9, 'kind': 'trade', 'is_active': true},
+              {'id': 10, 'name': 'Électricité', 'slug': 'electricite', 'parent': null, 'trade': 10, 'kind': 'trade', 'is_active': true},
+            ]});
+          }
+          if (r.url.path.endsWith('/services/') && r.method == 'POST') {
+            onPost(jsonDecode(r.body) as Map<String, dynamic>);
+            return _json({'id': 3}, 201);
+          }
+          return _json({});
+        }));
+
+    Future<void> fillAndSubmit(WidgetTester t) async {
       await t.enterText(_field('Description'), 'Recherche et réparation de fuites, matériel fourni.');
       await t.enterText(_field('Tarif (FCFA)'), '15000');
       await t.ensureVisible(find.byKey(const ValueKey('new-submit')));
       await t.tap(find.byKey(const ValueKey('new-submit')));
       await t.pumpAndSettle();
-      expect(posted, isNotNull);
+    }
+
+    testWidgets('nouvelle offre : « Métier » en autocomplétion — une prestation se trouve directement (« fuite »), son métier est déduit', (t) async {
+      _size(t);
+      Map<String, dynamic>? posted;
+      await t.pumpWidget(_host(offerApi((b) => posted = b), const Scaffold(body: _Opener()), dash: DashData(_dashPayload())));
+      await t.tap(find.text('ouvrir'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('new-waiting')), findsOneWidget);       // publication pas encore autorisée : annoncé avant la création
+      // saisie libre sans choix dans la liste : refusée (aucun métier inventé)
+      await t.enterText(_field('Métier'), 'xyz');
+      await t.pumpAndSettle();
+      expect(find.byType(ListTile), findsNothing);
+      await t.ensureVisible(find.byKey(const ValueKey('new-submit')));
+      await t.tap(find.byKey(const ValueKey('new-submit')));
+      await t.pumpAndSettle();
+      expect(find.text('Choisissez votre métier dans la liste proposée.'), findsOneWidget);
+      expect(posted, isNull);
+      // « fuite » propose la prestation avec son rattachement
+      await t.enterText(_field('Métier'), 'fuite');
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('option-8')), findsOneWidget);
+      expect(find.text('Prestation · Plomberie'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('option-8')));
+      await t.pumpAndSettle();
+      expect(find.widgetWithText(TextField, 'Plomberie › Réparation de fuite'), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Réparation de fuite'), findsOneWidget);   // titre proposé, modifiable
+      expect(find.byKey(const ValueKey('new-prestation-7')), findsNothing);           // prestation déjà choisie
+      expect(find.text('2'), findsOneWidget);                                          // étapes renumérotées : 1 métier, 2 description, 3 tarif
+      expect(find.text('4'), findsNothing);
+      await fillAndSubmit(t);
       expect(posted!['category'], 8);
       expect(posted!['title'], 'Réparation de fuite');
       expect(posted!['price'], '15000');
       expect(find.text('Offre créée : elle sera publiée dès que votre publication sera autorisée.'), findsOneWidget);
+    });
+
+    testWidgets('autocomplétion sans accents ni majuscules ; un métier à prestations demande ensuite la prestation', (t) async {
+      _size(t);
+      Map<String, dynamic>? posted;
+      await t.pumpWidget(_host(offerApi((b) => posted = b), const Scaffold(body: _Opener()), dash: DashData(_dashPayload())));
+      await t.tap(find.text('ouvrir'));
+      await t.pumpAndSettle();
+      await t.enterText(_field('Métier'), 'ELECTRI');
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('option-10')), findsOneWidget);                // « Électricité »
+      await t.enterText(_field('Métier'), 'plomb');
+      await t.pumpAndSettle();
+      expect(find.text('Métier · 2 prestations'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('option-7')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('new-prestation-7')), findsOneWidget);
+      await t.ensureVisible(find.byKey(const ValueKey('new-submit')));
+      await t.tap(find.byKey(const ValueKey('new-submit')));
+      await t.pumpAndSettle();
+      expect(find.text('Choisissez la prestation proposée.'), findsOneWidget);
+      await t.enterText(_field('Prestation'), 'debou');
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('option-11')));
+      await t.pumpAndSettle();
+      await fillAndSubmit(t);
+      expect(posted!['category'], 11);
+      expect(posted!['title'], 'Débouchage');
+    });
+
+    test('recherche du catalogue : accents, majuscules, débuts de mot d’abord', () {
+      final c = Catalog([
+        for (final m in [
+          {'id': 1, 'name': 'Électricité', 'parent': null, 'trade': 1},
+          {'id': 2, 'name': 'Dépannage électrique', 'parent': 1, 'trade': 1},
+          {'id': 3, 'name': 'Nounou', 'parent': null, 'trade': 3},
+        ])
+          Category.fromJson(m),
+      ]);
+      expect(catalogFold('  Électricité-Générale '), 'electricite generale');
+      expect(c.search('ELEC').map((x) => x.name), ['Électricité', 'Dépannage électrique']);
+      expect(c.search('').map((x) => x.name), ['Électricité', 'Nounou']);              // saisie vide : tous les métiers
+      expect(c.search('elec', tradeId: '1').map((x) => x.name), ['Dépannage électrique']);
+      expect(c.pathOf(c.byId('2')!), 'Électricité › Dépannage électrique');
+    });
+  });
+
+  group('spécialités du profil professionnel', () {
+    Catalog cat() => Catalog([
+          for (final m in [
+            {'id': 7, 'name': 'Plomberie', 'parent': null, 'trade': 7},
+            {'id': 8, 'name': 'Réparation de fuite', 'parent': 7, 'trade': 7},
+            {'id': 11, 'name': 'Débouchage', 'parent': 7, 'trade': 7},
+            {'id': 9, 'name': 'Nounou', 'parent': null, 'trade': 9},
+            for (var i = 20; i < 32; i++) {'id': i, 'name': 'Métier $i', 'parent': null, 'trade': i},
+          ])
+            Category.fromJson(m),
+        ]);
+
+    Widget picker(Set<int> selected, {Size? size}) => MaterialApp(
+          theme: TratraTheme.light(),
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, set) => SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: SkillsPicker(catalog: cat(), selected: selected, onChanged: (n) => set(() => selected..clear()..addAll(n))),
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('choisir un métier le fait remonter en haut et disparaître de la liste ; la croix le remet', (t) async {
+      _size(t);
+      final selected = <int>{};
+      await t.pumpWidget(picker(selected));
+      expect(find.byKey(const ValueKey('skills-none')), findsOneWidget);
+      expect(find.byKey(const ValueKey('family-9')), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('family-9')));                      // « Nounou » : métier sans prestation, ajout direct
+      await t.pumpAndSettle();
+      expect(selected, {9});
+      expect(find.byKey(const ValueKey('skill-chosen-9')), findsOneWidget);
+      expect(find.byKey(const ValueKey('family-9')), findsNothing);              // la liste se resserre
+      expect(find.text('1 choisie'), findsOneWidget);
+      await t.tap(find.descendant(of: find.byKey(const ValueKey('skill-chosen-9')), matching: find.byIcon(Icons.close_rounded)));
+      await t.pumpAndSettle();
+      expect(selected, isEmpty);
+      expect(find.byKey(const ValueKey('family-9')), findsOneWidget);
+    });
+
+    testWidgets('famille dépliable : prestations choisies une à une, le métier disparaît quand tout est choisi', (t) async {
+      _size(t);
+      final selected = <int>{};
+      await t.pumpWidget(picker(selected));
+      await t.tap(find.byKey(const ValueKey('family-7')));
+      await t.pumpAndSettle();
+      expect(find.text('2 prestations à choisir'), findsOneWidget);
+      expect(find.byKey(const ValueKey('family-all-7')), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('family-item-8')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('family-item-8')), findsNothing);
+      expect(find.text('Plomberie › Réparation de fuite'), findsOneWidget);    // remontée en haut, avec son métier
+      await t.tap(find.byKey(const ValueKey('family-item-11')));
+      await t.pumpAndSettle();
+      expect(find.text('Ajouter le métier entier'), findsOneWidget);              // prestations toutes choisies
+      await t.tap(find.byKey(const ValueKey('family-7')));
+      await t.pumpAndSettle();
+      expect(selected, {7, 8, 11});
+      expect(find.byKey(const ValueKey('family-7')), findsNothing);
+    });
+
+    testWidgets('recherche : quelques lettres suffisent, les spécialités déjà choisies ne sont plus proposées, le champ se vide', (t) async {
+      _size(t);
+      final selected = <int>{8};
+      await t.pumpWidget(picker(selected));
+      await t.enterText(_field('Ajouter une spécialité'), 'fuit');
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('option-8')), findsNothing);              // déjà choisie
+      await t.enterText(_field('Ajouter une spécialité'), 'NOUN');
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('option-9')));
+      await t.pumpAndSettle();
+      expect(selected, {8, 9});
+      expect(find.widgetWithText(TextField, 'Nounou'), findsNothing);            // champ vidé, prêt pour la suivante
+    });
+
+    testWidgets('liste longue : 8 métiers d’abord, « Voir les autres métiers » ; petit écran sans débordement', (t) async {
+      _size(t, size: const Size(320, 568), text: 1.3);
+      await t.pumpWidget(picker(<int>{7, 8}));
+      expect(find.text('Voir les 6 autres métiers'), findsOneWidget);           // 14 familles restantes, 8 affichées
+      await t.ensureVisible(find.byKey(const ValueKey('skills-more')));
+      await t.tap(find.byKey(const ValueKey('skills-more')));
+      await t.pumpAndSettle();
+      expect(find.text('Réduire la liste'), findsOneWidget);
+      expect(t.takeException(), isNull);
     });
   });
 

@@ -161,7 +161,7 @@ void main() {
     testWidgets('compte mixte : indicateurs artisan, progression du profil et onglets', (t) async {
       _tall(t);
       await t.pumpWidget(_host(DashData(_payload(provider: true)), Scaffold(body: DashboardHome(onExplore: () {}, onMessages: () {}))));
-      expect(find.text('Gérer mes services'), findsOneWidget);
+      expect(find.text('Gérer mes offres'), findsOneWidget);
       expect(find.text('Missions à traiter'), findsOneWidget);
       expect(find.text('Gains disponibles'), findsNothing); // fonctions financières désactivées (version Google Play)
       expect(find.text(formatFcfa(13350)), findsNothing);
@@ -213,6 +213,38 @@ void main() {
       expect(find.text('Réessayer'), findsOneWidget);
       await t.pumpWidget(const SizedBox.shrink());
       activities.dispose(); // arrête la relance automatique programmée
+    });
+
+    test('session refusée par le serveur (401) : « session expirée », pas une panne à réessayer', () async {
+      FlutterSecureStorage.setMockInitialValues({});
+      final c = DashboardController(DashboardApi(BaseApi(client: MockClient((_) async => http.Response('{"detail":"Token invalide"}', 401)))))..bindUser('9');
+      await c.load();
+      expect(c.sessionExpired, isTrue);
+      expect(c.error, contains('session a expiré'));
+      final down = DashboardController(DashboardApi(BaseApi(client: MockClient((_) async => http.Response('{}', 503)))))..bindUser('9');
+      await down.load();
+      expect(down.sessionExpired, isFalse);
+    });
+
+    testWidgets('session expirée : bouton « Se reconnecter » au lieu de l’impasse « Réessayer »', (t) async {
+      final expired = _FakeController(DashData(_payload()))
+        ..data = null
+        ..sessionExpired = true
+        ..error = 'Votre session a expiré. Reconnectez-vous pour retrouver votre espace.';
+      final activities = ActivitiesController(fetch: (_) async => {});
+      await t.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider<DashboardController>.value(value: expired),
+          ChangeNotifierProvider<ActivitiesController>.value(value: activities),
+          ChangeNotifierProvider<OfflineQueue>.value(value: OfflineQueue(send: (_) async => 200)),
+        ],
+        child: MaterialApp(theme: TratraTheme.light(), home: Scaffold(body: DashboardHome(onExplore: () {}, onMessages: () {}))),
+      ));
+      expect(find.text('Session expirée'), findsOneWidget);
+      expect(find.byKey(const ValueKey('relogin')), findsOneWidget);
+      expect(find.text('Réessayer'), findsNothing);
+      await t.pumpWidget(const SizedBox.shrink());
+      activities.dispose();
     });
   });
 

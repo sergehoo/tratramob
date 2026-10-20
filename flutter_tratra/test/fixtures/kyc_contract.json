@@ -31,7 +31,7 @@
    },
    {
     "key": "review",
-    "label": "Revue par l'équipe Tratra",
+    "label": "Revue par l’équipe Tratra",
     "state": "todo"
    },
    {
@@ -51,7 +51,7 @@
    "kinds": [
     {
      "value": "cni",
-     "label": "Carte nationale d'identité",
+     "label": "Carte nationale d’identité",
      "sides": 2
     },
     {
@@ -71,7 +71,7 @@
    "choice": "",
    "human_review_requested": false,
    "done": true,
-   "note": "Non requise : l'équipe Tratra vérifie votre pièce elle-même."
+   "note": "Non requise : l’équipe Tratra vérifie votre pièce elle-même."
   },
   "review": {
    "state": "none",
@@ -101,12 +101,12 @@
      {
       "key": "experience",
       "label": "Expérience",
-      "hint": "Indiquez vos années d'expérience.",
+      "hint": "Indiquez vos années d’expérience.",
       "done": false
      },
      {
       "key": "zone",
-      "label": "Zone d'intervention",
+      "label": "Zone d’intervention",
       "hint": "Renseignez votre commune.",
       "done": false
      },
@@ -127,7 +127,7 @@
    },
    "approval": {
     "approved": false,
-    "label": "Validation de l'équipe en attente"
+    "label": "Validation de l’équipe en attente"
    },
    "publication": {
     "authorized": false,
@@ -135,7 +135,7 @@
     "blockers": [
      {
       "code": "profile_incomplete",
-      "label": "Profil incomplet : présentation, spécialités, expérience, zone d'intervention, photo de profil",
+      "label": "Profil incomplet : présentation, spécialités, expérience, zone d’intervention, photo de profil",
       "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
       "action": {
        "code": "edit_profile",
@@ -145,7 +145,7 @@
      {
       "code": "kyc_draft",
       "label": "Identité non vérifiée",
-      "hint": "Faites vérifier votre pièce d'identité : quelques minutes suffisent.",
+      "hint": "Faites vérifier votre pièce d’identité : quelques minutes suffisent.",
       "action": {
        "code": "verify_identity",
        "label": "Vérifier mon identité"
@@ -170,7 +170,7 @@
    }
   },
   "editable": true,
-  "updated_at": "2026-10-20T18:33:48.002690+00:00"
+  "updated_at": "2026-10-20T19:09:40.955114+00:00"
  },
  "ready": {
   "status": "draft",
@@ -204,7 +204,7 @@
    },
    {
     "key": "review",
-    "label": "Revue par l'équipe Tratra",
+    "label": "Revue par l’équipe Tratra",
     "state": "todo"
    },
    {
@@ -224,7 +224,7 @@
    "kinds": [
     {
      "value": "cni",
-     "label": "Carte nationale d'identité",
+     "label": "Carte nationale d’identité",
      "sides": 2
     },
     {
@@ -267,7 +267,7 @@
    "choice": "",
    "human_review_requested": false,
    "done": true,
-   "note": "Non requise : l'équipe Tratra vérifie votre pièce elle-même."
+   "note": "Non requise : l’équipe Tratra vérifie votre pièce elle-même."
   },
   "review": {
    "state": "none",
@@ -297,12 +297,12 @@
      {
       "key": "experience",
       "label": "Expérience",
-      "hint": "Indiquez vos années d'expérience.",
+      "hint": "Indiquez vos années d’expérience.",
       "done": false
      },
      {
       "key": "zone",
-      "label": "Zone d'intervention",
+      "label": "Zone d’intervention",
       "hint": "Renseignez votre commune.",
       "done": false
      },
@@ -323,7 +323,7 @@
    },
    "approval": {
     "approved": false,
-    "label": "Validation de l'équipe en attente"
+    "label": "Validation de l’équipe en attente"
    },
    "publication": {
     "authorized": false,
@@ -331,7 +331,7 @@
     "blockers": [
      {
       "code": "profile_incomplete",
-      "label": "Profil incomplet : présentation, spécialités, expérience, zone d'intervention, photo de profil",
+      "label": "Profil incomplet : présentation, spécialités, expérience, zone d’intervention, photo de profil",
       "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
       "action": {
        "code": "edit_profile",
@@ -341,7 +341,7 @@
      {
       "code": "kyc_draft",
       "label": "Identité non vérifiée",
-      "hint": "Faites vérifier votre pièce d'identité : quelques minutes suffisent.",
+      "hint": "Faites vérifier votre pièce d’identité : quelques minutes suffisent.",
       "action": {
        "code": "verify_identity",
        "label": "Vérifier mon identité"
@@ -366,7 +366,7 @@
    }
   },
   "editable": true,
-  "updated_at": "2026-10-20T18:33:48.169809+00:00"
+  "updated_at": "2026-10-20T19:09:41.086876+00:00"
  },
  "in_review": {
   "status": "in_review",
@@ -400,7 +400,7 @@
    },
    {
     "key": "review",
-    "label": "Revue par l'équipe Tratra",
+    "label": "Revue par l’équipe Tratra",
     "state": "waiting"
    },
    {
@@ -420,7 +420,7 @@
    "kinds": [
     {
      "value": "cni",
-     "label": "Carte nationale d'identité",
+     "label": "Carte nationale d’identité",
      "sides": 2
     },
     {
@@ -463,12 +463,12 @@
    "choice": "",
    "human_review_requested": false,
    "done": true,
-   "note": "Non requise : l'équipe Tratra vérifie votre pièce elle-même."
+   "note": "Non requise : l’équipe Tratra vérifie votre pièce elle-même."
   },
   "review": {
    "state": "pending",
    "reason": "",
-   "sent_at": "2026-10-20T18:33:48.217348+00:00",
+   "sent_at": "2026-10-20T19:09:41.160930+00:00",
    "attempts": 1,
    "previous_reason": null
   },
@@ -493,12 +493,12 @@
      {
       "key": "experience",
       "label": "Expérience",
-      "hint": "Indiquez vos années d'expérience.",
+      "hint": "Indiquez vos années d’expérience.",
       "done": false
      },
      {
       "key": "zone",
-      "label": "Zone d'intervention",
+      "label": "Zone d’intervention",
       "hint": "Renseignez votre commune.",
       "done": false
      },
@@ -519,7 +519,7 @@
    },
    "approval": {
     "approved": false,
-    "label": "Validation de l'équipe en attente"
+    "label": "Validation de l’équipe en attente"
    },
    "publication": {
     "authorized": false,
@@ -527,7 +527,7 @@
     "blockers": [
      {
       "code": "profile_incomplete",
-      "label": "Profil incomplet : présentation, spécialités, expérience, zone d'intervention, photo de profil",
+      "label": "Profil incomplet : présentation, spécialités, expérience, zone d’intervention, photo de profil",
       "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
       "action": {
        "code": "edit_profile",
@@ -536,8 +536,8 @@
      },
      {
       "code": "kyc_pending",
-      "label": "Pièce d'identité en cours de revue",
-      "hint": "L'équipe Tratra examine votre pièce : aucune action n'est nécessaire.",
+      "label": "Pièce d’identité en cours de revue",
+      "hint": "L’équipe Tratra examine votre pièce : aucune action n’est nécessaire.",
       "action": null
      }
     ]
@@ -559,7 +559,7 @@
    }
   },
   "editable": false,
-  "updated_at": "2026-10-20T18:33:48.217384+00:00"
+  "updated_at": "2026-10-20T19:09:41.160987+00:00"
  },
  "rejected": {
   "status": "changes_requested",
@@ -593,7 +593,7 @@
    },
    {
     "key": "review",
-    "label": "Revue par l'équipe Tratra",
+    "label": "Revue par l’équipe Tratra",
     "state": "todo"
    },
    {
@@ -613,7 +613,7 @@
    "kinds": [
     {
      "value": "cni",
-     "label": "Carte nationale d'identité",
+     "label": "Carte nationale d’identité",
      "sides": 2
     },
     {
@@ -626,27 +626,21 @@
     {
      "side": "front",
      "label": "Recto",
-     "present": true,
-     "quality": "ok",
+     "present": false,
+     "quality": null,
      "problems": [],
-     "reading": {
-      "notes": [],
-      "status": "unavailable"
-     }
+     "reading": null
     },
     {
      "side": "back",
      "label": "Verso",
-     "present": true,
-     "quality": "ok",
+     "present": false,
+     "quality": null,
      "problems": [],
-     "reading": {
-      "notes": [],
-      "status": "unavailable"
-     }
+     "reading": null
     }
    ],
-   "ready_to_send": true
+   "ready_to_send": false
   },
   "face": {
    "enabled": false,
@@ -656,12 +650,12 @@
    "choice": "",
    "human_review_requested": false,
    "done": true,
-   "note": "Non requise : l'équipe Tratra vérifie votre pièce elle-même."
+   "note": "Non requise : l’équipe Tratra vérifie votre pièce elle-même."
   },
   "review": {
    "state": "rejected",
    "reason": "Verso illisible.",
-   "sent_at": "2026-10-20T18:33:48.217348+00:00",
+   "sent_at": "2026-10-20T19:09:41.160930+00:00",
    "attempts": 1,
    "previous_reason": null
   },
@@ -686,12 +680,12 @@
      {
       "key": "experience",
       "label": "Expérience",
-      "hint": "Indiquez vos années d'expérience.",
+      "hint": "Indiquez vos années d’expérience.",
       "done": false
      },
      {
       "key": "zone",
-      "label": "Zone d'intervention",
+      "label": "Zone d’intervention",
       "hint": "Renseignez votre commune.",
       "done": false
      },
@@ -712,7 +706,7 @@
    },
    "approval": {
     "approved": false,
-    "label": "Validation de l'équipe en attente"
+    "label": "Validation de l’équipe en attente"
    },
    "publication": {
     "authorized": false,
@@ -720,7 +714,7 @@
     "blockers": [
      {
       "code": "profile_incomplete",
-      "label": "Profil incomplet : présentation, spécialités, expérience, zone d'intervention, photo de profil",
+      "label": "Profil incomplet : présentation, spécialités, expérience, zone d’intervention, photo de profil",
       "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
       "action": {
        "code": "edit_profile",
@@ -729,7 +723,7 @@
      },
      {
       "code": "kyc_rejected",
-      "label": "Nouvelle pièce d'identité demandée",
+      "label": "Nouvelle pièce d’identité demandée",
       "hint": "Verso illisible.",
       "action": {
        "code": "verify_identity",
@@ -755,7 +749,7 @@
    }
   },
   "editable": true,
-  "updated_at": "2026-10-20T18:33:48.217384+00:00"
+  "updated_at": "2026-10-20T19:09:41.160987+00:00"
  },
  "services": {
   "publishable": false,
@@ -780,12 +774,12 @@
      {
       "key": "experience",
       "label": "Expérience",
-      "hint": "Indiquez vos années d'expérience.",
+      "hint": "Indiquez vos années d’expérience.",
       "done": false
      },
      {
       "key": "zone",
-      "label": "Zone d'intervention",
+      "label": "Zone d’intervention",
       "hint": "Renseignez votre commune.",
       "done": false
      },
@@ -806,7 +800,7 @@
    },
    "approval": {
     "approved": false,
-    "label": "Validation de l'équipe en attente"
+    "label": "Validation de l’équipe en attente"
    },
    "publication": {
     "authorized": false,
@@ -814,7 +808,7 @@
     "blockers": [
      {
       "code": "profile_incomplete",
-      "label": "Profil incomplet : présentation, spécialités, expérience, zone d'intervention, photo de profil",
+      "label": "Profil incomplet : présentation, spécialités, expérience, zone d’intervention, photo de profil",
       "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
       "action": {
        "code": "edit_profile",
@@ -823,7 +817,7 @@
      },
      {
       "code": "kyc_rejected",
-      "label": "Nouvelle pièce d'identité demandée",
+      "label": "Nouvelle pièce d’identité demandée",
       "hint": "Verso illisible.",
       "action": {
        "code": "verify_identity",
@@ -884,12 +878,12 @@
     {
      "key": "experience",
      "label": "Expérience",
-     "hint": "Indiquez vos années d'expérience.",
+     "hint": "Indiquez vos années d’expérience.",
      "done": false
     },
     {
      "key": "zone",
-     "label": "Zone d'intervention",
+     "label": "Zone d’intervention",
      "hint": "Renseignez votre commune.",
      "done": false
     },
@@ -901,13 +895,13 @@
     },
     {
      "key": "kyc",
-     "label": "Pièce d'identité vérifiée",
-     "hint": "Déposez votre pièce d'identité ; l'équipe Tratra la vérifie.",
+     "label": "Pièce d’identité vérifiée",
+     "hint": "Déposez votre pièce d’identité ; l’équipe Tratra la vérifie.",
      "done": false
     },
     {
      "key": "approval",
-     "label": "Validation par l'équipe Tratra",
+     "label": "Validation par l’équipe Tratra",
      "hint": "Dernière étape, après vérification de votre dossier.",
      "done": false
     }
@@ -947,12 +941,12 @@
      {
       "key": "experience",
       "label": "Expérience",
-      "hint": "Indiquez vos années d'expérience.",
+      "hint": "Indiquez vos années d’expérience.",
       "done": false
      },
      {
       "key": "zone",
-      "label": "Zone d'intervention",
+      "label": "Zone d’intervention",
       "hint": "Renseignez votre commune.",
       "done": false
      },
@@ -973,7 +967,7 @@
    },
    "approval": {
     "approved": false,
-    "label": "Validation de l'équipe en attente"
+    "label": "Validation de l’équipe en attente"
    },
    "publication": {
     "authorized": false,
@@ -981,7 +975,7 @@
     "blockers": [
      {
       "code": "profile_incomplete",
-      "label": "Profil incomplet : présentation, spécialités, expérience, zone d'intervention, photo de profil",
+      "label": "Profil incomplet : présentation, spécialités, expérience, zone d’intervention, photo de profil",
       "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
       "action": {
        "code": "edit_profile",
@@ -990,7 +984,7 @@
      },
      {
       "code": "kyc_rejected",
-      "label": "Nouvelle pièce d'identité demandée",
+      "label": "Nouvelle pièce d’identité demandée",
       "hint": "Verso illisible.",
       "action": {
        "code": "verify_identity",

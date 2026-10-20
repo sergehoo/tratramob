@@ -327,9 +327,11 @@ class _IdentityFlowScreenState extends State<IdentityFlowScreen> {
       );
 
   Widget? _rejection(KycFlowState s) {
-    final reason = s.reviewState == 'rejected' ? s.reviewReason : s.previousReason;
-    if (reason == null) return null;
-    return TratraAlert(key: const ValueKey('kyc-rejection'), tone: TratraAlertTone.danger, title: 'Nouvelle pièce demandée', message: reason);
+    if (s.reviewState == 'rejected' && s.reviewReason != null) {
+      return TratraAlert(key: const ValueKey('kyc-rejection'), tone: TratraAlertTone.danger, title: 'Nouvelle pièce demandée', message: s.reviewReason!);
+    }
+    if (s.previousReason == null) return null;
+    return TratraAlert(key: const ValueKey('kyc-previous'), tone: TratraAlertTone.warning, title: 'Motif du refus précédent', message: s.previousReason!);
   }
 
   List<Widget> _capture(KycFlowState s) => [
@@ -538,6 +540,13 @@ class _Header extends StatelessWidget {
   }
 }
 
+/// « 2 sur 6 terminées » : une étape non requise (vérification faciale désactivée) n'est ni comptée ni présentée comme faite.
+String _progressLabel(KycFlowState s) {
+  final required = s.steps.where((x) => x.state != 'skipped').length;
+  final done = s.steps.where((x) => x.state == 'done').length;
+  return '$done sur $required terminée${done > 1 ? 's' : ''}';
+}
+
 /// Les 7 étapes et leur état réel ; une étape déjà faite et encore modifiable peut être rouverte.
 class _StepsOverview extends StatelessWidget {
   const _StepsOverview({required this.state, this.onOpen});
@@ -555,8 +564,7 @@ class _StepsOverview extends StatelessWidget {
           tilePadding: const EdgeInsets.symmetric(horizontal: TtSpace.s4),
           childrenPadding: const EdgeInsets.fromLTRB(TtSpace.s4, 0, TtSpace.s4, TtSpace.s3),
           title: Text('Les 7 étapes', style: TratraTheme.style(TtType.title)),
-          subtitle: Text('${state.steps.where((s) => s.state == 'done' || s.state == 'skipped').length} terminée(s)',
-              style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
+          subtitle: Text(_progressLabel(state), style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
           children: [
             for (final s in state.steps)
               InkWell(

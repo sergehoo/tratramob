@@ -88,7 +88,11 @@ class EligibilityPanel extends StatelessWidget {
           title: 'Autorisation de publication',
           value: e.authorized ? 'Autorisée' : 'Non autorisée',
           ok: e.authorized,
-          detail: e.authorized ? 'Vos offres actives sont visibles des clients.' : e.approvalLabel,
+          detail: e.authorized
+              ? 'Vos offres actives sont visibles des clients.'
+              : e.blockers.isEmpty
+                  ? e.approvalLabel
+                  : '${e.blockers.length} point${e.blockers.length > 1 ? 's bloquent' : ' bloque'} la publication : voir ci-dessous.',
         ),
         if (showOffers)
           _Block(
