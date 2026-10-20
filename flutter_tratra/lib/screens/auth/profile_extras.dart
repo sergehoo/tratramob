@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
-import 'package:flutter_tratra/biometric/biometric_flow_screen.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/user.dart';
 import 'package:flutter_tratra/routes.dart';
@@ -96,43 +95,70 @@ Future<bool> changeProfilePhoto(BuildContext context, User user) async {
   }
 }
 
-/// « Mon espace » : tout ce que le même compte demande ou propose, plus sécurité et confidentialité.
+/// « Mon espace », regroupé par thème : compte, activité, espace professionnel, confiance et vérification, paramètres. Chaque destination
+/// n'apparaît qu'UNE fois (plus de « Mes services » et « Mes missions » vers le même écran, plus de « KYC » et « Vérification faciale »
+/// séparés : un seul parcours « Vérifier mon identité »).
 class AccountShortcuts extends StatelessWidget {
   const AccountShortcuts({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final isProvider = context.watch<DashboardController>().data?.isProvider ?? false;
-    final items = <(IconData, String, String, VoidCallback)>[
-      if (isProvider)
-        (Icons.handyman_outlined, 'Mes services', 'Publier et gérer mes prestations', () => openProviderHub(context))
-      else
-        (Icons.add_business_outlined, 'Proposer un service', 'Créer mon profil professionnel avec ce compte', () => openProvide(context)),
-      (Icons.place_outlined, 'Mes adresses', 'Principale, secondaires et favorites', () => openAddresses(context)),
-      (Icons.event_note_outlined, 'Mes réservations', 'Ce que j’ai demandé', () => openBookings(context)),
-      if (isProvider) (Icons.work_outline_rounded, 'Mes missions', 'Ce que j’exécute pour d’autres', () => openProviderHub(context)),
-      (Icons.description_outlined, 'Mes engagements', 'Contrats récurrents et longue durée', () => openEngagements(context)),
-      (Icons.star_outline_rounded, 'Mes évaluations', 'Avis donnés et reçus, réputation', () => openReviews(context)),
-      if (isProvider) (Icons.workspace_premium_outlined, 'Mes badges', 'Badges Trust et justificatifs', () => openReputation(context)),
-      if (isProvider) (Icons.verified_user_outlined, 'Vérification d’identité (KYC)', 'Pièces et justificatifs', () => openKyc(context)),
-      if (isProvider) (Icons.face_retouching_natural_rounded, 'Vérification faciale', 'Visage et pièce d’identité, ou vérification par l’équipe', () => pushPage(context, const BiometricFlowScreen())),
-      (Icons.notifications_none_rounded, 'Notifications et confidentialité', 'Alertes, communications promotionnelles', () => pushPage(context, const NotificationPreferencesScreen())),
-      (Icons.lock_outline_rounded, 'Sécurité du compte', 'Changer mon mot de passe par code SMS', () => Navigator.pushNamed(context, RouteNames.forgotPassword)),
-    ];
-    return TratraCard(
-      padding: const EdgeInsets.symmetric(horizontal: TtSpace.s2, vertical: TtSpace.s1),
-      child: Column(children: [
-        for (var i = 0; i < items.length; i++) ...[
-          if (i > 0) const Divider(height: 1),
-          ListTile(
-            leading: Icon(items[i].$1, color: TtColors.primary),
-            title: Text(items[i].$2),
-            subtitle: Text(items[i].$3, style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
-            trailing: const Icon(Icons.chevron_right_rounded, color: TtColors.ash),
-            onTap: items[i].$4,
-          ),
-        ],
+    final data = context.watch<DashboardController>().data;
+    final isProvider = data?.isProvider ?? false;
+    final e = data?.provider?.eligibility;
+    final sections = <(String, List<(IconData, String, String, VoidCallback)>)>[
+      ('Compte', [
+        (Icons.place_outlined, 'Mes adresses', 'Principale, secondaires et favorites', () => openAddresses(context)),
+        (Icons.lock_outline_rounded, 'Sécurité du compte', 'Changer mon mot de passe par code SMS', () => Navigator.pushNamed(context, RouteNames.forgotPassword)),
       ]),
-    );
+      ('Activité', [
+        (Icons.event_note_outlined, 'Mes réservations', 'Ce que j’ai demandé', () => openBookings(context)),
+        (Icons.description_outlined, 'Mes engagements', 'Contrats récurrents et longue durée', () => openEngagements(context)),
+        (Icons.star_outline_rounded, 'Mes évaluations', 'Avis donnés et reçus', () => openReviews(context)),
+      ]),
+      ('Espace professionnel', [
+        if (isProvider) ...[
+          (Icons.storefront_outlined, 'Mes offres et missions', 'Publier mes offres, accepter mes missions', () => openProviderHub(context)),
+          (Icons.badge_outlined, 'Mon profil professionnel',
+              e == null ? 'Présentation, spécialités, zone' : 'Profil ${e.profileDone}/${e.profileTotal} · ${e.authorized ? 'publié' : 'non publié'}',
+              () => openProProfile(context)),
+          (Icons.workspace_premium_outlined, 'Mes badges et réputation', 'Badges Trust, avis reçus', () => openReputation(context)),
+        ] else
+          (Icons.add_business_outlined, 'Proposer un service', 'Créer mon profil professionnel avec ce compte', () => openProvide(context)),
+      ]),
+      if (isProvider)
+        ('Confiance et vérification', [
+          (Icons.verified_user_outlined, 'Vérifier mon identité', e?.kycLabel ?? 'Pièce d’identité, revue par l’équipe Tratra', () => openKyc(context)),
+          (Icons.folder_open_outlined, 'Documents et justificatifs', 'Diplômes, attestations, historique des pièces', () => openDocuments(context)),
+        ]),
+      ('Paramètres', [
+        (Icons.notifications_none_rounded, 'Notifications et confidentialité', 'Alertes, communications promotionnelles',
+            () => pushPage(context, const NotificationPreferencesScreen())),
+      ]),
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      for (final (title, items) in sections) ...[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(TtSpace.s1, TtSpace.s4, TtSpace.s1, TtSpace.s2),
+          child: Semantics(header: true, child: Text(title, style: TratraTheme.style(TtType.title, color: TtColors.inkSoft))),
+        ),
+        TratraCard(
+          key: ValueKey('shortcuts-$title'),
+          padding: const EdgeInsets.symmetric(horizontal: TtSpace.s2, vertical: TtSpace.s1),
+          child: Column(children: [
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0) const Divider(height: 1),
+              ListTile(
+                leading: Icon(items[i].$1, color: TtColors.primary),
+                title: Text(items[i].$2),
+                subtitle: Text(items[i].$3, style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
+                trailing: const Icon(Icons.chevron_right_rounded, color: TtColors.ash),
+                onTap: items[i].$4,
+              ),
+            ],
+          ]),
+        ),
+      ],
+    ]);
   }
 }

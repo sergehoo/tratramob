@@ -102,7 +102,7 @@ class _ReputationScreenState extends State<ReputationScreen> {
                             'Les badges Vérifié, Expert et Sûr — et la publication de votre fiche — dépendent exclusivement de la vérification d’identité (KYC) par l’équipe Tratra.',
                       ),
                       const SizedBox(height: TtSpace.s2),
-                      TratraButton(label: 'Compléter mon dossier', variant: TratraButtonVariant.outline, block: true, onPressed: () => openKyc(context)),
+                      TratraButton(label: 'Vérifier mon identité', variant: TratraButtonVariant.outline, block: true, onPressed: () => openKyc(context)),
                     ],
                     const SizedBox(height: TtSpace.s4),
                     if (!verified) ...[

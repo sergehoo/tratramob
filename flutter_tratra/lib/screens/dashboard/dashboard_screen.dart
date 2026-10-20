@@ -155,7 +155,7 @@ class _MoreTab extends StatelessWidget {
     final isProvider = data?.isProvider ?? false;
     final entries = <_Entry>[
       if (isProvider)
-        _Entry(Icons.handyman_outlined, 'Mes prestations', 'Services, missions et disponibilité', () => openProviderHub(context))
+        _Entry(Icons.storefront_outlined, 'Mes offres et missions', 'Offres publiées, missions et disponibilité', () => openProviderHub(context))
       else
         _Entry(Icons.add_business_outlined, 'Proposer un service', 'Publiez vos prestations avec ce même compte', () => openProvide(context)),
       _Entry(Icons.description_outlined, 'Engagements', 'Contrats récurrents et de longue durée, offres et candidatures', () => openEngagements(context)),
@@ -176,7 +176,8 @@ class _MoreTab extends StatelessWidget {
       _Entry(Icons.place_outlined, 'Mes adresses', 'Principale, secondaires et favorites', () => openAddresses(context)),
       if (isProvider) ...[
         _Entry(Icons.badge_outlined, 'Profil professionnel', 'Présentation, spécialités, zone', () => openProProfile(context)),
-        _Entry(Icons.verified_user_outlined, 'Vérification d’identité (KYC)', 'Pièces d’identité et justificatifs', () => openKyc(context)),
+        _Entry(Icons.verified_user_outlined, 'Vérifier mon identité', 'Parcours guidé : pièce, photo, revue par l’équipe', () => openKyc(context)),
+        _Entry(Icons.folder_open_outlined, 'Documents et justificatifs', 'Diplômes, attestations et historique des pièces', () => openDocuments(context)),
       ],
     ];
     return ListView(

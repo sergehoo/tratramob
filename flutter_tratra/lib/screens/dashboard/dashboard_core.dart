@@ -178,10 +178,79 @@ class DashChecklistItem {
   DashChecklistItem(Map<String, dynamic> j)
       : key = _s(j['key']) ?? '',
         label = _s(j['label']) ?? '',
+        hint = _s(j['hint']),
         done = _b(j['done']);
   final String key;
   final String label;
+  final String? hint;
   final bool done;
+}
+
+/// Action corrective proposée par le serveur (`edit_profile`, `verify_identity`, `add_service`, `manage_services`, `contact_support`).
+class DashActionRef {
+  DashActionRef(Map<String, dynamic> j)
+      : code = _s(j['code']) ?? '',
+        label = _s(j['label']) ?? '';
+  final String code;
+  final String label;
+  static DashActionRef? maybe(dynamic v) => v is Map ? DashActionRef(_m(v)) : null;
+}
+
+/// Blocage réel de la publication, avec son explication et, s'il y en a une, l'action pour le lever.
+class DashBlocker {
+  DashBlocker(Map<String, dynamic> j)
+      : code = _s(j['code']) ?? '',
+        label = _s(j['label']) ?? '',
+        hint = _s(j['hint']),
+        action = DashActionRef.maybe(j['action']);
+  final String code;
+  final String label;
+  final String? hint;
+  final DashActionRef? action;
+}
+
+/// Synthèse d'éligibilité calculée par le serveur (`handy/eligibility.py`, `eligibility_summary`) : quatre notions DISTINCTES.
+class DashEligibility {
+  DashEligibility(Map<String, dynamic> j)
+      : profileComplete = _b(_m(j['profile'])['complete']),
+        profileDone = _i(_m(j['profile'])['done']),
+        profileTotal = _i(_m(j['profile'])['total']),
+        profileItems = _l(_m(j['profile'])['items']).map(DashChecklistItem.new).toList(),
+        kycStatus = _s(_m(j['kyc'])['status']) ?? 'draft',
+        kycLabel = _s(_m(j['kyc'])['label']) ?? 'Identité non vérifiée',
+        kycReason = _s(_m(j['kyc'])['reason']),
+        approved = _b(_m(j['approval'])['approved']),
+        approvalLabel = _s(_m(j['approval'])['label']) ?? '',
+        authorized = _b(_m(j['publication'])['authorized']),
+        publicationLabel = _s(_m(j['publication'])['label']) ?? '',
+        blockers = _l(_m(j['publication'])['blockers']).map(DashBlocker.new).toList(),
+        offersTotal = _i(_m(j['offers'])['total']),
+        offersActive = _i(_m(j['offers'])['active']),
+        offersPublished = _i(_m(j['offers'])['published']),
+        offersLabel = _s(_m(j['offers'])['label']) ?? '',
+        offersAction = DashActionRef.maybe(_m(j['offers'])['action']),
+        nextAction = DashActionRef.maybe(j['next_action']);
+  final bool profileComplete;
+  final int profileDone;
+  final int profileTotal;
+  final List<DashChecklistItem> profileItems;
+
+  /// draft | pending | rejected | approved (pièce d'identité uniquement).
+  final String kycStatus;
+  final String kycLabel;
+  final String? kycReason;
+  final bool approved;
+  final String approvalLabel;
+  final bool authorized;
+  final String publicationLabel;
+  final List<DashBlocker> blockers;
+  final int offersTotal;
+  final int offersActive;
+  final int offersPublished;
+  final String offersLabel;
+  final DashActionRef? offersAction;
+  final DashActionRef? nextAction;
+  bool get kycApproved => kycStatus == 'approved';
 }
 
 class DashProvider {
@@ -197,6 +266,7 @@ class DashProvider {
         checklist = _l(_m(j['completion'])['items']).map(DashChecklistItem.new).toList(),
         kycStatus = _s(_m(j['kyc'])['status']) ?? 'none',
         kycReason = _s(_m(j['kyc'])['rejection_reason']),
+        eligibility = j['eligibility'] is Map ? DashEligibility(_m(j['eligibility'])) : null,
         servicesActive = _i(_m(j['services'])['active']),
         servicesTotal = _i(_m(j['services'])['total']),
         pending = _i(_m(j['missions'])['pending']),
@@ -219,6 +289,9 @@ class DashProvider {
   final List<DashChecklistItem> checklist;
   final String kycStatus;
   final String? kycReason;
+
+  /// Profil complet / identité / autorisation de publication / offres, avec blocages et actions (règle unique du serveur).
+  final DashEligibility? eligibility;
   final int servicesActive;
   final int servicesTotal;
   final int pending;

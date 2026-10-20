@@ -8,6 +8,7 @@ import 'package:flutter_tratra/engagements/contract_screen.dart';
 import 'package:flutter_tratra/engagements/engagements_home.dart';
 import 'package:flutter_tratra/engagements/posting_screen.dart';
 import 'package:flutter_tratra/engagements/replacements_screen.dart';
+import 'package:flutter_tratra/kyc/identity_flow_screen.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/business/business_screens.dart';
 import 'package:flutter_tratra/screens/auth/profile_screen.dart';
@@ -48,7 +49,10 @@ Future<void> openBusiness(BuildContext context) => pushPage(context, const Busin
 Future<void> openNotifications(BuildContext context) => pushPage(context, const NotificationsScreen());
 Future<void> openProvide(BuildContext context) => pushPage(context, const ProvideScreen());
 Future<void> openProProfile(BuildContext context) => pushPage(context, const ProProfileScreen());
-Future<void> openKyc(BuildContext context) => pushPage(context, const KycScreen());
+/// « Vérifier mon identité » : le parcours guidé (une seule entrée pour la pièce d'identité et la vérification faciale).
+Future<void> openKyc(BuildContext context) => pushPage(context, const IdentityFlowScreen());
+/// Autres justificatifs (diplômes, casier, assurance…) et historique des pièces.
+Future<void> openDocuments(BuildContext context) => pushPage(context, const KycScreen());
 Future<void> openAddresses(BuildContext context) => pushPage(context, const AddressesScreen());
 Future<void> openAccount(BuildContext context) => pushPage(context, const ProfileScreen());
 

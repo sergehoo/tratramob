@@ -1,0 +1,1037 @@
+{
+ "initial": {
+  "status": "draft",
+  "status_label": "À compléter",
+  "current_step": "personal",
+  "steps": [
+   {
+    "key": "personal",
+    "label": "Informations personnelles",
+    "state": "current"
+   },
+   {
+    "key": "document",
+    "label": "Choix de la pièce",
+    "state": "todo"
+   },
+   {
+    "key": "capture",
+    "label": "Photo de la pièce",
+    "state": "todo"
+   },
+   {
+    "key": "quality",
+    "label": "Contrôle qualité et lecture",
+    "state": "todo"
+   },
+   {
+    "key": "face",
+    "label": "Vérification faciale",
+    "state": "skipped"
+   },
+   {
+    "key": "review",
+    "label": "Revue par l'équipe Tratra",
+    "state": "todo"
+   },
+   {
+    "key": "activation",
+    "label": "Activation du profil professionnel",
+    "state": "todo"
+   }
+  ],
+  "personal": {
+   "first_name": "Awa",
+   "last_name": "Koné",
+   "birth_date": null,
+   "complete": false
+  },
+  "document": {
+   "kind": null,
+   "kinds": [
+    {
+     "value": "cni",
+     "label": "Carte nationale d'identité",
+     "sides": 2
+    },
+    {
+     "value": "passport",
+     "label": "Passeport",
+     "sides": 1
+    }
+   ],
+   "captures": [],
+   "ready_to_send": false
+  },
+  "face": {
+   "enabled": false,
+   "required": false,
+   "status": "not_started",
+   "satisfied": false,
+   "choice": "",
+   "human_review_requested": false,
+   "done": true,
+   "note": "Non requise : l'équipe Tratra vérifie votre pièce elle-même."
+  },
+  "review": {
+   "state": "none",
+   "reason": "",
+   "sent_at": null,
+   "attempts": 0,
+   "previous_reason": null
+  },
+  "activation": {
+   "profile": {
+    "complete": false,
+    "done": 0,
+    "total": 5,
+    "items": [
+     {
+      "key": "bio",
+      "label": "Présentation",
+      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "done": false
+     },
+     {
+      "key": "skills",
+      "label": "Spécialités",
+      "hint": "Choisissez au moins un métier que vous exercez.",
+      "done": false
+     },
+     {
+      "key": "experience",
+      "label": "Expérience",
+      "hint": "Indiquez vos années d'expérience.",
+      "done": false
+     },
+     {
+      "key": "zone",
+      "label": "Zone d'intervention",
+      "hint": "Renseignez votre commune.",
+      "done": false
+     },
+     {
+      "key": "photo",
+      "label": "Photo de profil",
+      "hint": "Ajoutez une photo : les clients choisissent des visages.",
+      "done": false
+     }
+    ]
+   },
+   "kyc": {
+    "status": "draft",
+    "label": "Identité non vérifiée",
+    "reason": null,
+    "started": false,
+    "approved": false
+   },
+   "approval": {
+    "approved": false,
+    "label": "Validation de l'équipe en attente"
+   },
+   "publication": {
+    "authorized": false,
+    "label": "Publication non autorisée",
+    "blockers": [
+     {
+      "code": "profile_incomplete",
+      "label": "Profil incomplet : présentation, spécialités, expérience, zone d'intervention, photo de profil",
+      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "action": {
+       "code": "edit_profile",
+       "label": "Compléter mon profil"
+      }
+     },
+     {
+      "code": "kyc_draft",
+      "label": "Identité non vérifiée",
+      "hint": "Faites vérifier votre pièce d'identité : quelques minutes suffisent.",
+      "action": {
+       "code": "verify_identity",
+       "label": "Vérifier mon identité"
+      }
+     }
+    ]
+   },
+   "offers": {
+    "total": 0,
+    "active": 0,
+    "published": 0,
+    "inactive": 0,
+    "label": "Aucune offre créée",
+    "action": {
+     "code": "add_service",
+     "label": "Ajouter une offre"
+    }
+   },
+   "next_action": {
+    "code": "edit_profile",
+    "label": "Compléter mon profil"
+   }
+  },
+  "editable": true,
+  "updated_at": "2026-10-20T18:33:48.002690+00:00"
+ },
+ "ready": {
+  "status": "draft",
+  "status_label": "À compléter",
+  "current_step": "quality",
+  "steps": [
+   {
+    "key": "personal",
+    "label": "Informations personnelles",
+    "state": "done"
+   },
+   {
+    "key": "document",
+    "label": "Choix de la pièce",
+    "state": "done"
+   },
+   {
+    "key": "capture",
+    "label": "Photo de la pièce",
+    "state": "done"
+   },
+   {
+    "key": "quality",
+    "label": "Contrôle qualité et lecture",
+    "state": "current"
+   },
+   {
+    "key": "face",
+    "label": "Vérification faciale",
+    "state": "skipped"
+   },
+   {
+    "key": "review",
+    "label": "Revue par l'équipe Tratra",
+    "state": "todo"
+   },
+   {
+    "key": "activation",
+    "label": "Activation du profil professionnel",
+    "state": "todo"
+   }
+  ],
+  "personal": {
+   "first_name": "Awa Marie",
+   "last_name": "Koné",
+   "birth_date": "1990-04-12",
+   "complete": true
+  },
+  "document": {
+   "kind": "cni",
+   "kinds": [
+    {
+     "value": "cni",
+     "label": "Carte nationale d'identité",
+     "sides": 2
+    },
+    {
+     "value": "passport",
+     "label": "Passeport",
+     "sides": 1
+    }
+   ],
+   "captures": [
+    {
+     "side": "front",
+     "label": "Recto",
+     "present": true,
+     "quality": "ok",
+     "problems": [],
+     "reading": {
+      "notes": [],
+      "status": "unavailable"
+     }
+    },
+    {
+     "side": "back",
+     "label": "Verso",
+     "present": true,
+     "quality": "ok",
+     "problems": [],
+     "reading": {
+      "notes": [],
+      "status": "unavailable"
+     }
+    }
+   ],
+   "ready_to_send": true
+  },
+  "face": {
+   "enabled": false,
+   "required": false,
+   "status": "not_started",
+   "satisfied": false,
+   "choice": "",
+   "human_review_requested": false,
+   "done": true,
+   "note": "Non requise : l'équipe Tratra vérifie votre pièce elle-même."
+  },
+  "review": {
+   "state": "none",
+   "reason": "",
+   "sent_at": null,
+   "attempts": 0,
+   "previous_reason": null
+  },
+  "activation": {
+   "profile": {
+    "complete": false,
+    "done": 0,
+    "total": 5,
+    "items": [
+     {
+      "key": "bio",
+      "label": "Présentation",
+      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "done": false
+     },
+     {
+      "key": "skills",
+      "label": "Spécialités",
+      "hint": "Choisissez au moins un métier que vous exercez.",
+      "done": false
+     },
+     {
+      "key": "experience",
+      "label": "Expérience",
+      "hint": "Indiquez vos années d'expérience.",
+      "done": false
+     },
+     {
+      "key": "zone",
+      "label": "Zone d'intervention",
+      "hint": "Renseignez votre commune.",
+      "done": false
+     },
+     {
+      "key": "photo",
+      "label": "Photo de profil",
+      "hint": "Ajoutez une photo : les clients choisissent des visages.",
+      "done": false
+     }
+    ]
+   },
+   "kyc": {
+    "status": "draft",
+    "label": "Identité non vérifiée",
+    "reason": null,
+    "started": true,
+    "approved": false
+   },
+   "approval": {
+    "approved": false,
+    "label": "Validation de l'équipe en attente"
+   },
+   "publication": {
+    "authorized": false,
+    "label": "Publication non autorisée",
+    "blockers": [
+     {
+      "code": "profile_incomplete",
+      "label": "Profil incomplet : présentation, spécialités, expérience, zone d'intervention, photo de profil",
+      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "action": {
+       "code": "edit_profile",
+       "label": "Compléter mon profil"
+      }
+     },
+     {
+      "code": "kyc_draft",
+      "label": "Identité non vérifiée",
+      "hint": "Faites vérifier votre pièce d'identité : quelques minutes suffisent.",
+      "action": {
+       "code": "verify_identity",
+       "label": "Vérifier mon identité"
+      }
+     }
+    ]
+   },
+   "offers": {
+    "total": 0,
+    "active": 0,
+    "published": 0,
+    "inactive": 0,
+    "label": "Aucune offre créée",
+    "action": {
+     "code": "add_service",
+     "label": "Ajouter une offre"
+    }
+   },
+   "next_action": {
+    "code": "edit_profile",
+    "label": "Compléter mon profil"
+   }
+  },
+  "editable": true,
+  "updated_at": "2026-10-20T18:33:48.169809+00:00"
+ },
+ "in_review": {
+  "status": "in_review",
+  "status_label": "En cours de revue",
+  "current_step": "review",
+  "steps": [
+   {
+    "key": "personal",
+    "label": "Informations personnelles",
+    "state": "done"
+   },
+   {
+    "key": "document",
+    "label": "Choix de la pièce",
+    "state": "done"
+   },
+   {
+    "key": "capture",
+    "label": "Photo de la pièce",
+    "state": "done"
+   },
+   {
+    "key": "quality",
+    "label": "Contrôle qualité et lecture",
+    "state": "done"
+   },
+   {
+    "key": "face",
+    "label": "Vérification faciale",
+    "state": "skipped"
+   },
+   {
+    "key": "review",
+    "label": "Revue par l'équipe Tratra",
+    "state": "waiting"
+   },
+   {
+    "key": "activation",
+    "label": "Activation du profil professionnel",
+    "state": "todo"
+   }
+  ],
+  "personal": {
+   "first_name": "Awa Marie",
+   "last_name": "Koné",
+   "birth_date": "1990-04-12",
+   "complete": true
+  },
+  "document": {
+   "kind": "cni",
+   "kinds": [
+    {
+     "value": "cni",
+     "label": "Carte nationale d'identité",
+     "sides": 2
+    },
+    {
+     "value": "passport",
+     "label": "Passeport",
+     "sides": 1
+    }
+   ],
+   "captures": [
+    {
+     "side": "front",
+     "label": "Recto",
+     "present": true,
+     "quality": "ok",
+     "problems": [],
+     "reading": {
+      "notes": [],
+      "status": "unavailable"
+     }
+    },
+    {
+     "side": "back",
+     "label": "Verso",
+     "present": true,
+     "quality": "ok",
+     "problems": [],
+     "reading": {
+      "notes": [],
+      "status": "unavailable"
+     }
+    }
+   ],
+   "ready_to_send": false
+  },
+  "face": {
+   "enabled": false,
+   "required": false,
+   "status": "not_started",
+   "satisfied": false,
+   "choice": "",
+   "human_review_requested": false,
+   "done": true,
+   "note": "Non requise : l'équipe Tratra vérifie votre pièce elle-même."
+  },
+  "review": {
+   "state": "pending",
+   "reason": "",
+   "sent_at": "2026-10-20T18:33:48.217348+00:00",
+   "attempts": 1,
+   "previous_reason": null
+  },
+  "activation": {
+   "profile": {
+    "complete": false,
+    "done": 0,
+    "total": 5,
+    "items": [
+     {
+      "key": "bio",
+      "label": "Présentation",
+      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "done": false
+     },
+     {
+      "key": "skills",
+      "label": "Spécialités",
+      "hint": "Choisissez au moins un métier que vous exercez.",
+      "done": false
+     },
+     {
+      "key": "experience",
+      "label": "Expérience",
+      "hint": "Indiquez vos années d'expérience.",
+      "done": false
+     },
+     {
+      "key": "zone",
+      "label": "Zone d'intervention",
+      "hint": "Renseignez votre commune.",
+      "done": false
+     },
+     {
+      "key": "photo",
+      "label": "Photo de profil",
+      "hint": "Ajoutez une photo : les clients choisissent des visages.",
+      "done": false
+     }
+    ]
+   },
+   "kyc": {
+    "status": "pending",
+    "label": "Vérification en cours",
+    "reason": null,
+    "started": true,
+    "approved": false
+   },
+   "approval": {
+    "approved": false,
+    "label": "Validation de l'équipe en attente"
+   },
+   "publication": {
+    "authorized": false,
+    "label": "Publication non autorisée",
+    "blockers": [
+     {
+      "code": "profile_incomplete",
+      "label": "Profil incomplet : présentation, spécialités, expérience, zone d'intervention, photo de profil",
+      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "action": {
+       "code": "edit_profile",
+       "label": "Compléter mon profil"
+      }
+     },
+     {
+      "code": "kyc_pending",
+      "label": "Pièce d'identité en cours de revue",
+      "hint": "L'équipe Tratra examine votre pièce : aucune action n'est nécessaire.",
+      "action": null
+     }
+    ]
+   },
+   "offers": {
+    "total": 0,
+    "active": 0,
+    "published": 0,
+    "inactive": 0,
+    "label": "Aucune offre créée",
+    "action": {
+     "code": "add_service",
+     "label": "Ajouter une offre"
+    }
+   },
+   "next_action": {
+    "code": "edit_profile",
+    "label": "Compléter mon profil"
+   }
+  },
+  "editable": false,
+  "updated_at": "2026-10-20T18:33:48.217384+00:00"
+ },
+ "rejected": {
+  "status": "changes_requested",
+  "status_label": "Nouvelle pièce demandée",
+  "current_step": "capture",
+  "steps": [
+   {
+    "key": "personal",
+    "label": "Informations personnelles",
+    "state": "done"
+   },
+   {
+    "key": "document",
+    "label": "Choix de la pièce",
+    "state": "done"
+   },
+   {
+    "key": "capture",
+    "label": "Photo de la pièce",
+    "state": "error"
+   },
+   {
+    "key": "quality",
+    "label": "Contrôle qualité et lecture",
+    "state": "todo"
+   },
+   {
+    "key": "face",
+    "label": "Vérification faciale",
+    "state": "skipped"
+   },
+   {
+    "key": "review",
+    "label": "Revue par l'équipe Tratra",
+    "state": "todo"
+   },
+   {
+    "key": "activation",
+    "label": "Activation du profil professionnel",
+    "state": "todo"
+   }
+  ],
+  "personal": {
+   "first_name": "Awa Marie",
+   "last_name": "Koné",
+   "birth_date": "1990-04-12",
+   "complete": true
+  },
+  "document": {
+   "kind": "cni",
+   "kinds": [
+    {
+     "value": "cni",
+     "label": "Carte nationale d'identité",
+     "sides": 2
+    },
+    {
+     "value": "passport",
+     "label": "Passeport",
+     "sides": 1
+    }
+   ],
+   "captures": [
+    {
+     "side": "front",
+     "label": "Recto",
+     "present": true,
+     "quality": "ok",
+     "problems": [],
+     "reading": {
+      "notes": [],
+      "status": "unavailable"
+     }
+    },
+    {
+     "side": "back",
+     "label": "Verso",
+     "present": true,
+     "quality": "ok",
+     "problems": [],
+     "reading": {
+      "notes": [],
+      "status": "unavailable"
+     }
+    }
+   ],
+   "ready_to_send": true
+  },
+  "face": {
+   "enabled": false,
+   "required": false,
+   "status": "not_started",
+   "satisfied": false,
+   "choice": "",
+   "human_review_requested": false,
+   "done": true,
+   "note": "Non requise : l'équipe Tratra vérifie votre pièce elle-même."
+  },
+  "review": {
+   "state": "rejected",
+   "reason": "Verso illisible.",
+   "sent_at": "2026-10-20T18:33:48.217348+00:00",
+   "attempts": 1,
+   "previous_reason": null
+  },
+  "activation": {
+   "profile": {
+    "complete": false,
+    "done": 0,
+    "total": 5,
+    "items": [
+     {
+      "key": "bio",
+      "label": "Présentation",
+      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "done": false
+     },
+     {
+      "key": "skills",
+      "label": "Spécialités",
+      "hint": "Choisissez au moins un métier que vous exercez.",
+      "done": false
+     },
+     {
+      "key": "experience",
+      "label": "Expérience",
+      "hint": "Indiquez vos années d'expérience.",
+      "done": false
+     },
+     {
+      "key": "zone",
+      "label": "Zone d'intervention",
+      "hint": "Renseignez votre commune.",
+      "done": false
+     },
+     {
+      "key": "photo",
+      "label": "Photo de profil",
+      "hint": "Ajoutez une photo : les clients choisissent des visages.",
+      "done": false
+     }
+    ]
+   },
+   "kyc": {
+    "status": "rejected",
+    "label": "Nouvelle pièce demandée",
+    "reason": "Verso illisible.",
+    "started": true,
+    "approved": false
+   },
+   "approval": {
+    "approved": false,
+    "label": "Validation de l'équipe en attente"
+   },
+   "publication": {
+    "authorized": false,
+    "label": "Publication non autorisée",
+    "blockers": [
+     {
+      "code": "profile_incomplete",
+      "label": "Profil incomplet : présentation, spécialités, expérience, zone d'intervention, photo de profil",
+      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "action": {
+       "code": "edit_profile",
+       "label": "Compléter mon profil"
+      }
+     },
+     {
+      "code": "kyc_rejected",
+      "label": "Nouvelle pièce d'identité demandée",
+      "hint": "Verso illisible.",
+      "action": {
+       "code": "verify_identity",
+       "label": "Vérifier mon identité"
+      }
+     }
+    ]
+   },
+   "offers": {
+    "total": 0,
+    "active": 0,
+    "published": 0,
+    "inactive": 0,
+    "label": "Aucune offre créée",
+    "action": {
+     "code": "add_service",
+     "label": "Ajouter une offre"
+    }
+   },
+   "next_action": {
+    "code": "edit_profile",
+    "label": "Compléter mon profil"
+   }
+  },
+  "editable": true,
+  "updated_at": "2026-10-20T18:33:48.217384+00:00"
+ },
+ "services": {
+  "publishable": false,
+  "eligibility": {
+   "profile": {
+    "complete": false,
+    "done": 0,
+    "total": 5,
+    "items": [
+     {
+      "key": "bio",
+      "label": "Présentation",
+      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "done": false
+     },
+     {
+      "key": "skills",
+      "label": "Spécialités",
+      "hint": "Choisissez au moins un métier que vous exercez.",
+      "done": false
+     },
+     {
+      "key": "experience",
+      "label": "Expérience",
+      "hint": "Indiquez vos années d'expérience.",
+      "done": false
+     },
+     {
+      "key": "zone",
+      "label": "Zone d'intervention",
+      "hint": "Renseignez votre commune.",
+      "done": false
+     },
+     {
+      "key": "photo",
+      "label": "Photo de profil",
+      "hint": "Ajoutez une photo : les clients choisissent des visages.",
+      "done": false
+     }
+    ]
+   },
+   "kyc": {
+    "status": "rejected",
+    "label": "Nouvelle pièce demandée",
+    "reason": "Verso illisible.",
+    "started": true,
+    "approved": false
+   },
+   "approval": {
+    "approved": false,
+    "label": "Validation de l'équipe en attente"
+   },
+   "publication": {
+    "authorized": false,
+    "label": "Publication non autorisée",
+    "blockers": [
+     {
+      "code": "profile_incomplete",
+      "label": "Profil incomplet : présentation, spécialités, expérience, zone d'intervention, photo de profil",
+      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "action": {
+       "code": "edit_profile",
+       "label": "Compléter mon profil"
+      }
+     },
+     {
+      "code": "kyc_rejected",
+      "label": "Nouvelle pièce d'identité demandée",
+      "hint": "Verso illisible.",
+      "action": {
+       "code": "verify_identity",
+       "label": "Vérifier mon identité"
+      }
+     }
+    ]
+   },
+   "offers": {
+    "total": 0,
+    "active": 0,
+    "published": 0,
+    "inactive": 0,
+    "label": "Aucune offre créée",
+    "action": {
+     "code": "add_service",
+     "label": "Ajouter une offre"
+    }
+   },
+   "next_action": {
+    "code": "edit_profile",
+    "label": "Compléter mon profil"
+   }
+  },
+  "results": []
+ },
+ "dashboard_provider": {
+  "profile_id": 1,
+  "badges": [
+   {
+    "code": "NOUVEAU",
+    "label": "Nouveau"
+   }
+  ],
+  "trust_score": null,
+  "online": false,
+  "is_approved": false,
+  "publishable": false,
+  "rating": null,
+  "completed_jobs": 0,
+  "completion": {
+   "percent": 0,
+   "done": 0,
+   "total": 7,
+   "items": [
+    {
+     "key": "bio",
+     "label": "Présentation",
+     "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+     "done": false
+    },
+    {
+     "key": "skills",
+     "label": "Spécialités",
+     "hint": "Choisissez au moins un métier que vous exercez.",
+     "done": false
+    },
+    {
+     "key": "experience",
+     "label": "Expérience",
+     "hint": "Indiquez vos années d'expérience.",
+     "done": false
+    },
+    {
+     "key": "zone",
+     "label": "Zone d'intervention",
+     "hint": "Renseignez votre commune.",
+     "done": false
+    },
+    {
+     "key": "photo",
+     "label": "Photo de profil",
+     "hint": "Ajoutez une photo : les clients choisissent des visages.",
+     "done": false
+    },
+    {
+     "key": "kyc",
+     "label": "Pièce d'identité vérifiée",
+     "hint": "Déposez votre pièce d'identité ; l'équipe Tratra la vérifie.",
+     "done": false
+    },
+    {
+     "key": "approval",
+     "label": "Validation par l'équipe Tratra",
+     "hint": "Dernière étape, après vérification de votre dossier.",
+     "done": false
+    }
+   ]
+  },
+  "kyc": {
+   "status": "rejected",
+   "label": "Nouvelle pièce demandée",
+   "required": [
+    "id_card"
+   ],
+   "documents": {
+    "pending": 1,
+    "approved": 0,
+    "rejected": 1
+   },
+   "rejection_reason": "Verso illisible."
+  },
+  "eligibility": {
+   "profile": {
+    "complete": false,
+    "done": 0,
+    "total": 5,
+    "items": [
+     {
+      "key": "bio",
+      "label": "Présentation",
+      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "done": false
+     },
+     {
+      "key": "skills",
+      "label": "Spécialités",
+      "hint": "Choisissez au moins un métier que vous exercez.",
+      "done": false
+     },
+     {
+      "key": "experience",
+      "label": "Expérience",
+      "hint": "Indiquez vos années d'expérience.",
+      "done": false
+     },
+     {
+      "key": "zone",
+      "label": "Zone d'intervention",
+      "hint": "Renseignez votre commune.",
+      "done": false
+     },
+     {
+      "key": "photo",
+      "label": "Photo de profil",
+      "hint": "Ajoutez une photo : les clients choisissent des visages.",
+      "done": false
+     }
+    ]
+   },
+   "kyc": {
+    "status": "rejected",
+    "label": "Nouvelle pièce demandée",
+    "reason": "Verso illisible.",
+    "started": true,
+    "approved": false
+   },
+   "approval": {
+    "approved": false,
+    "label": "Validation de l'équipe en attente"
+   },
+   "publication": {
+    "authorized": false,
+    "label": "Publication non autorisée",
+    "blockers": [
+     {
+      "code": "profile_incomplete",
+      "label": "Profil incomplet : présentation, spécialités, expérience, zone d'intervention, photo de profil",
+      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "action": {
+       "code": "edit_profile",
+       "label": "Compléter mon profil"
+      }
+     },
+     {
+      "code": "kyc_rejected",
+      "label": "Nouvelle pièce d'identité demandée",
+      "hint": "Verso illisible.",
+      "action": {
+       "code": "verify_identity",
+       "label": "Vérifier mon identité"
+      }
+     }
+    ]
+   },
+   "offers": {
+    "total": 0,
+    "active": 0,
+    "published": 0,
+    "inactive": 0,
+    "label": "Aucune offre créée",
+    "action": {
+     "code": "add_service",
+     "label": "Ajouter une offre"
+    }
+   },
+   "next_action": {
+    "code": "edit_profile",
+    "label": "Compléter mon profil"
+   }
+  },
+  "services": {
+   "active": 0,
+   "total": 0
+  },
+  "missions": {
+   "pending": 0,
+   "confirmed": 0,
+   "in_progress": 0,
+   "completed": 0,
+   "cancelled": 0,
+   "total": 0
+  },
+  "earnings": {
+   "available": "0.00",
+   "currency": "XOF"
+  },
+  "next_missions": [],
+  "recent_missions": []
+ }
+}

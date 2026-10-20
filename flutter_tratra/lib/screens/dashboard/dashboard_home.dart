@@ -366,7 +366,7 @@ class _ProfileCard extends StatelessWidget {
         Row(children: [
           Expanded(child: TratraButton(label: 'Mon profil', variant: TratraButtonVariant.outline, onPressed: () => openProProfile(context))),
           const SizedBox(width: TtSpace.s3),
-          Expanded(child: TratraButton(label: 'Mon KYC', variant: TratraButtonVariant.soft, onPressed: () => openKyc(context))),
+          Expanded(child: TratraButton(label: 'Mon identité', variant: TratraButtonVariant.soft, onPressed: () => openKyc(context))),
         ]),
         const SizedBox(height: TtSpace.s3),
         TratraButton(label: 'Ma réputation', variant: TratraButtonVariant.soft, onPressed: () => openReputation(context)),

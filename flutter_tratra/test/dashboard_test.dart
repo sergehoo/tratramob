@@ -226,19 +226,20 @@ void main() {
       expect(find.text('Portefeuille'), findsNothing); // fonctions financières désactivées (version Google Play)
       expect(find.text('Avis'), findsOneWidget);
       expect(find.text('Notifications'), findsWidgets);
-      expect(find.text('Mes prestations'), findsNothing);
-      expect(find.text('Vérification d’identité (KYC)'), findsNothing);
+      expect(find.text('Mes offres et missions'), findsNothing);
+      expect(find.text('Vérifier mon identité'), findsNothing);
     });
 
-    testWidgets('compte mixte : « Plus » ajoute Mes prestations, profil pro et KYC', (t) async {
+    testWidgets('compte mixte : « Plus » ajoute Mes offres et missions, profil pro, identité et justificatifs', (t) async {
       _tall(t);
       await t.pumpWidget(_host(DashData(_payload(provider: true)), const DashboardScreen()));
       await t.tap(find.text('Plus'));
       await t.pumpAndSettle();
-      expect(find.text('Mes prestations'), findsOneWidget);
+      expect(find.text('Mes offres et missions'), findsOneWidget);
       expect(find.text('Proposer un service'), findsNothing);
       expect(find.text('Profil professionnel'), findsOneWidget);
-      expect(find.text('Vérification d’identité (KYC)'), findsOneWidget);
+      expect(find.text('Vérifier mon identité'), findsOneWidget);       // une seule entrée : pièce d'identité + vérification faciale
+      expect(find.text('Documents et justificatifs'), findsOneWidget);
     });
   });
 }

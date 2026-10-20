@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_tratra/core/session.dart';
@@ -77,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _tick();
     if (!_locked) return;
     if (announce) {
-      SemanticsService.announce('Connexion bloquée après trop de tentatives. Consultez le support ou patientez ${formatCountdown(_secondsLeft)}.', TextDirection.ltr);
+      SemanticsService.sendAnnouncement(View.of(context), 'Connexion bloquée après trop de tentatives. Consultez le support ou patientez ${formatCountdown(_secondsLeft)}.', TextDirection.ltr);
     }
     _lockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;

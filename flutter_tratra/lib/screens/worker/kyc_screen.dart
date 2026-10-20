@@ -1,15 +1,15 @@
 // lib/screens/worker/kyc_screen.dart
 //
-// Vérification KYC artisan : liste des documents + téléversement (galerie/caméra).
-// Aucune règle métier ici : mêmes appels HandymanService, mêmes types de documents,
-// même sélection image (qualité 80). Le statut affiché est celui renvoyé par l'API.
+// « Documents et justificatifs » : historique des pièces + téléversement des autres justificatifs (diplômes, casier, assurance…).
+// La pièce d'identité et la vérification faciale passent par le parcours guidé « Vérifier mon identité » (une seule entrée).
+// Aucune règle métier ici : le statut affiché est celui renvoyé par l'API.
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
-import 'package:flutter_tratra/biometric/biometric_flow_screen.dart';
+import 'package:flutter_tratra/kyc/identity_flow_screen.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/services/handyman_service.dart';
 
@@ -126,9 +126,15 @@ class _KycScreenState extends State<KycScreen> {
     );
   }
 
+  Future<void> _openIdentityFlow() async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IdentityFlowScreen()));
+    if (mounted) await _reload();
+  }
+
   Future<void> _startUpload() async {
     final type = await _chooseType();
     if (type == null || !mounted) return;
+    if (type == 'id_card') return _openIdentityFlow();      // pièce d'identité : parcours guidé (photo, contrôle qualité, revue)
 
     final source = await _chooseSource();
     if (source == null || !mounted) return;
@@ -189,8 +195,8 @@ class _KycScreenState extends State<KycScreen> {
     return Scaffold(
       backgroundColor: TtColors.canvas,
       appBar: const TratraAppBar(
-        title: 'Vérification (KYC)',
-        subtitle: 'Pièces d’identité et justificatifs',
+        title: 'Documents et justificatifs',
+        subtitle: 'Diplômes, attestations et historique des pièces',
       ),
       bottomNavigationBar: _UploadBar(
         uploading: _uploading,
@@ -221,14 +227,14 @@ class _KycScreenState extends State<KycScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: TtSpace.s4),
                   child: TratraCard(
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BiometricFlowScreen())),
+                    onTap: _openIdentityFlow,
                     child: Row(children: [
-                      const Icon(Icons.face_retouching_natural_rounded, color: TtColors.primary),
+                      const Icon(Icons.verified_user_outlined, color: TtColors.primary),
                       const SizedBox(width: TtSpace.s3),
                       Expanded(
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text('Vérification faciale', style: TratraTheme.style(TtType.title)),
-                          Text('Comparez votre visage à votre pièce d’identité, ou demandez une vérification par l’équipe.', style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
+                          Text('Vérifier mon identité', style: TratraTheme.style(TtType.title)),
+                          Text('Pièce d’identité et, si elle est proposée, vérification faciale : parcours guidé en 7 étapes.', style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
                         ]),
                       ),
                       const Icon(Icons.chevron_right_rounded, color: TtColors.ash),

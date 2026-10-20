@@ -106,6 +106,17 @@ class ApiException implements Exception {
     }
   }
 
+  /// Erreurs par champ renvoyées sous `fields` (« first_name » → message), quand le serveur les détaille.
+  Map<String, String> get fieldErrors {
+    try {
+      final data = json.decode(body);
+      final f = data is Map ? data['fields'] : null;
+      return f is Map ? {for (final e in f.entries) '${e.key}': '${e.value}'} : const {};
+    } catch (_) {
+      return const {};
+    }
+  }
+
   /// Connexion temporairement bloquée après trop de tentatives (réponse 429 `login_locked`, avec le temps restant).
   bool get isLoginLocked => statusCode == 429 && code == 'login_locked' && (retryAfterSeconds ?? 0) > 0;
 

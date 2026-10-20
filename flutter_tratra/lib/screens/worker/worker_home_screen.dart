@@ -10,7 +10,7 @@ import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/booking.dart';
 import 'package:flutter_tratra/screens/worker/dashboard/worker_ui.dart';
-import 'package:flutter_tratra/screens/worker/kyc_screen.dart';
+import 'package:flutter_tratra/kyc/identity_flow_screen.dart';
 import 'package:flutter_tratra/screens/worker/mission_detail_screen.dart';
 import 'package:flutter_tratra/services/booking_service.dart';
 import 'package:flutter_tratra/services/handyman_service.dart';
@@ -911,10 +911,10 @@ class _AccountTabState extends State<_AccountTab> {
           index: 1,
           child: _AccountTile(
             icon: Icons.verified_user_outlined,
-            title: 'Vérification (KYC)',
-            subtitle: 'Pièces d’identité et justificatifs',
+            title: 'Vérifier mon identité',
+            subtitle: 'Parcours guidé : pièce, photo, revue par l’équipe',
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const KycScreen()),
+              MaterialPageRoute(builder: (_) => const IdentityFlowScreen()),
             ),
           ),
         ),
