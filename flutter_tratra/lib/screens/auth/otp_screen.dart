@@ -27,8 +27,11 @@ String maskPhone(String phone) {
 }
 
 class OtpScreen extends StatefulWidget {
-  const OtpScreen({super.key, this.nextRoute = RouteNames.home, this.autoSend = false});
+  const OtpScreen({super.key, this.nextRoute = RouteNames.home, this.autoSend = false, this.onDone});
   final String nextRoute;
+
+  /// Parcours intégré (inscription accompagnée) : appelé à la place de la navigation vers [nextRoute].
+  final VoidCallback? onDone;
 
   /// Envoie le code dès l'arrivée sur l'écran (juste après l'inscription).
   final bool autoSend;
@@ -148,7 +151,7 @@ class _OtpScreenState extends State<OtpScreen> {
     }
   }
 
-  void _continue() => Navigator.pushReplacementNamed(context, widget.nextRoute);
+  void _continue() => widget.onDone != null ? widget.onDone!() : Navigator.pushReplacementNamed(context, widget.nextRoute);
 
   @override
   Widget build(BuildContext context) {

@@ -86,7 +86,8 @@ class KycFlowState {
         sentAt = DateTime.tryParse('${_m(j['review'])['sent_at'] ?? ''}'),
         attempts = (_m(j['review'])['attempts'] as num?)?.toInt() ?? 0,
         activation = j['activation'] is Map ? DashEligibility(_m(j['activation'])) : null,
-        editable = j['editable'] != false;
+        editable = j['editable'] != false,
+        suggestions = {for (final e in _m(j['suggestions']).entries) if (e.value != null) e.key: '${e.value}'};
 
   /// draft | in_review | changes_requested | verified
   final String status;
@@ -114,6 +115,9 @@ class KycFlowState {
   final int attempts;
   final DashEligibility? activation;
   final bool editable;
+
+  /// Lu sur la pièce par la lecture automatique (réponse à une photo du recto) : PROPOSÉ à l'utilisateur, jamais enregistré tel quel.
+  final Map<String, String> suggestions;
 
   KycStep? step(String key) {
     for (final s in steps) {

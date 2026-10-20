@@ -6,6 +6,7 @@ import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/core/phone/phone_value.dart';
 import 'package:flutter_tratra/design/design.dart';
+import 'package:flutter_tratra/onboarding/onboarding_entry.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/auth/widgets/auth_frame.dart';
 import 'package:flutter_tratra/screens/auth/widgets/login_lock_notice.dart';
@@ -193,6 +194,13 @@ class _LoginScreenState extends State<LoginScreen> {
           TextButton(
             onPressed: () => Navigator.pushNamed(context, RouteNames.register),
             child: const Text('Créer un compte'),
+          ),
+          // Nounou, ménagère, jardinier… : inscription pas à pas, guidée à la voix (le formulaire classique reste disponible).
+          TextButton.icon(
+            key: const ValueKey('login-guided'),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OnboardingChoiceScreen())),
+            icon: const Icon(Icons.record_voice_over_rounded, size: 20),
+            label: const Text('Je veux proposer mes services'),
           ),
         ],
       ),

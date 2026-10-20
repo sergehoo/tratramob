@@ -52,6 +52,7 @@ import 'package:flutter_tratra/screens/artisan_profile_screen.dart';
 import 'package:flutter_tratra/screens/messaging_screen.dart';
 import 'package:flutter_tratra/messaging/inbox_controller.dart';
 import 'package:flutter_tratra/messaging/messaging_api.dart';
+import 'package:flutter_tratra/onboarding/onboarding_api.dart';
 import 'package:flutter_tratra/statuses/status_api.dart';
 import 'package:flutter_tratra/screens/tracking_screen.dart';
 import 'package:flutter_tratra/screens/payment_screen.dart';
@@ -250,6 +251,7 @@ class _MyAppState extends State<MyApp> {
     session.addListener(_syncPush);
     // Widget d'accueil : données minimales mises à jour à chaque synchronisation de l'espace, effacées à la déconnexion.
     session.addLogoutWipe(HomeWidgetSync.clear);
+    session.addLogoutWipe(OnboardingApi.clearStored);
     _dash.addListener(_syncHomeWidget);
     // Raccourcis d'application et widget : mêmes liens profonds que les notifications.
     AppShortcuts.init(_openLink);

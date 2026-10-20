@@ -45,6 +45,7 @@ dependencies:
   phone_numbers_parser: 9.0.26
   quick_actions: 1.1.1
   home_widget: 0.10.0
+  flutter_tts: 4.2.5
 
 dev_dependencies:
   flutter_test:

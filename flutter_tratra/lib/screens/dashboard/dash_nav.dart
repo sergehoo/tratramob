@@ -10,6 +10,7 @@ import 'package:flutter_tratra/engagements/engagements_home.dart';
 import 'package:flutter_tratra/engagements/posting_screen.dart';
 import 'package:flutter_tratra/engagements/replacements_screen.dart';
 import 'package:flutter_tratra/kyc/identity_flow_screen.dart';
+import 'package:flutter_tratra/onboarding/onboarding_entry.dart';
 import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/business/business_screens.dart';
 import 'package:flutter_tratra/screens/auth/profile_screen.dart';
@@ -48,7 +49,11 @@ Future<void> openScanner(BuildContext context) => pushPage(context, const ScanSc
 Future<void> openEngagements(BuildContext context) => pushPage(context, const EngagementsHomeScreen());
 Future<void> openBusiness(BuildContext context) => pushPage(context, const BusinessHomeScreen());
 Future<void> openNotifications(BuildContext context) => pushPage(context, const NotificationsScreen());
-Future<void> openProvide(BuildContext context) => pushPage(context, const ProvideScreen());
+/// « Proposer un service » : choix entre l'inscription accompagnée et l'inscription classique (un artisan existant garde l'écran habituel).
+Future<void> openProvide(BuildContext context) => pushPage(
+      context,
+      (context.read<DashboardController>().data?.isProvider ?? false) ? const ProvideScreen() : const OnboardingChoiceScreen(),
+    );
 Future<void> openProProfile(BuildContext context) => pushPage(context, const ProProfileScreen());
 /// « Vérifier mon identité » : le parcours guidé (une seule entrée pour la pièce d'identité et la vérification faciale).
 Future<void> openKyc(BuildContext context) => pushPage(context, const IdentityFlowScreen());

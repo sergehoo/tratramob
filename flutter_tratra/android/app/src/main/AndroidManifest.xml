@@ -71,5 +71,9 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Guide vocal de l'inscription accompagnée : synthèse vocale du téléphone (aucun fournisseur en ligne). -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
     </queries>
 </manifest>

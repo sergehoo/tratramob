@@ -34,9 +34,13 @@ const _months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet
 String _date(DateTime d) => '${d.day == 1 ? '1er' : d.day} ${_months[d.month - 1]} ${d.year}';
 
 class IdentityFlowScreen extends StatefulWidget {
-  const IdentityFlowScreen({super.key, this.picker, this.api});
+  const IdentityFlowScreen({super.key, this.picker, this.api, this.simplified = false});
   final KycPhotoPicker? picker;
   final KycFlowApi? api;
+
+  /// Inscription accompagnée : la pièce d'abord (choix, photos), puis les informations PRÉREMPLIES par la lecture de la pièce et le
+  /// nom du compte, à confirmer. Mêmes étapes côté serveur, même revue humaine ; la vérification faciale reste facultative.
+  final bool simplified;
   @override
   State<IdentityFlowScreen> createState() => _IdentityFlowScreenState();
 }
@@ -57,6 +61,7 @@ class _IdentityFlowScreenState extends State<IdentityFlowScreen> {
   Map<String, String> _fieldErrors = const {};
   String? _kind;
   final _local = <String, String>{};              // face → photo locale (aperçu de ce qui vient d'être pris)
+  Map<String, String> _read = const {};           // lu sur la pièce (proposé, à confirmer)
 
   @override
   void initState() {
@@ -172,15 +177,40 @@ class _IdentityFlowScreenState extends State<IdentityFlowScreen> {
       _progress = 0;
     });
     final file = path;
-    await _run(() => _api.capture(side, file, onProgress: (p) {
-          if (mounted) setState(() => _progress = p);
-        }));
+    await _run(() async {
+      final s = await _api.capture(side, file, onProgress: (p) {
+        if (mounted) setState(() => _progress = p);
+      });
+      if (s.suggestions.isNotEmpty && mounted) _prefill(s.suggestions);
+      return s;
+    });
     if (mounted) {
       setState(() {
         if (_error == null) _local[side] = file;
         _uploading = null;
       });
     }
+  }
+
+  /// Préremplit les informations avec ce qui a été lu sur la pièce ; l'utilisateur vérifie et corrige avant l'envoi.
+  void _prefill(Map<String, String> read) {
+    setState(() {
+      _read = read;
+      if ((read['first_name'] ?? '').isNotEmpty) _first.text = read['first_name']!;
+      if ((read['last_name'] ?? '').isNotEmpty) _last.text = read['last_name']!;
+      final birth = DateTime.tryParse(read['birth_date'] ?? '');
+      if (birth != null) _birth = birth;
+    });
+  }
+
+  /// Étape affichée. Mode simplifié : la pièce d'abord, puis les informations (préremplies) ; ensuite l'ordre du serveur.
+  String _stepOf(KycFlowState s) {
+    if (_view != null) return _view!;
+    if (!widget.simplified || !s.editable || s.reviewState == 'rejected' && s.captures.any((c) => !c.present)) return s.currentStep;
+    if (s.documentKind == null) return 'document';
+    if (s.captures.any((c) => !c.present)) return 'capture';
+    if (!s.personalComplete) return 'personal';
+    return s.currentStep;
   }
 
   Future<void> _send() async {
@@ -233,11 +263,11 @@ class _IdentityFlowScreenState extends State<IdentityFlowScreen> {
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: EdgeInsets.fromLTRB(TtLayout.gutterMobile, TtSpace.s4, TtLayout.gutterMobile, TtSpace.s8 + MediaQuery.paddingOf(context).bottom),
                 children: [
-                  _Header(state: s, step: _view ?? s.currentStep),
+                  _Header(state: s, step: _stepOf(s)),
                   const SizedBox(height: TtSpace.s3),
                   _StepsOverview(state: s, onOpen: s.editable && !_busy ? (k) => setState(() => _view = k) : null),
                   const SizedBox(height: TtSpace.s4),
-                  ..._content(s, _view ?? s.currentStep),
+                  ..._content(s, _stepOf(s)),
                   if (_error != null) ...[
                     const SizedBox(height: TtSpace.s3),
                     TratraAlert(key: const ValueKey('kyc-error'), tone: TratraAlertTone.danger, message: _error!),
@@ -259,6 +289,15 @@ class _IdentityFlowScreenState extends State<IdentityFlowScreen> {
       };
 
   List<Widget> _personal(KycFlowState s) => [
+        if (_read.isNotEmpty) ...[
+          const TratraAlert(
+            key: ValueKey('kyc-read'),
+            tone: TratraAlertTone.info,
+            title: 'Lu sur votre pièce',
+            message: 'Nous avons rempli ces informations à partir de votre pièce. Vérifiez-les et corrigez si besoin.',
+          ),
+          const SizedBox(height: TtSpace.s3),
+        ],
         Text('Saisissez vos nom et prénoms exactement comme sur votre pièce d’identité.', style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft)),
         const SizedBox(height: TtSpace.s4),
         TratraInput(key: const ValueKey('kyc-first'), controller: _first, label: 'Prénoms', required: true, textCapitalization: TextCapitalization.words,
