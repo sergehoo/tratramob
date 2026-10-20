@@ -4,6 +4,8 @@
 // (client) ET proposer des services (artisan). Cinq onglets : Accueil, Explorer, Réservations,
 // Messages, Plus (prestations, portefeuille, avis, notifications, profil & KYC).
 import 'package:flutter/material.dart';
+
+import 'package:flutter_tratra/core/deep_links.dart';
 import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/constants.dart';
@@ -36,11 +38,22 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) context.read<DashboardController>().load();
+      _applyTabRequest();
     });
+    dashboardTabRequest.addListener(_applyTabRequest);
+  }
+
+  /// Onglet demandé par un raccourci d'application ou le widget d'accueil.
+  void _applyTabRequest() {
+    final tab = dashboardTabRequest.value;
+    if (tab == null || !mounted) return;
+    dashboardTabRequest.value = null;
+    _go(tab);
   }
 
   @override
   void dispose() {
+    dashboardTabRequest.removeListener(_applyTabRequest);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

@@ -2,6 +2,7 @@
 //
 // Navigation depuis l'espace unifié vers les écrans (existants ou nouveaux).
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/deep_links.dart';
 import 'package:flutter_tratra/engagements/contract_screen.dart';
@@ -102,6 +103,13 @@ Future<void> openDeepLink(BuildContext context, DeepLink link) {
       return pushPage(context, const ReplacementsScreen());
     case DeepLinkKind.notifications:
       return openNotifications(context);
+    case DeepLinkKind.explore || DeepLinkKind.bookings || DeepLinkKind.messages:
+      Navigator.of(context).popUntil((r) => r.isFirst);
+      dashboardTabRequest.value = switch (link.kind) { DeepLinkKind.explore => 1, DeepLinkKind.bookings => 2, _ => 3 };
+      return Future.value();
+    case DeepLinkKind.pro:
+      final provider = context.read<DashboardController>().data?.isProvider ?? false;
+      return provider ? openProviderHub(context) : openProvide(context);
   }
 }
 

@@ -36,6 +36,9 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- Les liens tratra:// (widget d'accueil, raccourcis, notifications) sont interprétés par l'application
+                 (lib/core/deep_links.dart) : le routeur natif de Flutter ne doit pas les recevoir (« Route inconnue »). -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -50,6 +53,13 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Widget d'accueil (données minimales écrites par l'application). -->
+        <receiver android:name=".TratraWidgetProvider" android:exported="true" android:label="Tratra">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/tratra_widget_info" />
+        </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

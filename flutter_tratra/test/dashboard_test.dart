@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/continuity/activities_controller.dart';
+import 'package:flutter_tratra/core/deep_links.dart';
 import 'package:flutter_tratra/continuity/offline_queue.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/design/design.dart';
@@ -249,6 +250,17 @@ void main() {
   });
 
   group('Navigation', () {
+    testWidgets('raccourci ou widget : l’onglet demandé s’ouvre (Messages)', (t) async {
+      _tall(t);
+      await t.pumpWidget(_host(DashData(_payload(provider: true)), const DashboardScreen()));
+      await t.pump();
+      dashboardTabRequest.value = 3;
+      await t.pumpAndSettle();
+      expect(dashboardTabRequest.value, isNull);                      // demande consommée
+      expect(find.text('Messages'), findsWidgets);
+      expect(find.text('Plus'), findsWidgets);
+    });
+
     testWidgets('client seul : « Plus » propose Proposer un service, sans fonctions artisan', (t) async {
       _tall(t);
       await t.pumpWidget(_host(DashData(_payload()), const DashboardScreen()));

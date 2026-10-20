@@ -42,6 +42,7 @@ import 'package:flutter_tratra/screens/home_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_screen.dart';
 import 'package:flutter_tratra/core/deep_links.dart';
+import 'package:flutter_tratra/services/home_widget_sync.dart';
 import 'package:flutter_tratra/engagements/engagements_api.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
 import 'package:flutter_tratra/screens/search_screen.dart';
@@ -226,6 +227,10 @@ class _MyAppState extends State<MyApp> {
   late final Future<void> _bootFuture;
   late final Session _session = context.read<Session>();
   late final PushService _push = context.read<PushService>();
+  late final DashboardController _dash = context.read<DashboardController>();
+  StreamSubscription<Uri?>? _widgetClicks;
+  String? _pendingLink;
+  bool _booted = false;
 
   @override
   void initState() {
@@ -243,6 +248,17 @@ class _MyAppState extends State<MyApp> {
     push.onForeground = _onPushForeground;
     push.onTap = _onPushTap;
     session.addListener(_syncPush);
+    // Widget d'accueil : données minimales mises à jour à chaque synchronisation de l'espace, effacées à la déconnexion.
+    session.addLogoutWipe(HomeWidgetSync.clear);
+    _dash.addListener(_syncHomeWidget);
+    // Raccourcis d'application et widget : mêmes liens profonds que les notifications.
+    AppShortcuts.init(_openLink);
+    HomeWidgetSync.initialLink().then((uri) {
+      if (uri != null) _openLink(uri.toString());
+    });
+    _widgetClicks = HomeWidgetSync.clicks.listen((uri) {
+      if (uri != null) _openLink(uri.toString());
+    });
     _bootFuture = session.loadFromStorage().timeout(
           const Duration(seconds: 8),
           onTimeout: () {},
@@ -251,13 +267,49 @@ class _MyAppState extends State<MyApp> {
     _bootFuture.whenComplete(() {
       _syncPush();
       unawaited(push.start());
+      _booted = true;
+      final pending = _pendingLink;
+      _pendingLink = null;
+      if (pending != null) WidgetsBinding.instance.addPostFrameCallback((_) => _openLink(pending));
     });
   }
 
   @override
   void dispose() {
     _session.removeListener(_syncPush);
+    _dash.removeListener(_syncHomeWidget);
+    _widgetClicks?.cancel();
     super.dispose();
+  }
+
+  void _syncHomeWidget() {
+    final data = _dash.data;
+    if (data != null) {
+      unawaited(HomeWidgetSync.update(data));
+    } else if (_dash.sessionExpired) {
+      unawaited(HomeWidgetSync.clear());
+    }
+  }
+
+  /// Raccourci d'application ou widget : ouvre la destination (connexion d'abord si elle l'exige). Avant la fin du démarrage, le lien
+  /// est gardé puis ouvert dès que l'écran est prêt.
+  void _openLink(String uri) {
+    if (!_booted) {
+      _pendingLink = uri;
+      return;
+    }
+    final ctx = appNavigatorKey.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    final link = parseDeepLink({'deeplink': uri});
+    if (requiresSignIn(link) && !_session.isAuthenticated) {
+      Navigator.of(ctx).pushNamed(RouteNames.login);
+      return;
+    }
+    if (link.kind == DeepLinkKind.explore && !_session.isAuthenticated) {
+      Navigator.of(ctx).pushNamed(RouteNames.explore);
+      return;
+    }
+    openDeepLink(ctx, link);
   }
 
   /// L'appareil suit toujours le compte connecté (enregistré à la connexion, retiré à la déconnexion).

@@ -4,8 +4,21 @@
 // `tratra://reviews`, `tratra://announcement/3`, `tratra://contract/7`, `tratra://posting/4`, `tratra://replacements`… Le serveur décrit l'objet à ouvrir ; l'application ne devine rien.
 // Une donnée de notification illisible ou inconnue ne plante jamais : elle ouvre simplement le centre de notifications.
 
+import 'package:flutter/foundation.dart';
+
 /// Type d'objet désigné par un lien profond.
-enum DeepLinkKind { booking, mission, conversation, reviews, kyc, businessRequest, announcement, contract, posting, replacements, notifications }
+enum DeepLinkKind {
+  booking, mission, conversation, reviews, kyc, businessRequest, announcement, contract, posting, replacements, notifications,
+  // Destinations des raccourcis d'application et du widget d'accueil (sans identifiant).
+  explore, bookings, messages, pro,
+}
+
+/// Onglet de l'espace à afficher (0 accueil, 1 explorer, 2 réservations, 3 messages) : demandé par un raccourci ou le widget,
+/// appliqué par l'écran principal dès qu'il est prêt (y compris au lancement à froid).
+final ValueNotifier<int?> dashboardTabRequest = ValueNotifier<int?>(null);
+
+/// Liens qui exigent un compte connecté (sinon : écran de connexion).
+bool requiresSignIn(DeepLink link) => link.kind != DeepLinkKind.explore;
 
 class DeepLink {
   const DeepLink(this.kind, {this.id});
@@ -37,6 +50,10 @@ DeepLinkKind? _kind(String raw) => switch (raw) {
       'posting' => DeepLinkKind.posting,
       'replacements' => DeepLinkKind.replacements,
       'notifications' => DeepLinkKind.notifications,
+      'explore' => DeepLinkKind.explore,
+      'bookings' => DeepLinkKind.bookings,
+      'messages' => DeepLinkKind.messages,
+      'pro' => DeepLinkKind.pro,
       _ => null,
     };
 
