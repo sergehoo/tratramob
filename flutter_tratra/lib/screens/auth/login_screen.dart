@@ -38,9 +38,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
-  // Connexion par téléphone (pays + numéro national) ; « identifiant ou e-mail » reste possible pour les anciens comptes.
-  bool _byPhone = true;
+  // Connexion par téléphone uniquement (pays + numéro national) : les utilisateurs de l'application n'ont pas d'identifiant ni d'e-mail.
   PhoneValue _phone = PhoneValue.empty;
   String? _phoneError;
   final _passwordController = TextEditingController();
@@ -113,7 +111,6 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void dispose() {
     _lockTimer?.cancel();
-    _usernameController.dispose();
     _passwordController.dispose();
     _passwordFocusNode.dispose();
     super.dispose();
@@ -123,7 +120,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_isLoading || _locked) return;
     if (!_formKey.currentState!.validate()) return;
     // Numéro à rechercher : tolérant, un ancien numéro hors norme est retrouvé par le serveur.
-    final identifier = _byPhone ? _phone.lookupE164 : _usernameController.text.trim();
+    final identifier = _phone.lookupE164;
     if (identifier == null) {
       setState(() => _phoneError = _phone.error() ?? 'Saisissez votre numéro de téléphone.');
       return;
@@ -228,41 +225,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               const SizedBox(height: TtSpace.s5),
-              if (_byPhone)
-                TratraPhoneField(
-                  key: const ValueKey('login-phone'),
-                  value: _phone,
-                  onChanged: (v) => setState(() {
-                    _phone = v;
-                    _phoneError = null;
-                  }),
-                  errorText: _phoneError,
-                  autofillHints: const [AutofillHints.username, AutofillHints.telephoneNumberNational],
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) => _passwordFocusNode.requestFocus(),
-                )
-              else
-                TratraInput(
-                  key: const ValueKey('login-identifier'),
-                  label: 'Identifiant ou e-mail',
-                  controller: _usernameController,
-                  leadingIcon: Icons.person_outline,
-                  autofillHints: const [AutofillHints.username],
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Identifiant requis' : null,
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) => _passwordFocusNode.requestFocus(),
-                ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  key: const ValueKey('login-mode'),
-                  onPressed: () => setState(() {
-                    _byPhone = !_byPhone;
-                    _phoneError = null;
-                    _error = null;
-                  }),
-                  child: Text(_byPhone ? 'Ancien compte : identifiant ou e-mail' : 'Se connecter avec mon numéro de téléphone'),
-                ),
+              TratraPhoneField(
+                key: const ValueKey('login-phone'),
+                value: _phone,
+                onChanged: (v) => setState(() {
+                  _phone = v;
+                  _phoneError = null;
+                }),
+                errorText: _phoneError,
+                autofillHints: const [AutofillHints.username, AutofillHints.telephoneNumberNational],
+                textInputAction: TextInputAction.next,
+                onSubmitted: (_) => _passwordFocusNode.requestFocus(),
               ),
               const SizedBox(height: TtSpace.s5),
               TratraInput(

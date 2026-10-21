@@ -49,6 +49,8 @@ void main() {
     expect(find.text('Téléphone'), findsOneWidget);
     expect(find.text('Mot de passe oublié ?'), findsOneWidget);
     expect(find.text('Email ou nom d’utilisateur'), findsNothing);
+    expect(find.textContaining('Ancien compte'), findsNothing, reason: 'application : connexion par téléphone uniquement');
+    expect(find.text('Identifiant ou e-mail'), findsNothing);
   });
 
   testWidgets('la récupération commence par le numéro, sans révéler si le compte existe', (t) async {
