@@ -262,8 +262,9 @@ class _MyAppState extends State<MyApp> {
     _widgetClicks = HomeWidgetSync.clicks.listen((uri) {
       if (uri != null) _openLink(uri.toString());
     });
-    _bootFuture = session.loadFromStorage().timeout(
-          const Duration(seconds: 8),
+    // « Se souvenir de moi » décoché : une session ouverte avant la fermeture réelle de l'application ne survit pas au démarrage.
+    _bootFuture = session.endSessionOnlyAtColdStart().then((_) => session.loadFromStorage()).timeout(
+          const Duration(seconds: 10),
           onTimeout: () {},
         );
     // Push : démarré une fois la session connue, sans bloquer l'affichage.

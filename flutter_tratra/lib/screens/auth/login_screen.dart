@@ -41,6 +41,8 @@ class _LoginScreenState extends State<LoginScreen> {
   // Connexion par téléphone uniquement (pays + numéro national) : les utilisateurs de l'application n'ont pas d'identifiant ni d'e-mail.
   PhoneValue _phone = PhoneValue.empty;
   String? _phoneError;
+  // « Se souvenir de moi » : coché par défaut ; décoché, la session s'arrête à la fermeture réelle de l'application.
+  bool _remember = true;
   final _passwordController = TextEditingController();
 
   late final ApiService _apiService;
@@ -135,6 +137,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final user = await _apiService.loginWithUsername(
         identifier,
         _passwordController.text,
+        remember: _remember,
       );
 
       final token = _apiService.authToken;
@@ -250,12 +253,29 @@ class _LoginScreenState extends State<LoginScreen> {
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _login(),
               ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => Navigator.pushNamed(context, RouteNames.forgotPassword),
-                  child: const Text('Mot de passe oublié ?'),
-                ),
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  InkWell(
+                    key: const ValueKey('login-remember'),
+                    borderRadius: BorderRadius.circular(TtRadius.sm),
+                    onTap: () => setState(() => _remember = !_remember),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Checkbox(
+                        value: _remember,
+                        onChanged: (v) => setState(() => _remember = v ?? true),
+                        activeColor: TtColors.primaryDark,
+                      ),
+                      Text('Se souvenir de moi', style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft)),
+                      const SizedBox(width: TtSpace.s2),
+                    ]),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pushNamed(context, RouteNames.forgotPassword),
+                    child: const Text('Mot de passe oublié ?'),
+                  ),
+                ],
               ),
               if (_locked)
                 Padding(

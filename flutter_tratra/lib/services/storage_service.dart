@@ -48,5 +48,15 @@ class StorageService {
     await _storage.delete(key: AppConstants.authTokenKey);
     await _storage.delete(key: AppConstants.refreshTokenKey);
     await _storage.delete(key: AppConstants.userDataKey);
+    await _storage.delete(key: AppConstants.sessionOnlyKey);
+  }
+
+  /// « Se souvenir de moi » décoché : la session ne survivra pas à la fermeture réelle de l'application.
+  Future<bool> isSessionOnly() async {
+    try {
+      return await _storage.read(key: AppConstants.sessionOnlyKey) == '1';
+    } catch (_) {
+      return false;
+    }
   }
 }

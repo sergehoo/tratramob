@@ -16,9 +16,11 @@ import '../core/constants.dart';
 import '../core/timeout_http_client.dart';
 
 class ApiService {
+  ApiService({http.Client? client}) : client = client ?? TimeoutHttpClient(http.Client());
+
   final String baseUrl = AppConstants.baseUrl;
   // Délai maximal par requête : un serveur muet ne doit jamais figer l'écran (voir core/timeout_http_client.dart).
-  final http.Client client = TimeoutHttpClient(http.Client());
+  final http.Client client;
   String? authToken;
 
   // Méthode pour définir le token d'authentification
@@ -64,7 +66,10 @@ class ApiService {
     }
   }
 
-  Future<User> loginWithUsername(String username, String password) async {
+  /// Connexion. `remember` (« Se souvenir de moi », coché par défaut) : la session reste ouverte après la fermeture de l'application
+  /// et se renouvelle seule ; décoché, elle s'arrête à la fermeture réelle de l'application (jamais en simple arrière-plan) et le
+  /// serveur lui donne une durée courte. Aucun mot de passe n'est conservé.
+  Future<User> loginWithUsername(String username, String password, {bool remember = true}) async {
     authToken = null; // un jeton périmé/d'un autre compte ferait refuser la connexion (401)
     final resp = await client.post(
       Uri.parse('$baseUrl/auth/login/'),
@@ -72,6 +77,7 @@ class ApiService {
       body: json.encode({
         'username': username,
         'password': password,
+        'remember_me': remember,
       }),
     );
 
@@ -93,6 +99,11 @@ class ApiService {
       } else {
         // Évite de réutiliser le refresh token d'une session précédente.
         await secure.delete(key: AppConstants.refreshTokenKey);
+      }
+      if (remember) {
+        await secure.delete(key: AppConstants.sessionOnlyKey);
+      } else {
+        await secure.write(key: AppConstants.sessionOnlyKey, value: '1');
       }
 
       // Récupération du profil courant (protégé)

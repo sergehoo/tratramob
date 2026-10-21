@@ -61,6 +61,28 @@ class Session extends ChangeNotifier {
   final List<Future<void> Function()> _logoutWipes = [];
   void addLogoutWipe(Future<void> Function() wipe) => _logoutWipes.add(wipe);
 
+  /// « Se souvenir de moi » décoché : au DÉMARRAGE À FROID (l'application avait été réellement fermée), la session précédente est
+  /// révoquée et effacée comme une déconnexion. Une mise en arrière-plan ne redémarre pas l'application : la session y survit.
+  /// Réseau absent : la purge locale a lieu quand même (révocation et retrait du push limités à 3 s chacun).
+  Future<bool> endSessionOnlyAtColdStart() async {
+    if (!await _storage.isSessionOnly()) return false;
+    try {
+      await onBeforeLogout?.call().timeout(const Duration(seconds: 3));
+    } catch (_) {}
+    try {
+      await _auth.logout().timeout(const Duration(seconds: 3));
+    } catch (_) {}
+    await _storage.clearAuthData();
+    for (final wipe in _logoutWipes) {
+      try {
+        await wipe();
+      } catch (_) {}
+    }
+    _user = null;
+    notifyListeners();
+    return true;
+  }
+
   /// Déconnexion : révoque côté backend (best-effort) puis purge local.
   Future<void> logout() async {
     try {

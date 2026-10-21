@@ -80,6 +80,8 @@ class AppConstants {
   static const String authTokenKey = 'auth_token';
   static const String refreshTokenKey = 'refresh_token';
   static const String userDataKey = 'user_data';
+  /// « Se souvenir de moi » décoché : la session s'arrête à la fermeture réelle de l'application (démarrage à froid suivant).
+  static const String sessionOnlyKey = 'session_only';
   static const String fcmTokenKey = 'fcm_token';
 
   // Auth

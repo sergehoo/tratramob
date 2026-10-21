@@ -34,7 +34,7 @@ class _FakeApi extends ApiService {
   int calls = 0;
 
   @override
-  Future<User> loginWithUsername(String username, String password) async {
+  Future<User> loginWithUsername(String username, String password, {bool remember = true}) async {
     calls++;
     throw next();
   }
