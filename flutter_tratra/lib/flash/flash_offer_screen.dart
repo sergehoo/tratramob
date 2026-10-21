@@ -197,7 +197,11 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
         backgroundColor: TtColors.night,
         foregroundColor: Colors.white,
         title: Text('Tratra Flash', style: TratraTheme.style(TtType.title, color: Colors.white)),
-        leading: IconButton(key: const ValueKey('flash-close'), icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).maybePop()),
+        leading: IconButton(
+            key: const ValueKey('flash-close'),
+            tooltip: 'Fermer',
+            icon: const Icon(Icons.close, color: Colors.white),
+            onPressed: () => Navigator.of(context).maybePop()),
       ),
       body: offer == null
           ? Center(

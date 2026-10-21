@@ -140,7 +140,9 @@ object TratraAlerts {
         if (!nm.areNotificationsEnabled()) return
         val quote = data["mode"] == "quote"
         val title = data["title"] ?: "Nouvelle mission"
-        val body = data["body"] ?: listOfNotNull(data["zone"], data["when_label"], data["amount_label"]).joinToString(" · ")
+        // Le délai restant est affiché par le compte à rebours de la notification (jamais un nombre de secondes figé dans le texte).
+        val parts = listOfNotNull(data["zone"], data["when_label"], data["amount_label"]).filter { it.isNotBlank() }
+        val body = if (parts.isNotEmpty()) parts.joinToString(" · ") else (data["body"] ?: "")
         val green = ContextCompat.getColor(context, R.color.tratra_green)
         // Écran verrouillé sécurisé : seule cette version neutre est visible ; le détail et les actions exigent le déverrouillage.
         val public = NotificationCompat.Builder(context, flashChannel(context))

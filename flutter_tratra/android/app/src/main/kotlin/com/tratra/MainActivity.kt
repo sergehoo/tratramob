@@ -10,19 +10,22 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var flashChannel: MethodChannel? = null
-    /** Action d'une alerte Tratra Flash qui a LANCÉ l'application : remise à Dart dès qu'il la demande (une seule fois). */
+    /** Action d'une alerte Tratra Flash reçue avant que Dart n'écoute : remise à Dart dès qu'il la demande (une seule fois). */
     private var pendingFlashAction: Map<String, Any>? = null
+    /** Dart a demandé l'action de lancement : il écoute désormais « onAction ». Faux après une recréation de l'activité
+     *  (processus arrêté : Android recrée l'activité puis lui remet l'action par onNewIntent, AVANT que Dart ne tourne). */
+    private var dartReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         TratraAlerts.ensureChannels(this)
-        handleFlashIntent(intent, launching = true)
+        handleFlashIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleFlashIntent(intent, launching = false)
+        handleFlashIntent(intent)
     }
 
     override fun onResume() {
@@ -36,7 +39,7 @@ class MainActivity : FlutterActivity() {
     }
 
     /** Accepter / Refuser / Voir touché sur l'alerte : l'alerte s'arrête aussitôt, l'application exécute l'action (session authentifiée). */
-    private fun handleFlashIntent(intent: Intent?, launching: Boolean) {
+    private fun handleFlashIntent(intent: Intent?) {
         val action = intent?.getStringExtra(TratraAlerts.EXTRA_ACTION) ?: return
         val offer = intent.getIntExtra(TratraAlerts.EXTRA_OFFER, 0)
         intent.removeExtra(TratraAlerts.EXTRA_ACTION)
@@ -44,10 +47,10 @@ class MainActivity : FlutterActivity() {
         TratraAlerts.cancel(this, offer)
         val payload = mapOf("action" to action, "offer" to offer)
         val channel = flashChannel
-        if (launching || channel == null) {
-            pendingFlashAction = payload
-        } else {
+        if (dartReady && channel != null) {
             channel.invokeMethod("onAction", payload)
+        } else {
+            pendingFlashAction = payload
         }
     }
 
@@ -57,6 +60,7 @@ class MainActivity : FlutterActivity() {
             setMethodCallHandler { call, result ->
                 when (call.method) {
                     "takeLaunchAction" -> {
+                        dartReady = true
                         result.success(pendingFlashAction)
                         pendingFlashAction = null
                     }
