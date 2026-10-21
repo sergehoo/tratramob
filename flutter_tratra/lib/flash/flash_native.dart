@@ -1,6 +1,6 @@
 // lib/flash/flash_native.dart
 //
-// Pont vers le code natif Tratra Flash (canal « tratra/flash ») : lecture du son « Ta – Tra – Tra ! » et de la vibration rythmée en
+// Pont vers le code natif Tratra Flash (canal « tratra/flash ») : lecture de la sonnerie Tratra Flash (« Pulse ») et de la vibration rythmée en
 // respectant le mode du téléphone (silencieux, vibreur, Ne pas déranger), réglages Son / Vibration, retrait d'une alerte, action
 // touchée sur une alerte (Accepter / Refuser / Voir). Isolé derrière [FlashNative] pour les tests (aucun code natif requis).
 import 'dart:async';

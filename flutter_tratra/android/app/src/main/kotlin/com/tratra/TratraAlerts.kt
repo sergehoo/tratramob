@@ -21,7 +21,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 
 /**
- * Canaux de notification et alerte Tratra Flash (« Ta – Tra – Tra ! »).
+ * Canaux de notification et alerte Tratra Flash (sonnerie « Pulse »).
  *
  *  - tratra_activity       : réservations, messages, suivi, paiements, compte (importance haute, son « tratra_notification »).
  *  - tratra_updates        : avis, entreprise, informations (importance normale).
@@ -46,8 +46,8 @@ object TratraAlerts {
     const val EXTRA_OFFER = "tratra_flash_offer"
     private const val TAG = "tratra_flash"
 
-    /** Vibration calée sur le son : Ta (90 ms) – Tra (90 ms) – Tra ! (260 ms), deux fois, puis le « Tra ! » final qui résonne. */
-    val VIBRATION = longArrayOf(0, 90, 40, 90, 40, 260, 280, 90, 40, 90, 40, 260, 280, 90, 40, 90, 40, 600)
+    /** Vibration calée sur la sonnerie « Pulse » : six notes piquées (accents sur la 3e et la 6e), relancées, puis le double ping final. */
+    val VIBRATION = longArrayOf(120, 50, 50, 50, 50, 80, 20, 50, 50, 50, 50, 80, 300, 50, 50, 50, 50, 80, 20, 50, 50, 50, 50, 80, 370, 120, 40, 350)
 
     /** Vrai quand une activité de l'application est au premier plan : l'alerte est alors affichée par l'écran Tratra Flash. */
     @Volatile var appVisible = false
@@ -59,9 +59,10 @@ object TratraAlerts {
         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
         .build()
 
+    /** Adresse par NOM de ressource (stable d'une version à l'autre, contrairement à l'identifiant numérique). */
     fun soundUri(context: Context, name: String): Uri {
-        val res = if (name == "tratra_notification") R.raw.tratra_notification else R.raw.tratra_flash
-        return Uri.parse("android.resource://${context.packageName}/$res")
+        val raw = if (name == "tratra_notification") "tratra_notification" else "tratra_flash"
+        return Uri.parse("android.resource://${context.packageName}/raw/$raw")
     }
 
     fun ensureChannels(context: Context) {

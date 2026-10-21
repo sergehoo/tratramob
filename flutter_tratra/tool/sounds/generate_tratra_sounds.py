@@ -108,6 +108,18 @@ def write(name, x):
           f"RMS {20 * math.log10(np.sqrt(np.mean(x ** 2))):.1f} dBFS")
 
 
+def flash_pulse():
+    """Sonnerie « nouvelle mission » VALIDÉE (21 oct. 2026) : « Pulse » médium — arpège électro montant relancé une quarte plus haut,
+    basse + nappe médium + pulsation, double ping final (tool/sounds/proposals.py, variante A3). Remplace la première « Ta – Tra – Tra ! »
+    (flash() ci-dessus, conservée pour l'historique)."""
+    import sys
+
+    sys.path.insert(0, OUT)
+    from proposals import proposal_a_warm
+
+    return proposal_a_warm(octave_shift=-7, bass_amp=0.75, pad_amp=0.3, bright=0.9, maxf=5000, bell_amp=0.5)
+
+
 if __name__ == "__main__":
-    write("tratra_flash", flash())
+    write("tratra_flash", flash_pulse())
     write("tratra_notification", notification())

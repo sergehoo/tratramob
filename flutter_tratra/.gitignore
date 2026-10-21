@@ -46,3 +46,4 @@ app.*.map.json
 
 # Identité sonore : masters WAV intermédiaires (régénérés par tool/sounds/build_sounds.sh)
 /tool/sounds/*.wav
+/tool/sounds/propositions/*.wav

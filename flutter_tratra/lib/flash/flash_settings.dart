@@ -1,6 +1,6 @@
 // lib/flash/flash_settings.dart
 //
-// Réglages sonores Tratra (« Ta – Tra – Tra ! ») : son et vibration des nouvelles missions, aperçu de la sonnerie Tratra Flash et du son
+// Réglages sonores Tratra (sonnerie « Pulse ») : son et vibration des nouvelles missions, aperçu de la sonnerie Tratra Flash et du son
 // des notifications. Le mode silencieux, le vibreur et « Ne pas déranger » du téléphone sont toujours respectés (l'aperçu le dit).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -35,7 +35,7 @@ class _FlashSoundSettingsState extends State<FlashSoundSettings> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Sonnerie Tratra', style: TratraTheme.style(TtType.h3)),
         const SizedBox(height: TtSpace.s1),
-        Text('Les nouvelles missions sonnent « Ta – Tra – Tra ! », un son distinct des notifications ordinaires. '
+        Text('Les nouvelles missions ont leur propre sonnerie, « Pulse », distincte des notifications ordinaires. '
             'Le mode silencieux, le vibreur et « Ne pas déranger » de votre téléphone sont toujours respectés.',
             style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft)),
         SwitchListTile(
