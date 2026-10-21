@@ -1,9 +1,7 @@
 package com.tratra
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Context
-import android.os.Build
+import android.content.Intent
 import android.os.Bundle
 import android.telephony.TelephonyManager
 import io.flutter.embedding.android.FlutterActivity
@@ -11,13 +9,79 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var flashChannel: MethodChannel? = null
+    /** Action d'une alerte Tratra Flash qui a LANCÉ l'application : remise à Dart dès qu'il la demande (une seule fois). */
+    private var pendingFlashAction: Map<String, Any>? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        createNotificationChannels()
+        TratraAlerts.ensureChannels(this)
+        handleFlashIntent(intent, launching = true)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleFlashIntent(intent, launching = false)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        TratraAlerts.appVisible = true
+    }
+
+    override fun onPause() {
+        TratraAlerts.appVisible = false
+        super.onPause()
+    }
+
+    /** Accepter / Refuser / Voir touché sur l'alerte : l'alerte s'arrête aussitôt, l'application exécute l'action (session authentifiée). */
+    private fun handleFlashIntent(intent: Intent?, launching: Boolean) {
+        val action = intent?.getStringExtra(TratraAlerts.EXTRA_ACTION) ?: return
+        val offer = intent.getIntExtra(TratraAlerts.EXTRA_OFFER, 0)
+        intent.removeExtra(TratraAlerts.EXTRA_ACTION)
+        if (offer <= 0) return
+        TratraAlerts.cancel(this, offer)
+        val payload = mapOf("action" to action, "offer" to offer)
+        val channel = flashChannel
+        if (launching || channel == null) {
+            pendingFlashAction = payload
+        } else {
+            channel.invokeMethod("onAction", payload)
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        flashChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tratra/flash").apply {
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "takeLaunchAction" -> {
+                        result.success(pendingFlashAction)
+                        pendingFlashAction = null
+                    }
+                    "getPrefs" -> result.success(mapOf(
+                        "sound" to TratraAlerts.soundEnabled(this@MainActivity),
+                        "vibration" to TratraAlerts.vibrationEnabled(this@MainActivity)))
+                    "setPrefs" -> {
+                        TratraAlerts.setPrefs(this@MainActivity, call.argument<Boolean>("sound") ?: true,
+                            call.argument<Boolean>("vibration") ?: true)
+                        result.success(true)
+                    }
+                    "play" -> result.success(TratraAlerts.play(this@MainActivity, call.argument<String>("sound") ?: "tratra_flash",
+                        call.argument<Boolean>("withSound") ?: true, call.argument<Boolean>("withVibration") ?: true))
+                    "stop" -> {
+                        TratraAlerts.stop(this@MainActivity)
+                        result.success(true)
+                    }
+                    "cancel" -> {
+                        call.argument<Int>("offer")?.let { TratraAlerts.cancel(this@MainActivity, it) }
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
         // Pays de la carte SIM (puis du réseau) pour présélectionner l'indicatif téléphonique. Aucune permission requise ;
         // aucun numéro n'est lu.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tratra/device").setMethodCallHandler { call, result ->
@@ -33,31 +97,5 @@ class MainActivity : FlutterActivity() {
         listOf(tm?.simCountryIso, tm?.networkCountryIso).firstOrNull { !it.isNullOrBlank() && it.length == 2 }?.uppercase()
     } catch (e: Exception) {
         null
-    }
-
-    /**
-     * Canaux des notifications push (FCM). Le serveur désigne le canal par son identifiant selon la catégorie :
-     *  - tratra_default       : réservations, messages, suivi, paiements, compte (importance haute, alerte immédiate) ;
-     *  - tratra_updates       : avis, entreprise, informations (importance normale) ;
-     *  - tratra_announcements : annonces (importance normale, coupables séparément dans les réglages Android).
-     */
-    private fun createNotificationChannels() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel("tratra_default", "Réservations et suivi", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Statut des réservations, arrivée de l'artisan, messages et paiements."
-            }
-        )
-        manager.createNotificationChannel(
-            NotificationChannel("tratra_updates", "Avis et informations", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Nouveaux avis, activité de votre entreprise et informations de service."
-            }
-        )
-        manager.createNotificationChannel(
-            NotificationChannel("tratra_announcements", "Annonces", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Annonces et nouveautés de Tratra."
-            }
-        )
     }
 }

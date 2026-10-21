@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/design/design.dart';
+import 'package:flutter_tratra/flash/flash_settings.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/notifications_screen.dart' show notificationIcon;
@@ -89,6 +90,8 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
                   ],
                 ]),
               ),
+              const SizedBox(height: TtSpace.s4),
+              const FlashSoundSettings(),
               const SizedBox(height: TtSpace.s4),
               TratraCard(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

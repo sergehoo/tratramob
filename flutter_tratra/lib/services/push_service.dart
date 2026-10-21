@@ -220,6 +220,8 @@ class PushService extends ChangeNotifier {
         body: jsonEncode({
           'device_token': token,
           'device_type': defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
+          // Android : l'application construit elle-même l'alerte Tratra Flash (actions, compte à rebours, retrait à l'échéance).
+          if (defaultTargetPlatform == TargetPlatform.android) 'capabilities': const ['flash1'],
           if (previous != null && previous.isNotEmpty && previous != token) 'previous_token': previous,
         }),
       );

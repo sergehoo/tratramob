@@ -16,6 +16,9 @@ import 'package:flutter_tratra/continuity/drafts.dart';
 import 'package:flutter_tratra/continuity/offline_queue.dart';
 import 'package:flutter_tratra/continuity/vault.dart';
 import 'package:flutter_tratra/engagements/evidence_viewer.dart';
+import 'package:flutter_tratra/flash/flash_api.dart';
+import 'package:flutter_tratra/flash/flash_controller.dart';
+import 'package:flutter_tratra/flash/flash_native.dart';
 import 'package:flutter_tratra/routes.dart';
 
 // Services socle
@@ -195,6 +198,16 @@ void main() {
             },
           ),
 
+          // Tratra Flash : réception des nouvelles missions (écran, sonnerie, actions des alertes), demandes des clients
+          ChangeNotifierProvider<FlashController>(
+            create: (ctx) => FlashController(
+              api: FlashApi(ctx.read<BaseApi>()),
+              native: MethodChannelFlashNative(),
+              navigatorKey: appNavigatorKey,
+              isAuthenticated: () => ctx.read<Session>().isAuthenticated,
+            ),
+          ),
+
           // Compat
           Provider<ApiService>(create: (_) => ApiService()),
         ],
@@ -268,9 +281,11 @@ class _MyAppState extends State<MyApp> {
           onTimeout: () {},
         );
     // Push : démarré une fois la session connue, sans bloquer l'affichage.
+    final flash = context.read<FlashController>();
     _bootFuture.whenComplete(() {
       _syncPush();
       unawaited(push.start());
+      unawaited(flash.start());   // action d'une alerte qui a lancé l'application, réglages sonores
       _booted = true;
       final pending = _pendingLink;
       _pendingLink = null;
@@ -325,6 +340,8 @@ class _MyAppState extends State<MyApp> {
   void _onPushForeground(PushMessage m) {
     final ctx = appNavigatorKey.currentContext;
     if (ctx == null || !ctx.mounted) return;
+    // Tratra Flash : écran dédié avec sonnerie (une seule alerte, jamais le bandeau générique en plus).
+    if (ctx.read<FlashController>().handlePush(m.data)) return;
     try {
       ctx.read<DashboardController>().load();
     } catch (_) {}

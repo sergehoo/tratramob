@@ -92,3 +92,8 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Notifications Tratra Flash (actions, version publique, compte à rebours) : NotificationCompat.
+    implementation "androidx.core:core:1.13.1"
+}

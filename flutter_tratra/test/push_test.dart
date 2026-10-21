@@ -105,7 +105,8 @@ void main() {
     expect(calls.single.method, 'POST');
     expect(calls.single.path, '/handy/devices/');
     expect(calls.single.auth, 'Bearer access-A');
-    expect(calls.single.body, {'device_token': 'tok-1', 'device_type': 'android'}); // aucun identifiant utilisateur envoyé
+    // Aucun identifiant utilisateur envoyé ; l'application Android annonce qu'elle affiche elle-même l'alerte Tratra Flash.
+    expect(calls.single.body, {'device_token': 'tok-1', 'device_type': 'android', 'capabilities': ['flash1']});
     expect(push.status, PushStatus.registered);
     expect(await const FlutterSecureStorage().read(key: PushService.deviceIdKey), '41');
   });

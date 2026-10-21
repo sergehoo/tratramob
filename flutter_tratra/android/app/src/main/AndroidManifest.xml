@@ -9,6 +9,9 @@
     <uses-feature android:name="android.hardware.camera.front" android:required="false" />
     <!-- Android 13+ : autorisation d'afficher les notifications (suivi de mission, réservations). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Tratra Flash : vibration rythmée « Ta – Tra – Tra ! » des nouvelles missions (respecte le mode silencieux et « Ne pas déranger »).
+         Aucune permission d'appel ni d'écran plein (USE_FULL_SCREEN_INTENT) : une alerte flottante avec actions suffit. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Permissions ajoutées par des plugins mais inutiles ici : la caméra n'enregistre aucun son (enableAudio: false ; les vidéos de statut passent par
          la caméra système) et image_picker n'a besoin d'aucun accès large au stockage. Les retirer garde la liste de permissions Play minimale. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />
@@ -44,8 +47,9 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Notifications FCM : canal à importance haute créé par MainActivity, icône monochrome, couleur de marque. -->
-        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="tratra_default" />
+        <!-- Notifications FCM : canal à importance haute créé par TratraAlerts (son de la marque), icône monochrome, couleur de marque.
+             Un canal inconnu (ancien serveur : « tratra_default ») retombe ici. -->
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="tratra_activity" />
         <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_tratra" />
         <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/tratra_green" />
         <!-- Don't delete the meta-data below.
@@ -53,6 +57,15 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Tratra Flash : alerte des nouvelles missions construite par l'application (messages FCM de données, même application fermée). -->
+        <receiver
+            android:name=".FlashMessageReceiver"
+            android:exported="true"
+            android:permission="com.google.android.c2dm.permission.SEND">
+            <intent-filter>
+                <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+            </intent-filter>
+        </receiver>
         <!-- Widget d'accueil (données minimales écrites par l'application). -->
         <receiver android:name=".TratraWidgetProvider" android:exported="true" android:label="Tratra">
             <intent-filter>

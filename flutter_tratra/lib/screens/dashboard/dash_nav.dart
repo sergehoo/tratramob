@@ -4,6 +4,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/flash/flash_client.dart';
+import 'package:flutter_tratra/flash/flash_controller.dart';
+import 'package:flutter_tratra/flash/flash_pro.dart';
 import 'package:flutter_tratra/core/deep_links.dart';
 import 'package:flutter_tratra/engagements/contract_screen.dart';
 import 'package:flutter_tratra/engagements/engagements_home.dart';
@@ -115,6 +118,14 @@ Future<void> openDeepLink(BuildContext context, DeepLink link) {
     case DeepLinkKind.pro:
       final provider = context.read<DashboardController>().data?.isProvider ?? false;
       return provider ? openProviderHub(context) : openProvide(context);
+    case DeepLinkKind.flashOffer:
+      return context.read<FlashController>().present(link.id!);
+    case DeepLinkKind.flashRequest:
+      return pushPage(context, FlashRequestScreen(requestId: link.id!));
+    case DeepLinkKind.availability:
+      return pushPage(context, const FlashOffersScreen());
+    case DeepLinkKind.trustPenalty:
+      return openReputation(context);
   }
 }
 

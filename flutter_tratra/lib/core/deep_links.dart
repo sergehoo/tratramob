@@ -11,6 +11,8 @@ enum DeepLinkKind {
   booking, mission, conversation, reviews, kyc, businessRequest, announcement, contract, posting, replacements, notifications,
   // Destinations des raccourcis d'application et du widget d'accueil (sans identifiant).
   explore, bookings, messages, pro,
+  // Tratra Flash : proposition de mission (pro), demande (client), disponibilité ; décision Tratra Trust.
+  flashOffer, flashRequest, availability, trustPenalty,
 }
 
 /// Onglet de l'espace à afficher (0 accueil, 1 explorer, 2 réservations, 3 messages) : demandé par un raccourci ou le widget,
@@ -26,7 +28,8 @@ class DeepLink {
   final int? id;
 
   /// Un lien qui exige un identifiant mais n'en porte pas ouvre le centre de notifications.
-  bool get needsId => const {DeepLinkKind.booking, DeepLinkKind.mission, DeepLinkKind.conversation, DeepLinkKind.contract, DeepLinkKind.posting}.contains(kind);
+  bool get needsId => const {DeepLinkKind.booking, DeepLinkKind.mission, DeepLinkKind.conversation, DeepLinkKind.contract, DeepLinkKind.posting,
+        DeepLinkKind.flashOffer, DeepLinkKind.flashRequest}.contains(kind);
 
   @override
   bool operator ==(Object other) => other is DeepLink && other.kind == kind && other.id == id;
@@ -54,6 +57,10 @@ DeepLinkKind? _kind(String raw) => switch (raw) {
       'bookings' => DeepLinkKind.bookings,
       'messages' => DeepLinkKind.messages,
       'pro' => DeepLinkKind.pro,
+      'flash_offer' => DeepLinkKind.flashOffer,
+      'flash_request' => DeepLinkKind.flashRequest,
+      'availability' => DeepLinkKind.availability,
+      'trust_penalty' => DeepLinkKind.trustPenalty,
       _ => null,
     };
 

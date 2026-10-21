@@ -6,6 +6,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/flash/flash_client.dart';
+import 'package:flutter_tratra/flash/flash_pro.dart';
 import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/continuity/continuity_widgets.dart';
@@ -159,6 +161,10 @@ class _DashboardHomeState extends State<DashboardHome> {
             onProvide: () => provider != null ? openProviderHub(context) : openProvide(context),
           ),
           const SizedBox(height: TtSpace.s4),
+          // Tratra Flash : disponibilité du professionnel (missions immédiates) et demande express côté client.
+          if (provider != null) ...[const FlashAvailabilityCard(), const SizedBox(height: TtSpace.s3)],
+          const FlashRequestEntry(),
+          const SizedBox(height: TtSpace.s3),
           // Inscription professionnelle commencée et pas encore publiée : progression et UN bouton « Continuer ».
           const BeginnerProgressCard(),
           const AnnouncementsBanner(),
