@@ -164,6 +164,8 @@ class _DashboardHomeState extends State<DashboardHome> {
           // Tratra Flash : disponibilité du professionnel (missions immédiates) et demande express côté client.
           if (provider != null) ...[const FlashAvailabilityCard(), const SizedBox(height: TtSpace.s3)],
           const FlashRequestEntry(),
+          const SizedBox(height: TtSpace.s2),
+          const FlashFavoritesEntry(),
           const SizedBox(height: TtSpace.s3),
           // Inscription professionnelle commencée et pas encore publiée : progression et UN bouton « Continuer ».
           const BeginnerProgressCard(),

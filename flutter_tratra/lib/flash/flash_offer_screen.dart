@@ -256,7 +256,8 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
       decoration: BoxDecoration(gradient: TtGradients.brand, borderRadius: BorderRadius.circular(TtRadius.card)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Text('NOUVELLE MISSION', style: TratraTheme.style(TtType.eyebrow, color: TtColors.accent)),
+          Text(o.direct ? 'UN CLIENT VOUS A CHOISI' : 'NOUVELLE MISSION', key: const ValueKey('flash-eyebrow'),
+              style: TratraTheme.style(TtType.eyebrow, color: TtColors.accent)),
           const Spacer(),
           if (pending)
             Container(

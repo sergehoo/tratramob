@@ -24,6 +24,8 @@ class FlashOffer {
   String get whenLabel => '${raw['when_label'] ?? ''}';
   String get amountLabel => '${raw['amount_label'] ?? ''}';
   bool get immediate => '${raw['immediate']}' == '1' || raw['immediate'] == true;
+  /// Proposition ciblée : le client a CHOISI ce professionnel (« Choisir mon professionnel »).
+  bool get direct => '${raw['direct']}' == '1';
   String get description => '${raw['description'] ?? ''}';
   double? get distanceKm => double.tryParse('${raw['distance_km'] ?? ''}');
   int get secondsLeft => int.tryParse('${raw['seconds_left'] ?? ''}') ?? 0;
@@ -55,9 +57,11 @@ class FlashApi {
   Future<Map<String, dynamic>> _send(String method, String path, {Object? body, String? key}) async {
     final uri = Uri.parse('${_base.baseUrl}$path');
     final headers = {...await _base.headers, if (key != null) 'Idempotency-Key': key};
-    final http.Response r = method == 'POST'
-        ? await _base.client.post(uri, headers: headers, body: json.encode(body ?? const {}))
-        : await _base.client.get(uri, headers: headers);
+    final http.Response r = switch (method) {
+      'POST' => await _base.client.post(uri, headers: headers, body: json.encode(body ?? const {})),
+      'DELETE' => await _base.client.delete(uri, headers: headers),
+      _ => await _base.client.get(uri, headers: headers),
+    };
     final decoded = r.bodyBytes.isEmpty ? null : jsonDecode(utf8.decode(r.bodyBytes));
     final map = decoded is Map ? decoded.cast<String, dynamic>() : <String, dynamic>{};
     if (r.statusCode < 200 || r.statusCode >= 300) {
@@ -94,4 +98,29 @@ class FlashApi {
       _send('POST', '/flash/requests/$id/relaunch/', body: {if (amount != null) 'amount': amount}, key: key);
   Future<Map<String, dynamic>> chooseQuote(int requestId, int offerId) =>
       _send('POST', '/flash/requests/$requestId/quotes/$offerId/accept/', key: 'flash-choose-$requestId-$offerId');
+
+  // ── Hybrid Matching ────────────────────────────────────────────────────────────────────────────────────────────────────────
+  static String _query(Map<String, Object?> params) {
+    final kept = {for (final e in params.entries) if (e.value != null && '${e.value}'.isNotEmpty) e.key: '${e.value}'};
+    return kept.isEmpty ? '' : '?${Uri(queryParameters: kept).query}';
+  }
+
+  /// Mode conseillé (immédiat → Smart Dispatch, planifié → choix, devis → Smart Dispatch, favori disponible → choix) et dernier choix.
+  Future<Map<String, dynamic>> suggest(int categoryId, {DateTime? when, bool quote = false, double? lat, double? lng, String? commune}) =>
+      _send('GET', '/flash/suggest/${_query({'category': categoryId, 'when': when?.toIso8601String(), 'mode': quote ? 'quote' : null, 'lat': lat, 'lng': lng, 'commune': commune})}');
+
+  /// Professionnels disponibles à CHOISIR (profils, avis, badges ; favoris d'abord).
+  Future<List<Map<String, dynamic>>> pros(int categoryId,
+          {DateTime? when, double? lat, double? lng, String? commune, String sort = 'recommended', double? minRating, String? badge, bool favorites = false}) async =>
+      _results(await _send('GET', '/flash/pros/${_query({'category': categoryId, 'when': when?.toIso8601String(), 'lat': lat, 'lng': lng, 'commune': commune, 'sort': sort, 'min_rating': minRating, 'badge': badge, 'favorites': favorites ? '1' : null})}'));
+
+  /// Bascule confirmée entre « Trouvez-moi un professionnel » (auto) et « Choisir mon professionnel » (direct), sur la même demande.
+  Future<Map<String, dynamic>> switchMode(int requestId, String to, {int? target, int? version}) => _send('POST', '/flash/requests/$requestId/switch/',
+      body: {'to': to, 'confirm': true, if (target != null) 'target': target, if (version != null) 'expected_version': version},
+      key: 'flash-switch-$requestId-$to-${target ?? 0}-${version ?? 0}');
+
+  Future<List<Map<String, dynamic>>> favorites() async => _results(await _send('GET', '/me/favorites/'));
+  Future<List<Map<String, dynamic>>> addFavorite(int handymanId) async =>
+      _results(await _send('POST', '/me/favorites/', body: {'handyman': handymanId}, key: 'favorite-add-$handymanId'));
+  Future<List<Map<String, dynamic>>> removeFavorite(int handymanId) async => _results(await _send('DELETE', '/me/favorites/$handymanId/'));
 }

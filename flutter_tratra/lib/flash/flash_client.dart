@@ -13,11 +13,12 @@ import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/flash/flash_api.dart';
 import 'package:flutter_tratra/flash/flash_controller.dart';
+import 'package:flutter_tratra/flash/flash_hybrid.dart';
 import 'package:flutter_tratra/models/category.dart';
 import 'package:flutter_tratra/screens/dashboard/catalog_pickers.dart';
 import 'package:flutter_tratra/screens/tracking_screen.dart';
 import 'package:flutter_tratra/services/catalog_repository.dart';
-import 'package:flutter_tratra/services/location_service.dart';
+import 'package:flutter_tratra/widgets/address_autocomplete.dart';
 
 String _key(String prefix) => '$prefix-${DateTime.now().microsecondsSinceEpoch}-${Random().nextInt(1 << 30)}';
 
@@ -39,8 +40,8 @@ class FlashRequestEntry extends StatelessWidget {
           const SizedBox(width: TtSpace.s3),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Trouver un pro maintenant', style: TratraTheme.style(TtType.title)),
-              Text('Tratra Flash : les professionnels vérifiés et disponibles près de chez vous reçoivent votre demande.',
+              Text('Trouver un professionnel', style: TratraTheme.style(TtType.title)),
+              Text('Laissez Tratra trouver un pro vérifié et disponible, ou choisissez-le vous-même sur ses avis et badges.',
                   style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
             ]),
           ),
@@ -49,46 +50,104 @@ class FlashRequestEntry extends StatelessWidget {
       );
 }
 
+/// Accès aux professionnels favoris (réservation rapide).
+class FlashFavoritesEntry extends StatelessWidget {
+  const FlashFavoritesEntry({super.key});
+  @override
+  Widget build(BuildContext context) => TratraCard(
+        key: const ValueKey('favorites-entry'),
+        variant: TratraCardVariant.flat,
+        padding: TratraCard.compact,
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const FlashFavoritesScreen())),
+        child: Row(children: [
+          const Icon(Icons.favorite_border, color: TtColors.danger),
+          const SizedBox(width: TtSpace.s3),
+          Expanded(child: Text('Mes professionnels favoris', style: TratraTheme.style(TtType.title))),
+          const Icon(Icons.chevron_right_rounded, color: TtColors.fog),
+        ]),
+      );
+}
+
+/// Commande unique (Hybrid Matching) : métier, mode (« Trouvez-moi un professionnel » / « Choisir mon professionnel »), lieu, date, prix.
 class FlashRequestFormScreen extends StatefulWidget {
-  const FlashRequestFormScreen({super.key});
+  const FlashRequestFormScreen({super.key, this.initialCategory, this.initialMatching, this.initialPro});
+  final Category? initialCategory;
+  final String? initialMatching;
+  final ChosenPro? initialPro;
   @override
   State<FlashRequestFormScreen> createState() => _FlashRequestFormScreenState();
 }
 
 class _FlashRequestFormScreenState extends State<FlashRequestFormScreen> {
   late final Future<Catalog> _catalog = CatalogRepository.shared(context.read<BaseApi>()).load();
-  Category? _category;
-  final _address = TextEditingController();
+  late Category? _category = widget.initialCategory;
+  late String _matching = widget.initialMatching ?? kAuto;
+  late bool _matchingTouched = widget.initialMatching != null;   // choix explicite du client : jamais écrasé par le conseil
+  late ChosenPro? _pro = widget.initialPro;
+  Map<String, dynamic>? _suggestion;
+  AddressPick? _place;                 // adresse d'intervention (enregistrée, suggestion, position de l'appareil ou saisie libre)
   final _commune = TextEditingController();
   final _amount = TextEditingController();
   final _description = TextEditingController();
   bool _quote = false;
   DateTime? _when;              // null = maintenant
-  ({double lat, double lng})? _position;
-  bool _locating = false;
+  ({double lat, double lng})? get _position =>
+      _place?.lat != null && _place?.lng != null ? (lat: _place!.lat!, lng: _place!.lng!) : null;
   bool _busy = false;
   String? _error;
   final String _idempotency = _key('flash-req');
 
   @override
+  void initState() {
+    super.initState();
+    final offer = widget.initialPro?.offer;
+    if (offer != null && offer['price_type'] == 'quote') _quote = true;
+    _refreshSuggestion();
+  }
+
+  /// Conseil du serveur (type de mission, favori disponible, dernier choix) : appliqué tant que le client n'a pas choisi lui-même.
+  Future<void> _refreshSuggestion() async {
+    final c = _category;
+    if (c == null) return;
+    try {
+      final s = await context.read<FlashController>().api.suggest(int.parse(c.id), when: _when, quote: _quote,
+          lat: _position?.lat, lng: _position?.lng, commune: _commune.text.trim());
+      if (!mounted) return;
+      setState(() {
+        _suggestion = s;
+        if (!_matchingTouched && s['preselected'] is String) _matching = s['preselected'] as String;
+      });
+    } catch (_) {
+      // conseil indisponible : le choix reste celui du client
+    }
+  }
+
+  Future<void> _pickPro() async {
+    final c = _category;
+    if (c == null) {
+      setState(() => _error = 'Choisissez d’abord le métier recherché.');
+      return;
+    }
+    final chosen = await Navigator.of(context).push<ChosenPro>(MaterialPageRoute(
+        builder: (_) => FlashProsScreen(categoryId: int.parse(c.id), categoryName: c.name, when: _when, lat: _position?.lat, lng: _position?.lng,
+            commune: _commune.text.trim())));
+    if (chosen != null && mounted) {
+      setState(() {
+        _pro = chosen;
+        _matching = kDirect;
+        _matchingTouched = true;
+        _quote = chosen.offer?['price_type'] == 'quote';
+        if (chosen.offer?['price'] is num) _amount.text = '${(chosen.offer!['price'] as num).toInt()}';
+      });
+    }
+  }
+
+  @override
   void dispose() {
-    _address.dispose();
     _commune.dispose();
     _amount.dispose();
     _description.dispose();
     super.dispose();
-  }
-
-  Future<void> _locate() async {
-    setState(() => _locating = true);
-    try {
-      final p = await context.read<LocationService>().getCurrentLocation();
-      if (mounted) setState(() => _position = (lat: p.latitude, lng: p.longitude));
-    } catch (_) {
-      if (mounted) setState(() => _error = 'Position indisponible : indiquez la commune.');
-    } finally {
-      if (mounted) setState(() => _locating = false);
-    }
   }
 
   Future<void> _pickDate() async {
@@ -98,19 +157,22 @@ class _FlashRequestFormScreenState extends State<FlashRequestFormScreen> {
     final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 2))));
     if (time == null) return;
     setState(() => _when = DateTime(day.year, day.month, day.day, time.hour, time.minute));
+    _refreshSuggestion();
   }
 
   Future<void> _submit() async {
     final amount = int.tryParse(_amount.text.replaceAll(RegExp(r'[^0-9]'), ''));
     final problem = _category == null
         ? 'Choisissez le métier recherché.'
-        : _address.text.trim().isEmpty
+        : (_place == null || _place!.label.trim().isEmpty)
             ? 'Indiquez l’adresse de l’intervention.'
             : (_commune.text.trim().isEmpty && _position == null)
                 ? 'Indiquez la commune ou partagez votre position.'
-                : (!_quote && (amount == null || amount <= 0))
-                    ? 'Indiquez le montant que vous proposez.'
-                    : null;
+                : (_matching == kDirect && _pro == null)
+                    ? 'Choisissez votre professionnel, ou laissez Tratra en trouver un.'
+                    : (!_quote && (amount == null || amount <= 0))
+                        ? 'Indiquez le montant que vous proposez.'
+                        : null;
     if (problem != null) {
       setState(() => _error = problem);
       return;
@@ -122,7 +184,7 @@ class _FlashRequestFormScreenState extends State<FlashRequestFormScreen> {
     try {
       final r = await context.read<FlashController>().api.createRequest({
         'category': int.tryParse(_category!.id),
-        'address': _address.text.trim(),
+        'address': _place!.label.trim(),
         'commune': _commune.text.trim(),
         'mode': _quote ? 'quote' : 'firm',
         if (!_quote) 'amount': amount,
@@ -130,6 +192,9 @@ class _FlashRequestFormScreenState extends State<FlashRequestFormScreen> {
         if (_when != null) 'scheduled_for': _when!.toIso8601String(),
         if (_position != null) 'lat': _position!.lat,
         if (_position != null) 'lng': _position!.lng,
+        'matching': _matching,
+        if (_matching == kDirect) 'target': _pro!.id,
+        if (_matching == kDirect && _pro!.offer != null) 'service': _pro!.offer!['id'],
       }, _idempotency);
       if (!mounted) return;
       final id = int.tryParse('${r['id']}');
@@ -148,7 +213,7 @@ class _FlashRequestFormScreenState extends State<FlashRequestFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Trouver un pro maintenant')),
+      appBar: AppBar(title: Text(_category == null ? 'Nouvelle demande' : _category!.name)),
       body: FutureBuilder<Catalog>(
         future: _catalog,
         builder: (context, snap) {
@@ -158,26 +223,81 @@ class _FlashRequestFormScreenState extends State<FlashRequestFormScreen> {
           return ListView(
             padding: EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s8 + MediaQuery.paddingOf(context).bottom),
             children: [
-              CatalogAutocomplete(catalog: snap.data!, label: 'Métier recherché', hint: 'Plomberie, ménage, électricité…',
-                  onSelected: (c) => setState(() => _category = c)),
-              const SizedBox(height: TtSpace.s3),
-              TratraInput(key: const ValueKey('flash-address'), controller: _address, label: 'Adresse de l’intervention', required: true,
-                  helper: 'Communiquée au professionnel seulement quand il a accepté.'),
-              const SizedBox(height: TtSpace.s3),
-              TratraInput(key: const ValueKey('flash-commune'), controller: _commune, label: 'Commune ou quartier', hint: 'Cocody, Yopougon…'),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  key: const ValueKey('flash-locate'),
-                  onPressed: _locating ? null : _locate,
-                  icon: Icon(_position == null ? Icons.my_location_rounded : Icons.check_circle, size: 18),
-                  label: Text(_position == null ? 'Utiliser ma position (meilleure précision)' : 'Position partagée'),
+              if (_category == null)
+                CatalogAutocomplete(catalog: snap.data!, label: 'Métier recherché', hint: 'Plomberie, ménage, électricité…',
+                    onSelected: (c) {
+                      setState(() {
+                        _category = c;
+                        _pro = null;
+                      });
+                      _refreshSuggestion();
+                    })
+              else
+                TratraCard(
+                  key: const ValueKey('flash-category'),
+                  padding: TratraCard.compact,
+                  child: Row(children: [
+                    const Icon(Icons.handyman_outlined, color: TtColors.primary),
+                    const SizedBox(width: TtSpace.s3),
+                    Expanded(child: Text(_category!.name, style: TratraTheme.style(TtType.title))),
+                    TextButton(onPressed: () => setState(() {
+                          _category = null;
+                          _pro = null;
+                          _suggestion = null;
+                        }), child: const Text('Changer')),
+                  ]),
                 ),
+              const SizedBox(height: TtSpace.s3),
+              Text('Comment trouver votre professionnel ?', style: TratraTheme.style(TtType.title)),
+              const SizedBox(height: TtSpace.s2),
+              ModeSelector(
+                value: _matching,
+                suggestion: _suggestion,
+                onChanged: (v) => setState(() {
+                  _matching = v;
+                  _matchingTouched = true;
+                }),
               ),
+              if (_matching == kDirect) ...[
+                const SizedBox(height: TtSpace.s3),
+                if (_pro == null)
+                  TratraButton(key: const ValueKey('flash-pick-pro'), label: 'Choisir le professionnel', variant: TratraButtonVariant.outline,
+                      leading: const Icon(Icons.person_search_rounded, size: 18), block: true, onPressed: _pickPro)
+                else
+                  ProCard(
+                    key: const ValueKey('flash-chosen-pro'),
+                    card: _pro!.card,
+                    chooseLabel: 'Changer',
+                    onChoose: _pickPro,
+                  ),
+                if (_pro?.offer != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: TtSpace.s1),
+                    child: Text('Prestation : ${_pro!.offer!['title']}', style: TratraTheme.style(TtType.caption, color: TtColors.inkSoft)),
+                  ),
+              ],
+              const SizedBox(height: TtSpace.s3),
+              AddressAutocompleteField(
+                key: const ValueKey('flash-address'),
+                helper: 'Communiquée au professionnel seulement quand il a accepté.',
+                onChanged: (pick) {
+                  setState(() {
+                    _place = pick;
+                    if (pick != null && pick.commune.isNotEmpty) _commune.text = pick.commune;
+                  });
+                  if (pick?.lat != null) _refreshSuggestion();
+                },
+              ),
+              const SizedBox(height: TtSpace.s2),
+              TratraInput(key: const ValueKey('flash-commune'), controller: _commune, label: 'Commune ou quartier', hint: 'Cocody, Yopougon…',
+                  helper: _position != null ? 'Position connue : les professionnels les plus proches sont sollicités.' : null),
               const SizedBox(height: TtSpace.s2),
               Text('Quand ?', style: TratraTheme.style(TtType.title)),
               Wrap(spacing: TtSpace.s2, children: [
-                TratraChip(label: 'Maintenant', selected: _when == null, onTap: () => setState(() => _when = null)),
+                TratraChip(label: 'Maintenant', selected: _when == null, onTap: () {
+                  setState(() => _when = null);
+                  _refreshSuggestion();
+                }),
                 TratraChip(
                     label: _when == null ? 'Planifier' : '${_when!.day.toString().padLeft(2, '0')}/${_when!.month.toString().padLeft(2, '0')} à '
                         '${_when!.hour.toString().padLeft(2, '0')} h ${_when!.minute.toString().padLeft(2, '0')}',
@@ -187,8 +307,14 @@ class _FlashRequestFormScreenState extends State<FlashRequestFormScreen> {
               const SizedBox(height: TtSpace.s3),
               Text('Prix', style: TratraTheme.style(TtType.title)),
               Wrap(spacing: TtSpace.s2, children: [
-                TratraChip(key: const ValueKey('flash-mode-firm'), label: 'Je propose un prix', selected: !_quote, onTap: () => setState(() => _quote = false)),
-                TratraChip(key: const ValueKey('flash-mode-quote'), label: 'Je veux des devis', selected: _quote, onTap: () => setState(() => _quote = true)),
+                TratraChip(key: const ValueKey('flash-mode-firm'), label: 'Je propose un prix', selected: !_quote, onTap: () {
+                  setState(() => _quote = false);
+                  _refreshSuggestion();
+                }),
+                TratraChip(key: const ValueKey('flash-mode-quote'), label: 'Je veux des devis', selected: _quote, onTap: () {
+                  setState(() => _quote = true);
+                  _refreshSuggestion();
+                }),
               ]),
               const SizedBox(height: TtSpace.s2),
               if (!_quote)
@@ -235,7 +361,7 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
     _load();
     // Suivi en direct tant que la recherche est ouverte (le serveur reste la référence).
     _poll = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (const {'searching', 'quoting'}.contains(_data?['status'])) _load();
+      if (const {'searching', 'quoting', 'awaiting'}.contains(_data?['status'])) _load();
     });
   }
 
@@ -293,11 +419,29 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
     );
   }
 
+  Future<void> _switchToAuto(Map<String, dynamic> d, Map<String, dynamic>? target) async {
+    if (!await confirmSwitch(context, to: kAuto, currentPro: d['status'] == 'searching' ? '${target?['name'] ?? ''}'.trim() : null)) return;
+    await _act(() => _api.switchMode(widget.requestId, kAuto, version: int.tryParse('${d['version']}')));
+  }
+
+  Future<void> _switchToDirect(Map<String, dynamic> d) async {
+    final category = (d['category'] as Map?) ?? const {};
+    final contacted = <int>{if ((d['target'] as Map?)?['id'] != null) int.parse('${(d['target'] as Map)['id']}')};
+    final chosen = await Navigator.of(context).push<ChosenPro>(MaterialPageRoute(
+        builder: (_) => FlashProsScreen(categoryId: int.parse('${category['id']}'), categoryName: '${category['name']}',
+            when: DateTime.tryParse('${d['scheduled_for']}'), commune: '${d['commune'] ?? ''}', excludeIds: contacted)));
+    if (chosen == null || !mounted) return;
+    if (!await confirmSwitch(context, to: kDirect, newPro: chosen.name)) return;
+    await _act(() => _api.switchMode(widget.requestId, kDirect, target: chosen.id, version: int.tryParse('${d['version']}')));
+  }
+
   List<Widget> _content(Map<String, dynamic> d) {
     final status = '${d['status']}';
     final progress = (d['progress'] as Map?)?.cast<String, dynamic>() ?? const {};
     final quotes = ((d['quotes'] as List?) ?? const []).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
     final pro = (d['assigned_to'] as Map?)?.cast<String, dynamic>();
+    final target = (d['target'] as Map?)?.cast<String, dynamic>();
+    final direct = d['matching'] == kDirect;
     return [
       TratraCard(
         key: const ValueKey('flash-request-summary'),
@@ -306,11 +450,38 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
           Text('${(d['category'] as Map?)?['name'] ?? ''}', style: TratraTheme.style(TtType.h2)),
           Text('${d['commune']} · ${d['when_label']} · ${d['amount_label']}', style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
           const SizedBox(height: TtSpace.s3),
-          TratraBadge('${d['status_label']}', key: const ValueKey('flash-request-status'),
-              tone: switch (status) { 'assigned' => TratraTone.success, 'searching' || 'quoting' => TratraTone.accent, _ => TratraTone.gray },
-              pulse: status == 'searching'),
+          Wrap(spacing: TtSpace.s2, runSpacing: TtSpace.s2, children: [
+            TratraBadge('${d['status_label']}', key: const ValueKey('flash-request-status'),
+                tone: switch (status) { 'assigned' => TratraTone.success, 'searching' || 'quoting' => TratraTone.accent, 'awaiting' => TratraTone.warning, _ => TratraTone.gray },
+                pulse: status == 'searching'),
+            TratraBadge(direct ? 'Choisir mon professionnel' : 'Trouvez-moi un professionnel', key: const ValueKey('flash-request-matching'),
+                tone: TratraTone.night),
+          ]),
+          if (direct && target != null && status != 'assigned')
+            Padding(
+              padding: const EdgeInsets.only(top: TtSpace.s2),
+              child: Text('Professionnel choisi : ${target['name']}', style: TratraTheme.style(TtType.bodySm)),
+            ),
         ]),
       ),
+      if (status == 'awaiting') ...[
+        const SizedBox(height: TtSpace.s3),
+        TratraAlert(key: const ValueKey('flash-awaiting'), tone: TratraAlertTone.warning,
+            message: '${target?['name'] ?? 'Le professionnel choisi'} ${d['awaiting_reason'] ?? 'n’est pas disponible'}. '
+                'Votre demande est conservée : choisissez la suite.'),
+      ],
+      if (d['can_switch'] == true) ...[
+        const SizedBox(height: TtSpace.s3),
+        if (direct || status == 'awaiting')
+          TratraButton(key: const ValueKey('flash-switch-auto'), label: 'Trouvez-moi un professionnel', block: true,
+              leading: const Icon(Icons.bolt_rounded, size: 18),
+              variant: status == 'awaiting' ? TratraButtonVariant.primary : TratraButtonVariant.outline,
+              onPressed: _busy ? null : () => _switchToAuto(d, target)),
+        if (direct || status == 'awaiting') const SizedBox(height: TtSpace.s2),
+        TratraButton(key: const ValueKey('flash-switch-direct'), label: direct ? 'Choisir un autre professionnel' : 'Choisir mon professionnel',
+            block: true, variant: TratraButtonVariant.outline, leading: const Icon(Icons.person_search_rounded, size: 18),
+            onPressed: _busy ? null : () => _switchToDirect(d)),
+      ],
       const SizedBox(height: TtSpace.s3),
       if (status == 'searching' || status == 'quoting')
         TratraCard(

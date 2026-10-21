@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:flutter_tratra/flash/flash_hybrid.dart';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/category.dart';
@@ -165,6 +166,27 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
             Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AllServicesScreen(initialCategory: name)));
           }
 
+          // Hybrid Matching : après le métier ou la prestation, « Trouvez-moi un professionnel » ou « Choisir mon professionnel ».
+          void choose(Category category) {
+            showTratraSheet<void>(
+              context,
+              title: category.name,
+              child: Builder(
+                builder: (choiceContext) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  ModeChoiceButtons(category: category, onBeforeOpen: () {
+                    Navigator.of(choiceContext).pop();
+                    Navigator.of(sheetContext).pop();
+                  }),
+                  const SizedBox(height: TtSpace.s2),
+                  TextButton(onPressed: () {
+                    Navigator.of(choiceContext).pop();
+                    browse(category.name);
+                  }, child: const Text('Voir les offres publiées')),
+                ]),
+              ),
+            );
+          }
+
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -172,6 +194,8 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
                 Text(trade.description!.trim(), style: TratraTheme.style(TtType.body, color: TtColors.ash)),
                 const SizedBox(height: TtSpace.s3),
               ],
+              ModeChoiceButtons(category: trade, onBeforeOpen: () => Navigator.of(sheetContext).pop()),
+              const SizedBox(height: TtSpace.s4),
               if (prestations.isEmpty)
                 Text('Aucune prestation détaillée pour ce métier.', style: TratraTheme.style(TtType.body, color: TtColors.ash))
               else
@@ -181,7 +205,7 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
                     radius: TtRadius.panel,
                     padding: const EdgeInsets.symmetric(horizontal: TtSpace.s4, vertical: TtSpace.s3),
                     semanticLabel: '${p.name}, ${_offersLabel(p.offersTotal)}',
-                    onTap: () => browse(p.name),
+                    onTap: () => choose(p),
                     child: Row(
                       children: [
                         homeCategoryIcon(p, color: TtColors.primaryDark, size: 18),
