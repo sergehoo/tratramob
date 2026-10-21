@@ -42,6 +42,7 @@ import 'package:flutter_tratra/screens/home_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_screen.dart';
 import 'package:flutter_tratra/core/deep_links.dart';
+import 'package:flutter_tratra/core/route_observer.dart';
 import 'package:flutter_tratra/services/home_widget_sync.dart';
 import 'package:flutter_tratra/engagements/engagements_api.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
@@ -513,6 +514,7 @@ class _MyAppState extends State<MyApp> {
 
         return MaterialApp(
           navigatorKey: appNavigatorKey,
+          navigatorObservers: [appRouteObserver],
           title: 'Tratra',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,

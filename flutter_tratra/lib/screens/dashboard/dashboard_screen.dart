@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:flutter_tratra/core/deep_links.dart';
+import 'package:flutter_tratra/core/route_observer.dart';
 import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/constants.dart';
@@ -27,7 +28,7 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObserver {
+class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingObserver, RouteAware {
   static const _titles = ['Mon espace', 'Explorer', 'Mes réservations', 'Messages', 'Plus'];
   int _index = 0;
   final _visited = <int>{0};
@@ -52,7 +53,21 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null) appRouteObserver.subscribe(this, route);
+  }
+
+  /// Retour sur l'accueil (vérification d'identité, publication, profil…) : statuts relus auprès du serveur.
+  @override
+  void didPopNext() {
+    if (mounted) context.read<DashboardController>().load();
+  }
+
+  @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     dashboardTabRequest.removeListener(_applyTabRequest);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();

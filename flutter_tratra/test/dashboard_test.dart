@@ -3,6 +3,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:flutter_tratra/core/route_observer.dart';
+import 'package:flutter_tratra/screens/dashboard/pro_status.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
@@ -75,23 +78,66 @@ class _FakeController extends DashboardController {
   _FakeController(DashData d) : super(DashboardApi(BaseApi())) {
     data = d;
   }
+  int loads = 0;
+  @override
+  Future<void> load() async => loads++;
 }
 
 /// Messagerie et statuts : serveur injoignable dans ces scénarios (la barre des statuts reste masquée, l'accueil n'est pas dégradé).
 final _offlineBase = BaseApi(client: MockClient((_) async => http.Response('{}', 503)));
 
-Widget _host(DashData d, Widget child) => MultiProvider(
+Widget _host(DashData d, Widget child, {_FakeController? controller}) => MultiProvider(
       providers: [
         Provider<StatusApi>.value(value: StatusApi(_offlineBase)),
         Provider<MessagingApi>.value(value: MessagingApi(_offlineBase)),
         ChangeNotifierProvider<InboxController>.value(value: InboxController(_offlineBase, MessagingApi(_offlineBase))),
-        ChangeNotifierProvider<DashboardController>.value(value: _FakeController(d)),
+        ChangeNotifierProvider<DashboardController>.value(value: controller ?? _FakeController(d)),
         // Continuité : aucune activité en cours dans ces scénarios (le bandeau reste masqué).
         ChangeNotifierProvider<ActivitiesController>.value(value: ActivitiesController(fetch: (_) async => {})),
         ChangeNotifierProvider<OfflineQueue>.value(value: OfflineQueue(send: (_) async => 200)),
       ],
-      child: MaterialApp(theme: TratraTheme.light(), home: child),
+      child: MaterialApp(theme: TratraTheme.light(), navigatorObservers: [appRouteObserver], home: child),
     );
+
+/// Synthèse d'éligibilité du serveur (handy/eligibility.py) pour un compte artisan.
+Map<String, dynamic> _elig({
+  bool authorized = false,
+  bool complete = true,
+  String kyc = 'approved',
+  bool approved = false,
+  int offers = 1,
+  String? reason,
+  List<Map<String, dynamic>> blockers = const [],
+}) =>
+    {
+      'profile': {'complete': complete, 'done': complete ? 5 : 3, 'total': 5, 'items': []},
+      'kyc': {'status': kyc, 'label': kyc, 'reason': reason, 'approved': kyc == 'approved'},
+      'approval': {'approved': approved, 'label': ''},
+      'publication': {'authorized': authorized, 'label': '', 'blockers': blockers},
+      'offers': {'total': offers, 'active': offers, 'published': authorized ? offers : 0, 'inactive': 0, 'label': ''},
+      'next_action': null,
+    };
+
+/// Compte artisan dont la liste de contrôle est à 7/7 (ou non), avec la synthèse d'éligibilité donnée.
+DashData _pro(Map<String, dynamic> eligibility, {bool sevenOfSeven = true}) {
+  final p = _payload(provider: true);
+  final provider = Map<String, dynamic>.from(p['provider'] as Map);
+  provider['publishable'] = eligibility['publication']['authorized'];
+  provider['completion'] = {'percent': sevenOfSeven ? 100 : 71, 'done': sevenOfSeven ? 7 : 5, 'total': 7, 'items': [
+    {'key': 'bio', 'label': 'Présentation', 'done': true},
+    {'key': 'photo', 'label': 'Photo de profil', 'done': sevenOfSeven},
+  ]};
+  provider['eligibility'] = eligibility;
+  return DashData({...p, 'provider': provider});
+}
+
+Future<void> _home(WidgetTester t, DashData d) async {
+  t.view.physicalSize = const Size(900, 6000); // toute la liste de l'accueil construite (la carte est en bas)
+  t.view.devicePixelRatio = 1.0;
+  addTearDown(t.view.reset);
+  await t.pumpWidget(_host(d, Scaffold(body: DashboardHome(onExplore: () {}, onMessages: () {}))));
+  await t.pump();
+}
 
 void _tall(WidgetTester t) {
   t.view.physicalSize = const Size(900, 2400);
@@ -167,11 +213,98 @@ void main() {
       expect(find.text('Gains disponibles'), findsNothing); // fonctions financières désactivées (version Google Play)
       expect(find.text(formatFcfa(13350)), findsNothing);
       expect(find.text('Profil professionnel'), findsOneWidget);
-      expect(find.text('Aucun document déposé'), findsOneWidget);
+      expect(find.byKey(const ValueKey('pro-continue')), findsOneWidget);
       expect(find.text('Proposer un service'), findsNothing);
       await t.tap(find.text('Missions'));
       await t.pump();
       expect(find.text('Installation électrique'), findsWidgets);
+    });
+  });
+
+  group('Accueil : carte du profil professionnel (statuts réels du serveur)', () {
+    testWidgets('vérifié (publication autorisée) : plus de carte 7/7, badge « Vérifié » près du nom', (t) async {
+      await _home(t, _pro(_elig(authorized: true, approved: true)));
+      expect(find.byKey(const ValueKey('pro-card-hidden')), findsOneWidget);
+      expect(find.text('7/7'), findsNothing);
+      expect(find.text('Profil professionnel'), findsNothing);
+      expect(find.byKey(const ValueKey('hero-verified')), findsOneWidget);
+      expect(find.text('Vérifié'), findsOneWidget);
+    });
+
+    testWidgets('vérifié sans prestation : « Créer ma première prestation », sans la carte 7/7', (t) async {
+      await _home(t, _pro(_elig(authorized: true, approved: true, offers: 0)));
+      expect(find.text('Créer ma première prestation'), findsOneWidget);
+      expect(find.text('7/7'), findsNothing);
+      expect(find.byKey(const ValueKey('hero-verified')), findsOneWidget);
+    });
+
+    testWidgets('7/7 sans autorisation de publication : jamais « Vérifié » (la validation n’est pas déduite du 7/7)', (t) async {
+      await _home(t, _pro(_elig(approved: true, blockers: [
+        {'code': 'experience_minimum', 'label': 'Expérience minimale non atteinte : Nounou demande 2 ans', 'hint': 'Votre déclaration est conservée.',
+          'action': {'code': 'edit_profile', 'label': 'Compléter mon profil'}},
+      ])));
+      expect(find.byKey(const ValueKey('hero-verified')), findsNothing);
+      expect(find.text('7/7'), findsNothing);
+      expect(find.text('Expérience minimale non atteinte : Nounou demande 2 ans'), findsOneWidget);
+      expect(find.text('Compléter mon profil'), findsOneWidget);
+    });
+
+    testWidgets('pièce en revue : statut compact, aucun bouton d’action inutile', (t) async {
+      await _home(t, _pro(_elig(kyc: 'pending'), sevenOfSeven: false));
+      final card = find.byKey(const ValueKey('pro-status-kycPending'));
+      expect(card, findsOneWidget);
+      expect(find.text('Identité en cours de vérification'), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.byType(TratraButton)), findsNothing);
+      expect(find.byKey(const ValueKey('pro-progress')), findsNothing);
+    });
+
+    testWidgets('validation finale de l’équipe en attente : statut compact, sans bouton', (t) async {
+      await _home(t, _pro(_elig(blockers: [{'code': 'approval_pending', 'label': 'Validation finale', 'hint': '', 'action': null}])));
+      final card = find.byKey(const ValueKey('pro-status-approvalPending'));
+      expect(card, findsOneWidget);
+      expect(find.descendant(of: card, matching: find.byType(TratraButton)), findsNothing);
+      expect(find.byKey(const ValueKey('hero-verified')), findsNothing);
+    });
+
+    testWidgets('pièce refusée : la correction demandée et « Reprendre ma pièce »', (t) async {
+      await _home(t, _pro(_elig(kyc: 'rejected', reason: 'Photo floue : reprenez le recto sans reflet.'), sevenOfSeven: false));
+      expect(find.byKey(const ValueKey('pro-kyc-rejected')), findsOneWidget);
+      expect(find.text('Photo floue : reprenez le recto sans reflet.'), findsOneWidget);
+      expect(find.text('Reprendre ma pièce'), findsOneWidget);
+    });
+
+    testWidgets('profil incomplet : carte avec progression et « Continuer »', (t) async {
+      await _home(t, _pro(_elig(complete: false, kyc: 'draft', blockers: [
+        {'code': 'profile_incomplete', 'label': 'Profil incomplet : photo de profil', 'hint': '', 'action': {'code': 'edit_profile', 'label': 'Compléter mon profil'}},
+      ]), sevenOfSeven: false));
+      expect(find.byKey(const ValueKey('pro-progress')), findsOneWidget);
+      expect(find.text('5/7'), findsOneWidget);
+      expect(find.text('Continuer'), findsOneWidget);
+      expect(find.byKey(const ValueKey('hero-verified')), findsNothing);
+    });
+
+    test('même logique que le site : priorités des statuts', () {
+      ProHomeKind kind(Map<String, dynamic> e) => proHomeState(_pro(e).provider!).kind;
+      expect(kind(_elig(authorized: true, approved: true)), ProHomeKind.verified);
+      expect(kind(_elig(authorized: true, approved: true, offers: 0)), ProHomeKind.firstOffer);
+      expect(kind(_elig(kyc: 'rejected', complete: false)), ProHomeKind.kycRejected);
+      expect(kind(_elig(complete: false, kyc: 'pending')), ProHomeKind.progress, reason: 'profil incomplet : il y a quelque chose à faire');
+      expect(kind(_elig(kyc: 'draft')), ProHomeKind.progress);
+      expect(kind(_elig(kyc: 'pending')), ProHomeKind.kycPending);
+      expect(kind(_elig()), ProHomeKind.approvalPending);
+    });
+
+    testWidgets('retour sur l’accueil (identité, publication, profil) : statuts relus auprès du serveur', (t) async {
+      _tall(t);
+      final controller = _FakeController(_pro(_elig(kyc: 'pending')));
+      await t.pumpWidget(_host(controller.data!, const DashboardScreen(), controller: controller));
+      await t.pumpAndSettle();
+      final before = controller.loads;
+      t.state<NavigatorState>(find.byType(Navigator).first).push(MaterialPageRoute<void>(builder: (_) => const Scaffold(body: Text('Vérifier mon identité'))));
+      await t.pumpAndSettle();
+      t.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await t.pumpAndSettle();
+      expect(controller.loads, before + 1);
     });
   });
 
