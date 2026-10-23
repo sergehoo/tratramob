@@ -7,6 +7,9 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.media.AudioAttributes
 import android.media.AudioManager
@@ -19,6 +22,10 @@ import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Canaux de notification et alerte Tratra Flash (sonnerie « Pulse »).
@@ -45,6 +52,14 @@ object TratraAlerts {
     const val EXTRA_ACTION = "tratra_flash_action"
     const val EXTRA_OFFER = "tratra_flash_offer"
     private const val TAG = "tratra_flash"
+    const val CHANNEL_ANNOUNCEMENTS = "tratra_announcements"
+    const val EXTRA_LINK = "tratra_link"
+    const val EXTRA_ANNOUNCEMENT = "tratra_announcement"
+    const val EXTRA_NOTIFICATION = "tratra_notification"
+    const val TAG_ANNOUNCEMENT = "tratra_announcement"
+    /** Image d'une annonce : 1,5 Mo au plus (le serveur envoie un JPEG 2:1 d'environ 100 Ko), délais courts (réception en arrière-plan). */
+    private const val IMAGE_MAX_BYTES = 1_500_000
+    private val LINK = Regex("^tratra://[a-z_]+(/[0-9]+)?$")
 
     /** Vibration calée sur la sonnerie « Pulse » : six notes piquées (accents sur la 3e et la 6e), relancées, puis le double ping final. */
     val VIBRATION = longArrayOf(120, 50, 50, 50, 50, 80, 20, 50, 50, 50, 50, 80, 300, 50, 50, 50, 50, 80, 20, 50, 50, 50, 50, 80, 370, 120, 40, 350)
@@ -201,6 +216,103 @@ object TratraAlerts {
 
     fun cancel(context: Context, offer: Int) {
         NotificationManagerCompat.from(context).cancel(TAG, offer)
+    }
+
+    // ── Annonces (application en arrière-plan ou fermée) ──────────────────────────────────────────────────────────────────────
+
+    /**
+     * Annonce reçue en message de DONNÉES (appareils « rich1 ») : grande image téléchargée (format 2:1, repli en texte seul si elle
+     * est absente ou indisponible), logo Tratra en grande icône, bouton d'action, lien vers l'écran de l'application. Une même annonce
+     * remplace sa notification précédente (jamais de doublon). Appelée hors du fil principal (téléchargement).
+     */
+    fun showAnnouncement(context: Context, data: Map<String, String>) {
+        val id = data["id"]?.toIntOrNull() ?: return
+        val nm = NotificationManagerCompat.from(context)
+        if (!nm.areNotificationsEnabled()) return
+        ensureChannels(context)
+        val title = data["title"]?.takeIf { it.isNotBlank() } ?: "Tratra"
+        val body = data["body"].orEmpty()
+        val link = data["deeplink"]?.takeIf { LINK.matches(it) } ?: "tratra://announcement/$id"
+        val nid = data["nid"]?.toIntOrNull() ?: 0
+        val picture = data["image"]?.let { downloadImage(context, it) }
+        val builder = NotificationCompat.Builder(context, CHANNEL_ANNOUNCEMENTS)
+            .setSmallIcon(R.drawable.ic_stat_tratra)
+            .setColor(ContextCompat.getColor(context, R.color.tratra_green))
+            .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.tratra_notification_large))
+            .setContentTitle(title)
+            .setContentText(body)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(linkIntent(context, link, id, nid, 0))
+        if (picture != null) {
+            // Déroulée : l'image remplace le logo ; repliée : logo + texte.
+            builder.setStyle(NotificationCompat.BigPictureStyle().bigPicture(picture).bigLargeIcon(null as Bitmap?).setSummaryText(body))
+        } else {
+            builder.setStyle(NotificationCompat.BigTextStyle().bigText(body))
+        }
+        data["cta"]?.takeIf { it.isNotBlank() }?.let { builder.addAction(0, it.take(40), linkIntent(context, link, id, nid, 1)) }
+        try {
+            nm.notify(TAG_ANNOUNCEMENT, id, builder.build())
+        } catch (_: SecurityException) {
+            // autorisation des notifications retirée entre-temps
+        }
+    }
+
+    private fun linkIntent(context: Context, link: String, announcement: Int, nid: Int, slot: Int): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            this.action = "com.tratra.LINK.$announcement.$slot"
+            putExtra(EXTRA_LINK, link)
+            putExtra(EXTRA_ANNOUNCEMENT, announcement)
+            putExtra(EXTRA_NOTIFICATION, nid)
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return PendingIntent.getActivity(context, 100_000 + announcement * 2 + slot, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    fun cancelAnnouncement(context: Context, announcement: Int) {
+        NotificationManagerCompat.from(context).cancel(TAG_ANNOUNCEMENT, announcement)
+    }
+
+    /** HTTPS uniquement (HTTP toléré dans une version de développement), sans redirection, type image, taille bornée, décodage réduit. */
+    private fun downloadImage(context: Context, raw: String): Bitmap? {
+        val debuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        val scheme = Uri.parse(raw).scheme
+        if (scheme != "https" && !(scheme == "http" && debuggable)) return null
+        return try {
+            val conn = URL(raw).openConnection() as HttpURLConnection
+            try {
+                conn.connectTimeout = 4000
+                conn.readTimeout = 5000
+                conn.instanceFollowRedirects = false
+                conn.setRequestProperty("Accept", "image/*")
+                if (conn.responseCode != HttpURLConnection.HTTP_OK) return null
+                if (conn.contentType?.startsWith("image/") != true) return null
+                val bytes = readCapped(conn.inputStream, IMAGE_MAX_BYTES) ?: return null
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+                var sample = 1
+                while (bounds.outWidth / (sample * 2) >= 1024) sample *= 2
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+            } finally {
+                conn.disconnect()
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun readCapped(input: InputStream, max: Int): ByteArray? = input.use {
+        val out = ByteArrayOutputStream()
+        val buffer = ByteArray(16 * 1024)
+        while (true) {
+            val n = it.read(buffer)
+            if (n < 0) break
+            if (out.size() + n > max) return null
+            out.write(buffer, 0, n)
+        }
+        out.toByteArray()
     }
 
     // ── Lecture dans l'application (écran Tratra Flash, aperçu dans les réglages) ─────────────────────────────────────────────

@@ -15,17 +15,23 @@ class MainActivity : FlutterActivity() {
     /** Dart a demandé l'action de lancement : il écoute désormais « onAction ». Faux après une recréation de l'activité
      *  (processus arrêté : Android recrée l'activité puis lui remet l'action par onNewIntent, AVANT que Dart ne tourne). */
     private var dartReady = false
+    private var linksChannel: MethodChannel? = null
+    /** Notification d'annonce touchée avant que Dart n'écoute (lancement à froid) : remise dès qu'il la demande (une seule fois). */
+    private var pendingLink: Map<String, Any>? = null
+    private var linksReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         TratraAlerts.ensureChannels(this)
         handleFlashIntent(intent)
+        handleLinkIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         handleFlashIntent(intent)
+        handleLinkIntent(intent)
     }
 
     override fun onResume() {
@@ -54,8 +60,33 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /** Notification d'annonce (ou son bouton) touchée : lien de l'application, transmis à Dart qui vérifie session et rôle. */
+    private fun handleLinkIntent(intent: Intent?) {
+        val link = intent?.getStringExtra(TratraAlerts.EXTRA_LINK) ?: return
+        val announcement = intent.getIntExtra(TratraAlerts.EXTRA_ANNOUNCEMENT, 0)
+        val nid = intent.getIntExtra(TratraAlerts.EXTRA_NOTIFICATION, 0)
+        intent.removeExtra(TratraAlerts.EXTRA_LINK)
+        if (!link.startsWith("tratra://")) return
+        if (announcement > 0) TratraAlerts.cancelAnnouncement(this, announcement)   // bouton d'action : la notification se retire aussi
+        val payload = mapOf("link" to link, "announcement" to announcement, "nid" to nid)
+        val channel = linksChannel
+        if (linksReady && channel != null) channel.invokeMethod("onLink", payload) else pendingLink = payload
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        linksChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tratra/links").apply {
+            setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "takeLaunchLink" -> {
+                        linksReady = true
+                        result.success(pendingLink)
+                        pendingLink = null
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
         flashChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tratra/flash").apply {
             setMethodCallHandler { call, result ->
                 when (call.method) {

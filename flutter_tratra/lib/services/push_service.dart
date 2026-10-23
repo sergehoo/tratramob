@@ -19,6 +19,9 @@ import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/services/firebase_config.dart';
 
+/// Capacités annoncées au serveur par l'application Android (POST /devices/).
+const List<String> pushCapabilities = ['flash1', 'rich1'];
+
 enum PushStatus {
   /// Pas encore démarré.
   idle,
@@ -63,11 +66,15 @@ abstract class PushGateway {
   Future<PushMessage?> initialMessage();
 }
 
-PushMessage _fromRemote(RemoteMessage m) => PushMessage(
-      title: m.notification?.title,
-      body: m.notification?.body,
-      data: Map<String, dynamic>.from(m.data),
+/// Message de notification (titre dans `notification`) ou de DONNÉES (annonces avec image, Tratra Flash : titre dans `data`).
+PushMessage pushMessageFrom({String? title, String? body, required Map<String, dynamic> data}) => PushMessage(
+      title: title ?? data['title']?.toString(),
+      body: body ?? data['body']?.toString(),
+      data: data,
     );
+
+PushMessage _fromRemote(RemoteMessage m) =>
+    pushMessageFrom(title: m.notification?.title, body: m.notification?.body, data: Map<String, dynamic>.from(m.data));
 
 class FirebasePushGateway implements PushGateway {
   FirebaseMessaging get _fm => FirebaseMessaging.instance;
@@ -220,8 +227,9 @@ class PushService extends ChangeNotifier {
         body: jsonEncode({
           'device_token': token,
           'device_type': defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
-          // Android : l'application construit elle-même l'alerte Tratra Flash (actions, compte à rebours, retrait à l'échéance).
-          if (defaultTargetPlatform == TargetPlatform.android) 'capabilities': const ['flash1'],
+          // Android : l'application construit elle-même l'alerte Tratra Flash (actions, compte à rebours, retrait à l'échéance) et
+          // celle des annonces (grande image téléchargée, logo Tratra, bouton d'action).
+          if (defaultTargetPlatform == TargetPlatform.android) 'capabilities': pushCapabilities,
           if (previous != null && previous.isNotEmpty && previous != token) 'previous_token': previous,
         }),
       );

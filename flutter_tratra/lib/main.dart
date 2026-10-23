@@ -45,6 +45,7 @@ import 'package:flutter_tratra/screens/home_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_screen.dart';
 import 'package:flutter_tratra/core/deep_links.dart';
+import 'package:flutter_tratra/core/notification_links.dart';
 import 'package:flutter_tratra/core/route_observer.dart';
 import 'package:flutter_tratra/services/home_widget_sync.dart';
 import 'package:flutter_tratra/engagements/engagements_api.dart';
@@ -290,6 +291,8 @@ class _MyAppState extends State<MyApp> {
       final pending = _pendingLink;
       _pendingLink = null;
       if (pending != null) WidgetsBinding.instance.addPostFrameCallback((_) => _openLink(pending));
+      // Annonces avec image (notification construite par l'application) : lien touché, y compris au lancement à froid.
+      WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(NotificationLinks.start(_onNotificationTap)));
     });
   }
 
@@ -359,13 +362,32 @@ class _MyAppState extends State<MyApp> {
   /// Notification touchée (application en arrière-plan ou fermée) : ouvre directement l'objet concerné.
   void _onPushTap(PushMessage m) => _openFromPush(m);
 
-  void _openFromPush(PushMessage m) {
+  void _openFromPush(PushMessage m, [int attempt = 0]) {
     if (!_session.isAuthenticated) return;
     final ctx = appNavigatorKey.currentContext;
-    if (ctx == null || !ctx.mounted) return;
+    if (ctx == null || !ctx.mounted) {
+      // Lancement à froid : la navigation n'est pas encore construite — nouvel essai à l'image suivante (jamais de lien perdu).
+      if (attempt < 20) WidgetsBinding.instance.addPostFrameCallback((_) => _openFromPush(m, attempt + 1));
+      return;
+    }
+    if (m.data['t'] == 'announcement') _markAnnouncementOpened(int.tryParse('${m.data['id'] ?? ''}'));
     final link = parseDeepLink(m.data);
     // L'objet est rechargé auprès du serveur : un lien d'un autre compte (changement de compte) échoue proprement.
     openDeepLink(ctx, link);
+  }
+
+  /// Annonce avec image (notification construite par l'application) touchée : comptée comme ouverte, puis son lien est ouvert
+  /// (connexion d'abord si nécessaire ; rôle vérifié par openDeepLink).
+  void _onNotificationTap(NotificationTap tap) {
+    _markAnnouncementOpened(tap.announcementId);
+    _openLink(tap.link);
+  }
+
+  void _markAnnouncementOpened(int? id) {
+    if (id == null || !_session.isAuthenticated) return;
+    try {
+      unawaited(context.read<OfflineQueue>().enqueue('POST', '/me/announcements/$id/open/'));
+    } catch (_) {}
   }
 
   Route<dynamic> _generateRoute(RouteSettings settings) {

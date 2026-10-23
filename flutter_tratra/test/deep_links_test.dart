@@ -36,4 +36,36 @@ void main() {
   test('le lien profond prime sur kind/id', () {
     expect(parseDeepLink({'deeplink': 'tratra://mission/8', 'kind': 'booking', 'id': '99'}), const DeepLink(DeepLinkKind.mission, id: 8));
   });
+
+  test('destinations des annonces (registre central) : toutes reconnues, identifiant exigé pour une offre ou un métier', () {
+    expect(parseDeepLink({'deeplink': 'tratra://service/40'}), const DeepLink(DeepLinkKind.service, id: 40));
+    expect(parseDeepLink({'deeplink': 'tratra://category/3'}), const DeepLink(DeepLinkKind.category, id: 3));
+    expect(parseDeepLink({'deeplink': 'tratra://service'}).kind, DeepLinkKind.notifications);
+    expect(parseDeepLink({'deeplink': 'tratra://flash_order'}).kind, DeepLinkKind.flashOrder);
+    expect(parseDeepLink({'deeplink': 'tratra://home'}).kind, DeepLinkKind.home);
+    // Même liste que le serveur (handy/destinations.py, announcements/test_destinations_push.py : APP_KEYS).
+    const serverKeys = {
+      'home', 'explore', 'categories', 'category', 'services', 'service', 'search', 'urgent', 'flash_order', 'favorites', 'bookings',
+      'messages', 'notifications', 'announcement', 'reviews', 'engagements', 'profile', 'addresses', 'kyc', 'pro', 'reputation', 'badge',
+      'availability', 'replacements', 'business', 'booking', 'mission', 'conversation', 'contract', 'posting', 'business_request',
+      'flash_offer', 'flash_request', 'trust_penalty',
+    };
+    expect(knownLinkKeys, serverKeys);
+    for (final key in knownLinkKeys) {
+      final link = parseDeepLink({'deeplink': 'tratra://$key/1'});
+      expect(link.kind == DeepLinkKind.notifications, key == 'notifications', reason: key);
+    }
+  });
+
+  test('écrans réservés : professionnels ou entreprises seulement', () {
+    for (final k in [DeepLinkKind.mission, DeepLinkKind.availability, DeepLinkKind.flashOffer, DeepLinkKind.reputation, DeepLinkKind.badge,
+      DeepLinkKind.replacements, DeepLinkKind.trustPenalty]) {
+      expect(requiredRole(k), LinkRole.provider, reason: '$k');
+    }
+    expect(requiredRole(DeepLinkKind.business), LinkRole.business);
+    expect(requiredRole(DeepLinkKind.businessRequest), LinkRole.business);
+    for (final k in [DeepLinkKind.home, DeepLinkKind.service, DeepLinkKind.flashOrder, DeepLinkKind.kyc, DeepLinkKind.pro, DeepLinkKind.profile]) {
+      expect(requiredRole(k), isNull, reason: '$k');
+    }
+  });
 }

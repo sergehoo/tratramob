@@ -21,6 +21,8 @@ import 'package:flutter_tratra/statuses/status_api.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_home.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_screen.dart';
+import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
+import 'package:flutter_tratra/screens/dashboard/reputation_screen.dart';
 import 'package:flutter_tratra/screens/worker/dashboard/worker_ui.dart' show formatFcfa;
 
 Map<String, dynamic> _item(int id, String role, {String status = 'confirmed'}) => {
@@ -417,6 +419,29 @@ void main() {
       expect(find.text('Profil professionnel'), findsOneWidget);
       expect(find.text('Vérifier mon identité'), findsOneWidget);       // une seule entrée : pièce d'identité + vérification faciale
       expect(find.text('Documents et justificatifs'), findsOneWidget);
+    });
+  });
+
+  group('Liens des annonces et notifications : écrans réservés', () {
+    Future<void> open(WidgetTester t, DashData d, DeepLink link) async {
+      await t.pumpWidget(_host(d, Builder(builder: (ctx) => Scaffold(
+            body: Center(child: ElevatedButton(onPressed: () => openDeepLink(ctx, link), child: const Text('ouvrir')))))));
+      await t.tap(find.text('ouvrir'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+    }
+
+    testWidgets('client seul : « Ma réputation » n’est jamais affichée, retour à l’accueil avec un message', (t) async {
+      dashboardTabRequest.value = null;
+      await open(t, DashData(_payload()), const DeepLink(DeepLinkKind.reputation));
+      expect(find.byType(ReputationScreen), findsNothing);
+      expect(find.text('Cette page est réservée aux professionnels Tratra.'), findsOneWidget);
+      expect(dashboardTabRequest.value, 0);
+    });
+
+    testWidgets('compte sans entreprise : l’espace Business n’est jamais affiché', (t) async {
+      await open(t, DashData(_payload(provider: true)), const DeepLink(DeepLinkKind.business));
+      expect(find.text('Cette page est réservée aux comptes entreprise.'), findsOneWidget);
     });
   });
 }

@@ -14,12 +14,21 @@ import 'package:flutter_tratra/engagements/posting_screen.dart';
 import 'package:flutter_tratra/engagements/replacements_screen.dart';
 import 'package:flutter_tratra/kyc/identity_flow_screen.dart';
 import 'package:flutter_tratra/onboarding/onboarding_entry.dart';
+import 'package:flutter_tratra/core/base_api.dart';
+import 'package:flutter_tratra/flash/flash_hybrid.dart';
 import 'package:flutter_tratra/routes.dart';
+import 'package:flutter_tratra/screens/all_categories_screen.dart';
+import 'package:flutter_tratra/screens/all_services_screen.dart';
+import 'package:flutter_tratra/screens/all_urgent_services_screen.dart';
+import 'package:flutter_tratra/screens/search_screen.dart';
+import 'package:flutter_tratra/screens/service_link_screen.dart';
+import 'package:flutter_tratra/services/catalog_repository.dart';
 import 'package:flutter_tratra/screens/business/business_screens.dart';
 import 'package:flutter_tratra/screens/auth/profile_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/addresses_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/announcements_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/bookings_screen.dart';
+import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/messages_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/my_badge_screen.dart';
@@ -85,9 +94,56 @@ void openTarget(BuildContext context, DashTarget target, {VoidCallback? onMessag
   }
 }
 
-/// Ouvre l'objet désigné par un lien profond (notification touchée, centre de notifications, bandeau).
-/// Chaque écran recharge ses données auprès du serveur : un objet supprimé ou interdit s'affiche comme une erreur normale.
-Future<void> openDeepLink(BuildContext context, DeepLink link) {
+/// Le compte courant a-t-il le rôle exigé ? Données de l'espace rechargées si elles manquent (lancement à froid). Sans réponse du
+/// serveur, l'écran est ouvert : ses propres données restent protégées par le serveur (refus affiché comme une erreur normale).
+Future<bool> _hasRole(BuildContext context, LinkRole role) async {
+  final dash = context.read<DashboardController>();
+  if (dash.data == null) {
+    try {
+      await dash.load();
+    } catch (_) {}
+  }
+  final data = dash.data;
+  if (data == null) return true;
+  return switch (role) {
+    LinkRole.provider => data.isProvider,
+    LinkRole.business => data.isBusiness || data.isCompany,
+  };
+}
+
+/// Métier ou prestation du catalogue par identifiant : ses offres ; introuvable → tous les métiers.
+Future<void> _openCategory(BuildContext context, int id) async {
+  String? name;
+  try {
+    name = (await CatalogRepository.shared(context.read<BaseApi>()).load()).byId('$id')?.name;
+  } catch (_) {}
+  if (!context.mounted) return;
+  if (name == null) {
+    showMessage(context, 'Ce métier n’est plus proposé : voici tous les métiers.');
+    return pushPage(context, const AllCategoriesScreen());
+  }
+  return pushPage(context, AllServicesScreen(initialCategory: name));
+}
+
+/// Ouvre l'objet désigné par un lien profond (notification touchée, centre de notifications, bandeau, annonce).
+/// Chaque écran recharge ses données auprès du serveur : un objet supprimé ou interdit s'affiche comme une erreur normale. Un écran
+/// réservé (professionnel, entreprise) n'est jamais affiché à un autre compte : retour à l'accueil avec un message.
+Future<void> openDeepLink(BuildContext context, DeepLink link) async {
+  final role = requiredRole(link.kind);
+  if (role != null && !await _hasRole(context, role)) {
+    if (!context.mounted) return;
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    dashboardTabRequest.value = 0;
+    showMessage(context, role == LinkRole.provider
+        ? 'Cette page est réservée aux professionnels Tratra.'
+        : 'Cette page est réservée aux comptes entreprise.');
+    return;
+  }
+  if (!context.mounted) return;
+  return _open(context, link);
+}
+
+Future<void> _open(BuildContext context, DeepLink link) {
   switch (link.kind) {
     case DeepLinkKind.booking:
       return pushPage(context, TrackingScreen(bookingId: '${link.id}'));
@@ -126,6 +182,38 @@ Future<void> openDeepLink(BuildContext context, DeepLink link) {
       return pushPage(context, const FlashOffersScreen());
     case DeepLinkKind.trustPenalty:
       return openReputation(context);
+    case DeepLinkKind.home:
+      Navigator.of(context).popUntil((r) => r.isFirst);
+      dashboardTabRequest.value = 0;
+      return Future.value();
+    case DeepLinkKind.categories:
+      return pushPage(context, const AllCategoriesScreen());
+    case DeepLinkKind.category:
+      return _openCategory(context, link.id!);
+    case DeepLinkKind.services:
+      return pushPage(context, const AllServicesScreen());
+    case DeepLinkKind.service:
+      return pushPage(context, ServiceLinkScreen(serviceId: link.id!));
+    case DeepLinkKind.search:
+      return pushPage(context, const SearchScreen());
+    case DeepLinkKind.urgent:
+      return pushPage(context, const AllUrgentServicesScreen());
+    case DeepLinkKind.flashOrder:
+      return pushPage(context, const FlashRequestFormScreen());
+    case DeepLinkKind.favorites:
+      return pushPage(context, const FlashFavoritesScreen());
+    case DeepLinkKind.profile:
+      return openAccount(context);
+    case DeepLinkKind.addresses:
+      return openAddresses(context);
+    case DeepLinkKind.reputation:
+      return openReputation(context);
+    case DeepLinkKind.badge:
+      return openMyBadge(context);
+    case DeepLinkKind.engagements:
+      return openEngagements(context);
+    case DeepLinkKind.business:
+      return openBusiness(context);
   }
 }
 
