@@ -13,6 +13,7 @@ import 'package:flutter_tratra/models/conversation.dart';
 import 'package:flutter_tratra/models/message.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../core/constants.dart';
+import '../core/installation_id.dart';
 import '../core/timeout_http_client.dart';
 
 class ApiService {
@@ -51,7 +52,7 @@ class ApiService {
     authToken = null; // point d'accès public : jamais le jeton d'une session précédente
     final response = await client.post(
       Uri.parse('$baseUrl${AppConstants.usersEndpoint}/'),
-      headers: _headers,
+      headers: {..._headers, ...await deviceHeaders()},
       body: json.encode({
         ...user.toJson(),
         'password': password,
@@ -539,7 +540,8 @@ class ApiService {
       Uri.parse('$baseUrl${AppConstants.usersEndpoint}/'),
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        ...await deviceHeaders(), // limite d'inscriptions par appareil (anti-fraude)
       },
       body: json.encode(userData),
     );

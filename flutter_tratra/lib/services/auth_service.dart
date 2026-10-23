@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/models/user.dart';
+import 'package:flutter_tratra/core/installation_id.dart';
 
 class AuthService {
   final BaseApi api;
@@ -63,7 +64,7 @@ class AuthService {
   Future<Map<String, dynamic>> requestOtp() async {
     final r = await api.client.post(
       Uri.parse('${api.baseUrl}${AppConstants.otpRequestEndpoint}'),
-      headers: await api.headers,
+      headers: {...await api.headers, ...await deviceHeaders(api.storage)},
     );
     if (r.statusCode != 200 && r.statusCode != 201) api.handleError(r);
     final data = api.decodeBody(r);
@@ -75,7 +76,7 @@ class AuthService {
   Future<Map<String, dynamic>> requestPasswordReset(String phone) async {
     final r = await api.client.post(
       Uri.parse('${api.baseUrl}/auth/password-reset/request/'),
-      headers: await api.getHeaders(withAuth: false),
+      headers: {...await api.getHeaders(withAuth: false), ...await deviceHeaders(api.storage)},
       body: jsonEncode({'phone': phone}),
     );
     if (r.statusCode != 200 && r.statusCode != 202) api.handleError(r);
