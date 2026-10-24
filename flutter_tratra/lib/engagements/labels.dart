@@ -126,7 +126,8 @@ const interviewModeFr = {'phone': 'Par téléphone', 'video': 'En visioconféren
 const roleFr = {'principal': 'Donneur d’ordre', 'worker': 'Prestataire'};
 
 const contractEventFr = {
-  'created': 'Brouillon créé', 'proposed': 'Contrat proposé', 'accepted': 'Accepté', 'activated': 'Contrat démarré', 'sent_back': 'Modification demandée', 'cancelled': 'Contrat annulé',
+  'created': 'Brouillon créé', 'proposed': 'Contrat proposé', 'accepted': 'Accepté', 'ready_to_sign': 'Prêt à signer', 'signed': 'Signé par une partie',
+  'concluded': 'Contrat signé par les deux parties', 'activated': 'Contrat démarré', 'sent_back': 'Modification demandée', 'cancelled': 'Contrat annulé',
   'amendment_proposed': 'Avenant proposé', 'amendment_accepted': 'Avenant accepté', 'amendment_rejected': 'Avenant refusé', 'amendment_withdrawn': 'Avenant retiré',
   'amendment_applied': 'Avenant en vigueur', 'suspended': 'Contrat suspendu', 'resumed': 'Contrat repris', 'resume_requested': 'Reprise demandée', 'notice_given': 'Préavis donné',
   'non_renewal': 'Non-renouvellement', 'renewed': 'Contrat renouvelé', 'ended': 'Contrat terminé', 'closed': 'Contrat clôturé', 'admin_suspended': 'Suspendu par Tratra',
@@ -136,15 +137,23 @@ const contractEventFr = {
   'schedule_cancelled': 'Demande annulée', 'attendance_declared': 'Présence déclarée', 'attendance_confirmed': 'Présence confirmée', 'attendance_disputed': 'Présence contestée',
   'replacement_proposed': 'Remplacement proposé', 'replacement_accepted': 'Remplacement accepté', 'replacement_declined': 'Remplacement refusé', 'evaluation_created': 'Évaluation publiée',
   'dispute_opened': 'Litige ouvert', 'dispute_review': 'Litige pris en charge', 'dispute_resolved': 'Litige traité',
+  'document.contract.for_signature': 'Document à signer scellé', 'document.contract.final': 'Contrat final scellé',
+  'document.amendment.final': 'Avenant scellé', 'document.revoked': 'Document révoqué',
 };
 
 /// Libellé + ton d'un statut (contrat, échéance, besoin, candidature).
 typedef StatusView = (String, TratraTone);
 
+/// Statut affiché d'un contrat : accepté mais encore à signer (modèle validé) ≠ « début à venir ».
+StatusView contractStatusOf(Json c) =>
+    contractStatus(c.b('signature_required') && c.s('status') == 'accepted' ? 'to_sign' : c.s('status'));
+
 StatusView contractStatus(String s) => switch (s) {
       'draft' => ('Brouillon', TratraTone.gray),
       'pending_acceptance' => ('À accepter', TratraTone.accent),
       'accepted' => ('Accepté · début à venir', TratraTone.info),
+      'to_sign' => ('Accepté · à signer', TratraTone.accent), // pseudo-statut : accepté, en attente des signatures (modèle validé)
+      'signed' => ('Signé · début à venir', TratraTone.info),
       'active' => ('En cours', TratraTone.success),
       'suspended' => ('Suspendu', TratraTone.warning),
       'notice' => ('Préavis en cours', TratraTone.warning),

@@ -10,6 +10,7 @@ import 'package:flutter_tratra/engagements/contract_extras.dart';
 import 'package:flutter_tratra/engagements/contract_form.dart';
 import 'package:flutter_tratra/engagements/contract_pay.dart';
 import 'package:flutter_tratra/engagements/contract_planning.dart';
+import 'package:flutter_tratra/engagements/contract_sealed.dart';
 import 'package:flutter_tratra/engagements/engagements_api.dart';
 import 'package:flutter_tratra/engagements/engagements_ui.dart';
 import 'package:flutter_tratra/engagements/labels.dart';
@@ -92,7 +93,8 @@ class _ContractScreenState extends State<ContractScreen> {
       );
     }
     final status = c.s('status');
-    final started = const {'accepted', 'active', 'suspended', 'notice', 'terminated', 'completed'}.contains(status);
+    final started = const {'signed', 'active', 'suspended', 'notice', 'terminated', 'completed'}.contains(status) ||
+        (status == 'accepted' && _c?['signature_required'] != true);
     final tabs = <(ContractTab, String)>[
       (ContractTab.summary, 'Résumé'),
       if (started) ...[(ContractTab.pay, 'Rémunération'), (ContractTab.planning, 'Planning'), (ContractTab.amendments, 'Avenants'), (ContractTab.evaluations, 'Évaluations')],
@@ -110,7 +112,7 @@ class _ContractScreenState extends State<ContractScreen> {
           padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s8),
           children: [
             Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              StatusChip(contractStatus(status)),
+              StatusChip(contractStatusOf(c)),
               Text('${role == 'worker' ? 'Pour' : 'Avec'} ${c.m('counterpart').s('name')} · ${fcfa(c.s('amount'), c.s('currency', 'XOF'))} ${periodFr[c.s('period')] ?? ''}',
                   style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
             ]),
@@ -180,6 +182,7 @@ class ContractSummary extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (status == 'pending_acceptance' && has('accept')) _AcceptCard(api: api, c: c, onChanged: reload),
+        SignContractCard(api: api, c: c, onChanged: reload),
         if (status == 'pending_acceptance' && iAccepted)
           TratraAlert(tone: TratraAlertTone.info, title: 'En attente de l’autre partie', message: '${c.m('counterpart').s('name')} doit relire et accepter ces conditions. Vous serez prévenu(e) dès sa réponse.'),
         if (status == 'draft')
@@ -216,6 +219,8 @@ class ContractSummary extends StatelessWidget {
                 ('Heures supplémentaires', c.sn('overtime_hourly_rate') == null ? 'Non valorisées' : '${fcfa(c.sn('overtime_hourly_rate'))} / h'),
                 ('Prorata dernière période', c.s('proration_mode') == 'calendar_days' ? 'Jours calendaires' : 'Aucun'),
                 ('Réservations', c.s('bookings_mode') == 'per_occurrence' ? 'Une réservation Tratra par intervention' : 'Aucune'),
+                ('Avantages', c.s('benefits').isEmpty ? null : c.s('benefits')),
+                ('Référence', c.sn('reference')),
               ]),
               if (c.s('description').isNotEmpty) ...[Text('Missions confiées', style: TratraTheme.style(TtType.bodySm).copyWith(fontWeight: FontWeight.w700)), const SizedBox(height: 4), Text(c.s('description'), style: TratraTheme.style(TtType.body, color: TtColors.inkSoft)), const SizedBox(height: 12)],
               if (c.s('conditions').isNotEmpty) ...[Text('Conditions particulières', style: TratraTheme.style(TtType.bodySm).copyWith(fontWeight: FontWeight.w700)), const SizedBox(height: 4), Text(c.s('conditions'), style: TratraTheme.style(TtType.body, color: TtColors.inkSoft)), const SizedBox(height: 12)],
@@ -235,7 +240,9 @@ class ContractSummary extends StatelessWidget {
             ],
           ),
         ),
-        if (const {'accepted', 'active', 'suspended', 'notice', 'terminated', 'completed'}.contains(status)) ...[
+        ContractArticlesCard(c: c),
+        ContractDocumentsCard(api: api, c: c),
+        if (const {'accepted', 'signed', 'active', 'suspended', 'notice', 'terminated', 'completed'}.contains(status) && !(status == 'accepted' && c.b('signature_required'))) ...[
           const SizedBox(height: 16),
           TratraCard(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

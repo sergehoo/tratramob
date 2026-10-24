@@ -122,6 +122,8 @@ class _PostingScreenState extends State<PostingScreen> {
                   ('Heures par semaine', p.sn('hours_per_week') == null ? null : '${num.tryParse(p.s('hours_per_week'))} h'),
                   ('Candidatures jusqu’au', p.sn('application_deadline') == null ? 'Sans date limite' : dateFr(p.sn('application_deadline'))),
                   ('Zone', p.sn('location_note')),
+                  ('Durée envisagée', p.sn('duration_months') == null ? null : '${p.s('duration_months')} mois'),
+                  ('Avantages', p.sn('benefits') == null || p.s('benefits').isEmpty ? null : p.s('benefits')),
                 ]),
                 if (p.s('description').isNotEmpty) ...[Text('Mission', style: TratraTheme.style(TtType.bodySm).copyWith(fontWeight: FontWeight.w700)), const SizedBox(height: 4), Text(p.s('description'), style: TratraTheme.style(TtType.body, color: TtColors.inkSoft)), const SizedBox(height: 12)],
                 if (p.s('conditions').isNotEmpty) ...[Text('Conditions', style: TratraTheme.style(TtType.bodySm).copyWith(fontWeight: FontWeight.w700)), const SizedBox(height: 4), Text(p.s('conditions'), style: TratraTheme.style(TtType.body, color: TtColors.inkSoft))],

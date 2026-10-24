@@ -145,7 +145,7 @@ class _EngagementsHomeScreenState extends State<EngagementsHomeScreen> {
                         padding: TratraCard.compact,
                         onTap: () => _go(ContractScreen(id: c.i('id'))),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: Text(c.s('title'), style: TratraTheme.style(TtType.h3))), StatusChip(contractStatus(c.s('status')))]),
+                          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Expanded(child: Text(c.s('title'), style: TratraTheme.style(TtType.h3))), StatusChip(contractStatusOf(c))]),
                           const SizedBox(height: 4),
                           Text('${c.s('my_role') == 'worker' ? 'Pour' : 'Avec'} ${c.m('counterpart').s('name')}${c['organization'] is Map ? ' · ${c.m('organization').s('name')}' : ''} · ${missionTypeFr[c.s('mission_type')] ?? ''}', style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
                           const SizedBox(height: 2),

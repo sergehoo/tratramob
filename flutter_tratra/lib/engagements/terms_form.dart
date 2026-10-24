@@ -15,6 +15,7 @@ class TermsValue {
   String category = '', title = '', description = '', conditions = '', missionType = 'long_term', relationship = 'independent';
   String city = '', address = '', startDate = '', endDate = '', deadline = '', amount = '', period = 'monthly', paymentDay = '5';
   String renewalMonths = '12', proration = 'none', overtimeRate = '', notice = '7', bookingsMode = 'none', organization = '';
+  String benefits = '', durationMonths = '';
   bool ack = false, autoRenew = false;
   List<Json> schedule = [];
 
@@ -28,6 +29,8 @@ class TermsValue {
     ..title = p.s('title')
     ..description = p.s('description')
     ..conditions = p.s('conditions')
+    ..benefits = p.s('benefits')
+    ..durationMonths = p.s('duration_months')
     ..missionType = p.s('mission_type', 'long_term')
     ..relationship = p.s('work_relationship', 'independent')
     ..ack = p.b('employment_notice_ack')
@@ -46,6 +49,7 @@ class TermsValue {
     ..title = c.s('title')
     ..description = c.s('description')
     ..conditions = c.s('conditions')
+    ..benefits = c.s('benefits')
     ..missionType = c.s('mission_type', 'long_term')
     ..relationship = c.s('work_relationship', 'independent')
     ..ack = c.b('legal_notice_ack')
@@ -78,6 +82,8 @@ class TermsValue {
         'start_date': startDate.isEmpty ? null : startDate,
         'end_date': endDate.isEmpty ? null : endDate,
         'application_deadline': deadline.isEmpty ? null : deadline,
+        'benefits': benefits.trim(),
+        'duration_months': int.tryParse(durationMonths.trim()),
         'schedule': schedule,
         'amount': amount.trim(),
         'period': period,
@@ -93,6 +99,7 @@ class TermsValue {
         'mission_type': missionType,
         'work_relationship': relationship,
         'legal_notice_ack': relationship == 'employment' && ack,
+        'benefits': benefits.trim(),
         'location_city': city.trim(),
         'location_address': address.trim(),
         'start_date': startDate,
@@ -229,7 +236,13 @@ class _TermsFieldsState extends State<TermsFields> {
           helper: maxMonths == null ? null : 'Durée maximale pour ce métier : $maxMonths mois.', onTap: () => _pick('end')),
       if (v.endDate.isNotEmpty)
         Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: widget.enabled ? () => _set(() { v.endDate = ''; _dates['end']!.text = ''; v.autoRenew = false; }) : null, child: const Text('Effacer la date de fin'))),
-      if (!isContract) ...[gap, TratraInput(label: 'Date limite de candidature', optional: true, controller: _dates['deadline'], readOnly: true, enabled: widget.enabled, leadingIcon: Icons.event_outlined, errorText: _e('application_deadline'), onTap: () => _pick('deadline'))],
+      if (!isContract) ...[
+        gap,
+        TratraInput(label: 'Date limite de candidature', optional: true, controller: _dates['deadline'], readOnly: true, enabled: widget.enabled, leadingIcon: Icons.event_outlined, errorText: _e('application_deadline'), onTap: () => _pick('deadline')),
+        gap,
+        TratraInput(label: 'Durée envisagée (mois)', optional: true, enabled: widget.enabled, initialValue: v.durationMonths, keyboardType: TextInputType.number, errorText: _e('duration_months'),
+            helper: 'Indicative : la durée exacte figure au contrat.', onChanged: (x) => v.durationMonths = x),
+      ],
       gap,
       ScheduleEditor(value: v.schedule, onChanged: (s) => _set(() => v.schedule = s), error: _e('schedule')),
       gap,
@@ -268,6 +281,9 @@ class _TermsFieldsState extends State<TermsFields> {
             subtitle: _e('bookings_mode') == null ? null : Text(_e('bookings_mode')!, style: TratraTheme.style(TtType.caption, color: TtColors.dangerInk)),
           ),
       ],
+      gap,
+      TratraInput(label: 'Avantages', optional: true, enabled: widget.enabled, initialValue: v.benefits, maxLines: 3, minLines: 2, maxLength: 2000, errorText: _e('benefits'),
+          helper: 'Repas, transport, logement… Uniquement ce qui est réellement proposé.', onChanged: (x) => v.benefits = x),
       gap,
       TratraInput(label: 'Conditions particulières', optional: true, enabled: widget.enabled, initialValue: v.conditions, maxLines: 4, minLines: 3, maxLength: 4000, errorText: _e('conditions'),
           helper: 'Tenue, matériel fourni, déplacements… Tout ce dont vous convenez doit figurer ici.', onChanged: (x) => v.conditions = x),

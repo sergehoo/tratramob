@@ -240,6 +240,49 @@ void main() {
       expect(find.text('Accepté · début à venir'), findsOneWidget);
     });
 
+    testWidgets('contrat à signer : statut « à signer », signature seulement après lecture, consentement explicite envoyé', (t) async {
+      await t.binding.setSurfaceSize(const Size(800, 3000));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      Map<String, dynamic> sealed(String status, Map<String, String?> signatures) => {
+            ...contract(status: status, actions: status == 'accepted' ? const ['sign', 'decline'] : const [], acceptedBy: const ['principal', 'worker']),
+            'signature_required': true,
+            'reference': 'TRT-CTR-2027-000001',
+            'signatures': signatures,
+            'documents': [
+              {'id': 9, 'kind': 'contract', 'stage': 'for_signature', 'version': 2, 'reference': 'TRT-CTR-2027-000001', 'download': '/handy/engagements/documents/9/pdf/',
+               'issued_at': '2027-01-02T10:00:00Z', 'revoked_at': null, 'sha256': 'ab' * 32},
+            ],
+          };
+      var signed = false;
+      final f = fakeApi((r) async {
+        if (r.method == 'POST' && r.url.path.endsWith('/contracts/1/sign/')) {
+          signed = true;
+          return ok(sealed('signed', {'principal': '2027-01-02T11:00:00Z', 'worker': '2027-01-02T12:00:00Z'}));
+        }
+        if (r.url.path.endsWith('/contracts/1/')) {
+          return ok(signed ? sealed('signed', {'principal': '2027-01-02T11:00:00Z', 'worker': '2027-01-02T12:00:00Z'}) : sealed('accepted', {'principal': '2027-01-02T11:00:00Z', 'worker': null}));
+        }
+        return ok({'results': []});
+      });
+      await t.pumpWidget(host(f.api, const ContractScreen(id: 1)));
+      await settle(t);
+      expect(find.text('Accepté · à signer'), findsOneWidget);
+      expect(find.text('Accepté · début à venir'), findsNothing);
+      expect(find.text('Contrat à signer'), findsOneWidget);
+      final button = find.widgetWithText(TratraButton, 'Signer le contrat');
+      expect(t.widget<TratraButton>(button).onPressed, isNull); // pas avant d'avoir lu
+      await t.tap(find.byType(CheckboxListTile).first);
+      await t.pump();
+      expect(t.widget<TratraButton>(button).onPressed, isNotNull);
+      await t.tap(button);
+      await settle(t);
+      final post = f.calls.firstWhere((c) => c.method == 'POST');
+      expect(jsonDecode(post.body), {'consent': true});
+      expect(post.headers['Idempotency-Key'], isNotEmpty);
+      expect(find.text('Signé · début à venir'), findsOneWidget);
+      expect(find.text('Contrat à signer'), findsNothing);
+    });
+
     testWidgets('paiement : confirmé par la contrepartie seulement, jamais par son auteur', (t) async {
       await t.binding.setSurfaceSize(const Size(800, 3000));
       addTearDown(() => t.binding.setSurfaceSize(null));

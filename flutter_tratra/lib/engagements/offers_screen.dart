@@ -46,6 +46,7 @@ class _OffersScreenState extends State<OffersScreen> {
           children: [
             Text('Missions régulières ou sur plusieurs mois. Chaque offre est publiée par un compte Tratra ; postuler exige un profil vérifié.', style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
             const SizedBox(height: 14),
+            _Invitations(api: _api, onChanged: () => setState(() => _version++)),
             TratraInput(
               hint: 'Gardien, ménage, jardinier…',
               leadingIcon: Icons.search_rounded,
@@ -101,5 +102,57 @@ class _OffersScreenState extends State<OffersScreen> {
             ),
           ],
         ),
+      );
+}
+
+
+/// Invitations reçues : un donneur d'ordre vous invite à candidater. Accepter envoie votre candidature (mêmes contrôles qu'une
+/// candidature spontanée : profil vérifié) ; décliner prévient l'auteur. Rien n'est affiché sans invitation réelle.
+class _Invitations extends StatelessWidget {
+  const _Invitations({required this.api, required this.onChanged});
+  final EngagementsApi api;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) => EngLoader<Json>(
+        load: () => api.getMap('/invitations/mine/'),
+        builder: (ctx, data, reload) {
+          final open = data.l('results').where((i) => i.b('can_respond')).toList();
+          if (open.isEmpty) return const SizedBox.shrink();
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text('Invitations à candidater', style: TratraTheme.style(TtType.h2)),
+            const SizedBox(height: 8),
+            for (final i in open)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: TratraCard(
+                  variant: TratraCardVariant.accent,
+                  padding: TratraCard.compact,
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(i.m('posting').s('title'), style: TratraTheme.style(TtType.h3)),
+                    const SizedBox(height: 4),
+                    Text('${i.m('posting').s('category')} · ${i.m('posting').s('city')} · ${fcfa(i.m('posting').sn('amount'))} ${periodFr[i.m('posting').s('period')] ?? ''}',
+                        style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
+                    if (i.s('message').isNotEmpty) ...[const SizedBox(height: 6), Text('« ${i.s('message')} » — ${i.m('invited_by').s('name')}', style: TratraTheme.style(TtType.bodySm))],
+                    const SizedBox(height: 10),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      TratraButton(label: 'Voir l’offre', size: TratraButtonSize.sm, variant: TratraButtonVariant.outline,
+                          onPressed: () => goTo<void>(context, PostingScreen(id: i.m('posting').i('id')))),
+                      AsyncAction(label: 'Candidater', run: () async {
+                        await api.post('/invitations/${i.i('id')}/respond/', {'accept': true});
+                        await reload();
+                        onChanged();
+                      }),
+                      AsyncAction(label: 'Décliner', variant: TratraButtonVariant.ghost, confirm: 'L’auteur de l’offre sera prévenu que vous déclinez.', run: () async {
+                        await api.post('/invitations/${i.i('id')}/respond/', {'accept': false});
+                        await reload();
+                      }),
+                    ]),
+                  ]),
+                ),
+              ),
+            const SizedBox(height: 6),
+          ]);
+        },
       );
 }
