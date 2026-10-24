@@ -23,4 +23,21 @@ void main() {
     expect(await installationId(storage), first);
     expect(await deviceHeaders(storage), {'X-Tratra-Device': first});
   });
+
+  test('stockage chiffré illisible : un identifiant de secours est quand même envoyé, le même pendant l\'exécution', () async {
+    final broken = _BrokenStorage();
+    final headers = await deviceHeaders(broken);
+    expect(headers.keys, ['X-Tratra-Device']);
+    expect(RegExp(r'^[0-9a-f-]{36}$').hasMatch(headers['X-Tratra-Device']!), isTrue);
+    expect(await deviceHeaders(broken), headers);
+  });
+}
+
+class _BrokenStorage extends FlutterSecureStorage {
+  _BrokenStorage();
+
+  @override
+  Future<String?> read({required String key, IOSOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions,
+          WebOptions? webOptions, MacOsOptions? mOptions, WindowsOptions? wOptions}) =>
+      Future.error(Exception('clé du stockage chiffré perdue'));
 }

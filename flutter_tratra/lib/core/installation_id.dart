@@ -20,7 +20,12 @@ String newInstallationId([Random? random]) {
   return '${hex(0, 4)}-${hex(4, 6)}-${hex(6, 8)}-${hex(8, 10)}-${hex(10, 16)}';
 }
 
-Future<String?> installationId([FlutterSecureStorage storage = const FlutterSecureStorage()]) async {
+// Identifiant de secours, gardé en mémoire le temps de l'exécution, si le stockage chiffré est illisible (clé Android perdue après
+// une restauration de sauvegarde, par exemple). Sans en-tête, le serveur et Cloudflare prendraient l'application pour un script :
+// inscription, code SMS et récupération seraient refusés à un vrai utilisateur.
+String? _volatileId;
+
+Future<String> installationId([FlutterSecureStorage storage = const FlutterSecureStorage()]) async {
   try {
     final existing = await storage.read(key: installationIdKey);
     if (existing != null && existing.length == 36) return existing;
@@ -28,12 +33,11 @@ Future<String?> installationId([FlutterSecureStorage storage = const FlutterSecu
     await storage.write(key: installationIdKey, value: id);
     return id;
   } catch (_) {
-    return null; // stockage indisponible : la requête part sans l'en-tête (le serveur applique ses autres limites)
+    return _volatileId ??= newInstallationId();
   }
 }
 
-/// En-têtes à ajouter aux requêtes protégées (inscription, demandes de code).
+/// En-têtes à ajouter aux requêtes protégées (inscription, demandes de code) : toujours présents.
 Future<Map<String, String>> deviceHeaders([FlutterSecureStorage storage = const FlutterSecureStorage()]) async {
-  final id = await installationId(storage);
-  return id == null ? const {} : {deviceHeader: id};
+  return {deviceHeader: await installationId(storage)};
 }
