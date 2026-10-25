@@ -130,6 +130,7 @@ class _PostingScreenState extends State<PostingScreen> {
               ]),
             ),
             const SizedBox(height: 16),
+            if (mine && p.s('status') == 'open') ...[_InvitePanel(api: _api, postingId: p.i('id')), const SizedBox(height: 16)],
             if (mine) _Applications(api: _api, posting: p, version: _apps, onChanged: _load) else _ApplyBlock(api: _api, posting: p, mine: _mine, onChanged: _load),
           ],
         ),
@@ -139,6 +140,90 @@ class _PostingScreenState extends State<PostingScreen> {
 }
 
 // ── Côté auteur ─────────────────────────────────────────────────────────────────────────────────────────────────────
+
+const _invitationStatusFr = {'sent': 'Envoyée', 'accepted': 'Candidature reçue', 'declined': 'Déclinée', 'cancelled': 'Retirée'};
+
+/// Inviter un professionnel VÉRIFIÉ à candidater : il reste libre d'accepter (sa candidature est alors envoyée) ou de décliner.
+class _InvitePanel extends StatefulWidget {
+  const _InvitePanel({required this.api, required this.postingId});
+  final EngagementsApi api;
+  final int postingId;
+  @override
+  State<_InvitePanel> createState() => _InvitePanelState();
+}
+
+class _InvitePanelState extends State<_InvitePanel> {
+  PickedWorker? _worker;
+  int _pickerKey = 0;
+  int _version = 0;
+  String _message = '';
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _invite() async {
+    final w = _worker;
+    if (w == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.api.post('/postings/${widget.postingId}/invitations/', {'invitee': w.id, 'message': _message.trim()});
+      if (!mounted) return;
+      setState(() {
+        _worker = null;
+        _message = '';
+        _pickerKey++;
+        _version++;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invitation envoyée à ${w.name}.')));
+    } catch (e) {
+      if (mounted) setState(() => _error = messageOf(e, 'Invitation impossible.'));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => TratraCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Inviter un professionnel', style: TratraTheme.style(TtType.h2)),
+          const SizedBox(height: 4),
+          Text('Seuls les professionnels vérifiés peuvent être invités. L’invitation leur propose de candidater ; vous choisissez ensuite.',
+              style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
+          const SizedBox(height: 12),
+          WorkerPicker(key: ValueKey('invite-picker-$_pickerKey'), api: widget.api, label: 'Professionnel vérifié', onPicked: (w) => setState(() => _worker = w)),
+          const SizedBox(height: 10),
+          TratraInput(key: ValueKey('invite-message-$_pickerKey'), label: 'Message', optional: true, maxLength: 500, maxLines: 3, minLines: 2, onChanged: (v) => _message = v),
+          if (_error != null) ...[const SizedBox(height: 8), TratraAlert(tone: TratraAlertTone.danger, message: _error!)],
+          const SizedBox(height: 10),
+          TratraButton(key: const ValueKey('invite-send'), label: 'Envoyer l’invitation', block: true, loading: _busy, onPressed: _worker == null || _busy ? null : _invite),
+          EngLoader<Json>(
+            reloadKey: _version,
+            load: () => widget.api.getMap('/postings/${widget.postingId}/invitations/'),
+            builder: (ctx, data, reload) {
+              final rows = data.l('results');
+              if (rows.isEmpty) return const SizedBox.shrink();
+              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                const SizedBox(height: 12),
+                for (final i in rows)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(i.m('invitee').s('name'), style: TratraTheme.style(TtType.bodySm).copyWith(fontWeight: FontWeight.w700)),
+                    subtitle: Text(_invitationStatusFr[i.s('status')] ?? i.s('status'), style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
+                    trailing: i.s('status') == 'sent'
+                        ? AsyncAction(label: 'Retirer', variant: TratraButtonVariant.ghost, confirm: 'Le professionnel ne pourra plus répondre à cette invitation.', run: () async {
+                            await widget.api.post('/invitations/${i.i('id')}/cancel/');
+                            await reload();
+                          })
+                        : null,
+                  ),
+              ]);
+            },
+          ),
+        ]),
+      );
+}
 
 class _Applications extends StatelessWidget {
   const _Applications({required this.api, required this.posting, required this.version, required this.onChanged});

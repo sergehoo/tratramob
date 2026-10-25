@@ -19,6 +19,7 @@ import 'package:flutter_tratra/engagements/contract_screen.dart';
 import 'package:flutter_tratra/engagements/engagements_api.dart';
 import 'package:flutter_tratra/engagements/engagements_home.dart';
 import 'package:flutter_tratra/engagements/labels.dart';
+import 'package:flutter_tratra/engagements/posting_screen.dart';
 
 Map<String, dynamic> contract({String status = 'pending_acceptance', String role = 'worker', List<String> actions = const ['accept', 'send_back', 'decline'], List<String> acceptedBy = const ['principal']}) => {
       'id': 1,
@@ -238,6 +239,56 @@ void main() {
       expect(post.headers['Idempotency-Key'], isNotEmpty);
       expect(find.text('Ce contrat attend votre réponse'), findsNothing);
       expect(find.text('Accepté · début à venir'), findsOneWidget);
+    });
+
+    testWidgets('besoin publié : l’auteur invite un professionnel vérifié puis peut retirer l’invitation', (t) async {
+      await t.binding.setSurfaceSize(const Size(800, 3000));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      final invitations = <Map<String, dynamic>>[];
+      final f = fakeApi((r) async {
+        final path = r.url.path;
+        if (r.method == 'POST' && path.endsWith('/postings/5/invitations/')) {
+          invitations.add({'id': 7, 'status': 'sent', 'message': '', 'invitee': {'name': 'Moussa A.'}});
+          return ok(invitations.last, 201);
+        }
+        if (r.method == 'POST' && path.endsWith('/invitations/7/cancel/')) {
+          invitations[0] = {...invitations[0], 'status': 'cancelled'};
+          return ok(invitations[0]);
+        }
+        if (path.endsWith('/postings/5/invitations/')) return ok({'results': invitations});
+        if (path.endsWith('/workers/')) return ok({'results': [{'id': 2, 'name': 'Moussa A.', 'commune': 'Cocody'}]});
+        if (path.endsWith('/postings/5/')) {
+          return ok({'id': 5, 'title': 'Nounou à domicile', 'status': 'open', 'mine': true, 'category': {'id': 1, 'name': 'Garde d’enfants'}, 'city': 'Abidjan',
+            'mission_type': 'long_term', 'work_relationship': 'independent', 'amount': '120000.00', 'period': 'monthly', 'currency': 'XOF', 'schedule': [],
+            'benefits': 'Repas fourni', 'duration_months': 12, 'description': '', 'conditions': '', 'publisher': {'name': 'Awa C.'}, 'organization': null});
+        }
+        return ok({'results': []});
+      });
+      await t.pumpWidget(host(f.api, const PostingScreen(id: 5)));
+      await settle(t);
+      expect(find.text('Inviter un professionnel'), findsOneWidget);
+      expect(find.text('12 mois'), findsOneWidget);
+      expect(find.text('Repas fourni'), findsOneWidget);
+      final send = find.widgetWithText(TratraButton, 'Envoyer l’invitation');
+      expect(t.widget<TratraButton>(send).onPressed, isNull); // personne choisi
+      await t.enterText(find.byType(TextField).first, 'Mo');
+      await t.pump(const Duration(milliseconds: 400));
+      await settle(t);
+      await t.tap(find.text('Moussa A.').first);
+      await t.pump();
+      await t.tap(send);
+      await settle(t);
+      final post = f.calls.firstWhere((c) => c.method == 'POST');
+      expect(post.path, endsWith('/postings/5/invitations/'));
+      expect(jsonDecode(post.body), {'invitee': 2, 'message': ''});
+      expect(find.text('Envoyée'), findsOneWidget);
+      await t.tap(find.widgetWithText(TratraButton, 'Retirer'));
+      await settle(t);
+      expect(find.text('Le professionnel ne pourra plus répondre à cette invitation.'), findsOneWidget); // confirmation demandée
+      await t.tap(find.text('Retirer').last);
+      await settle(t);
+      expect(f.calls.where((c) => c.method == 'POST' && c.path.endsWith('/invitations/7/cancel/')), hasLength(1));
+      expect(find.text('Retirée'), findsOneWidget);
     });
 
     testWidgets('contrat à signer : statut « à signer », signature seulement après lecture, consentement explicite envoyé', (t) async {

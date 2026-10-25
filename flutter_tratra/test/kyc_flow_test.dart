@@ -437,6 +437,40 @@ void main() {
       expect(find.byKey(const ValueKey('blocker-profile_incomplete')), findsOneWidget);
     });
 
+    testWidgets('« Mes offres » : modes affichés et modifiables dans les limites du métier', (t) async {
+      _size(t);
+      Map<String, dynamic>? patched;
+      final base = _base(MockClient((r) async {
+        if (r.url.path.endsWith('/me/services/')) {
+          return _json({'publishable': true, 'eligibility': eligibility(offers: 1, active: 1), 'results': [
+            {'id': 4, 'title': 'Nounou à domicile', 'category': 'Nounou', 'category_id': 9, 'trade': null, 'price': '120000', 'price_type': 'fixed', 'is_active': true,
+              'bookings_count': 0, 'modes': ['one_off'], 'publication': {'state': 'published', 'label': 'Publiée'}},
+          ]});
+        }
+        if (r.url.path.endsWith('/engagements/rules/')) {
+          expect(r.url.queryParameters['category'], '9');
+          return _json({'allow_recurring': false, 'allow_long_term': true});
+        }
+        if (r.method == 'PATCH' && r.url.path.endsWith('/services/4/')) {
+          patched = jsonDecode(r.body) as Map<String, dynamic>;
+          return _json({'id': 4});
+        }
+        return _json({});
+      }));
+      await t.pumpWidget(_host(base, const ProviderHubScreen(), dash: DashData(_dashPayload())));
+      await t.pumpAndSettle();
+      expect(find.text('Modes : Ponctuel'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('service-modes-4')));
+      await t.pumpAndSettle();
+      expect(t.widget<CheckboxListTile>(find.byKey(const ValueKey('mode-recurring'))).onChanged, isNull);   // non ouvert pour ce métier
+      await t.tap(find.byKey(const ValueKey('mode-contract')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const ValueKey('modes-save')));
+      await t.pumpAndSettle();
+      expect(patched, {'modes': ['one_off', 'contract']});
+      expect(find.text('Modes enregistrés.'), findsOneWidget);
+    });
+
     testWidgets('« Mes offres » : état de publication par offre et blocages réels', (t) async {
       _size(t);
       final base = _base(MockClient((r) async => r.url.path.endsWith('/me/services/')
@@ -495,7 +529,8 @@ void main() {
       // saisie libre sans choix dans la liste : refusée (aucun métier inventé)
       await t.enterText(_field('Métier'), 'xyz');
       await t.pumpAndSettle();
-      expect(find.byType(ListTile), findsNothing);
+      // aucune suggestion (les cases « Modes proposés » du formulaire ne sont pas des suggestions)
+      expect(find.byType(ListTile).evaluate().where((e) => e.findAncestorWidgetOfExactType<CheckboxListTile>() == null), isEmpty);
       await t.ensureVisible(find.byKey(const ValueKey('new-submit')));
       await t.tap(find.byKey(const ValueKey('new-submit')));
       await t.pumpAndSettle();
@@ -511,10 +546,14 @@ void main() {
       expect(find.widgetWithText(TextField, 'Plomberie › Réparation de fuite'), findsOneWidget);
       expect(find.widgetWithText(TextField, 'Réparation de fuite'), findsOneWidget);   // titre proposé, modifiable
       expect(find.byKey(const ValueKey('new-prestation-7')), findsNothing);           // prestation déjà choisie
-      expect(find.text('2'), findsOneWidget);                                          // étapes renumérotées : 1 métier, 2 description, 3 tarif
-      expect(find.text('4'), findsNothing);
+      expect(find.text('2'), findsOneWidget);                                          // étapes renumérotées : 1 métier, 2 description, 3 tarif, 4 modes
+      expect(find.text('4'), findsOneWidget);
+      expect(find.text('5'), findsNothing);
+      // métier sans règle d'engagement : seul le ponctuel est ouvert
+      expect(t.widget<CheckboxListTile>(find.byKey(const ValueKey('mode-contract'))).onChanged, isNull);
       await fillAndSubmit(t);
       expect(posted!['category'], 8);
+      expect(posted!['modes'], ['one_off']);
       expect(posted!['title'], 'Réparation de fuite');
       expect(posted!['price'], '15000');
       expect(find.text('Offre créée : elle sera publiée dès que votre publication sera autorisée.'), findsOneWidget);

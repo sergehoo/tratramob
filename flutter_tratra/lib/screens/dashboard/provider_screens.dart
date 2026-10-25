@@ -17,6 +17,7 @@ import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/eligibility_panel.dart';
+import 'package:flutter_tratra/screens/dashboard/service_modes.dart';
 import 'package:flutter_tratra/screens/worker/worker_home_screen.dart';
 import 'package:flutter_tratra/services/catalog_repository.dart';
 
@@ -134,6 +135,13 @@ class _ProviderHubScreenState extends State<ProviderHubScreen> {
     }
   }
 
+  Future<void> _editModes(Map<String, dynamic> s) async {
+    if (await editServiceModes(context, _api, s) && mounted) {
+      showMessage(context, 'Modes enregistrés.');
+      _refresh();
+    }
+  }
+
   Future<void> _add() async {
     final added = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => const NewServiceScreen()));
     if (added == true && mounted) _refresh();
@@ -201,7 +209,7 @@ class _ProviderHubScreenState extends State<ProviderHubScreen> {
                 )
               else
                 for (final s in services) ...[
-                  _ServiceRow(service: s, busy: _toggling == (s['id'] as num).toInt(), onToggle: () => _toggle(s)),
+                  _ServiceRow(service: s, busy: _toggling == (s['id'] as num).toInt(), onToggle: () => _toggle(s), onModes: () => _editModes(s)),
                   const SizedBox(height: TtSpace.s2),
                 ],
             ],
@@ -240,10 +248,11 @@ class _PublicationBanner extends StatelessWidget {
 }
 
 class _ServiceRow extends StatelessWidget {
-  const _ServiceRow({required this.service, required this.busy, required this.onToggle});
+  const _ServiceRow({required this.service, required this.busy, required this.onToggle, required this.onModes});
   final Map<String, dynamic> service;
   final bool busy;
   final VoidCallback onToggle;
+  final VoidCallback onModes;
 
   @override
   Widget build(BuildContext context) {
@@ -270,6 +279,8 @@ class _ServiceRow extends StatelessWidget {
         Text('${service['title']}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TratraTheme.style(TtType.title)),
         const SizedBox(height: 2),
         Text('$where · $priceLabel · $n réservation${n > 1 ? 's' : ''}', style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
+        if (modesLabel(service['modes']).isNotEmpty)
+          Text('Modes : ${modesLabel(service['modes'])}', style: TratraTheme.style(TtType.caption, color: TtColors.inkSoft)),
         const SizedBox(height: TtSpace.s3),
         Wrap(
           spacing: TtSpace.s2,
@@ -278,6 +289,13 @@ class _ServiceRow extends StatelessWidget {
           alignment: WrapAlignment.spaceBetween,
           children: [
             TratraBadge(label, tone: tone, dot: true),
+            TratraButton(
+              key: ValueKey('service-modes-${service['id']}'),
+              label: 'Modes',
+              size: TratraButtonSize.sm,
+              variant: TratraButtonVariant.ghost,
+              onPressed: onModes,
+            ),
             TratraButton(
               label: active ? 'Désactiver' : 'Activer',
               size: TratraButtonSize.sm,
@@ -314,6 +332,8 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
   String? _trade;
   String? _prestation;
   String _priceType = 'fixed';
+  List<String> _modes = ['one_off'];
+  Map<String, dynamic>? _modeRules;
   bool _busy = false;
   bool _titleTouched = false;
   String? _error;
@@ -347,6 +367,20 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
   /// Catégorie enregistrée : la prestation choisie, sinon le métier lui-même (métier sans prestation).
   String? get _categoryId => _prestation ?? _trade;
 
+  /// Règle du métier choisi : les modes qu'il n'ouvre pas sont grisés et retirés.
+  Future<void> _loadModeRules() async {
+    final id = _categoryId;
+    setState(() => _modeRules = null);
+    if (id == null) return;
+    final rules = await loadModeRules(_api, id);
+    if (!mounted || id != _categoryId) return;
+    setState(() {
+      _modeRules = rules;
+      final kept = sanitizeModes(_modes, rules);
+      _modes = kept.isEmpty ? ['one_off'] : kept;
+    });
+  }
+
   /// Choix dans le champ « Métier » : un métier, ou directement une prestation (son métier est alors déduit).
   void _onCatalog(Category? c) {
     setState(() {
@@ -360,7 +394,11 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
         _trade = c.trade;
       }
     });
-    if (c != null && !c.isTrade) _onPrestation(c.id);
+    if (c != null && !c.isTrade) {
+      _onPrestation(c.id);
+    } else {
+      _loadModeRules();
+    }
   }
 
   void _onPrestation(String? id) {
@@ -369,6 +407,7 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
       final name = id == null ? null : _catalog?.byId(id)?.name;
       if (!_titleTouched && name != null) _title.text = name;   // titre proposé, modifiable
     });
+    _loadModeRules();
   }
 
   Future<void> _submit() async {
@@ -379,6 +418,7 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
       if (_title.text.trim().isEmpty) 'title': 'Donnez un titre à votre offre.',
       if (_description.text.trim().length < 10) 'description': 'Décrivez votre offre (au moins 10 caractères).',
       if (_priceType != 'quote' && !((num.tryParse(_price.text) ?? 0) > 0)) 'price': 'Indiquez un tarif supérieur à 0.',
+      if (_modes.isEmpty) 'modes': 'Choisissez au moins un mode.',
     };
     setState(() {
       _errors
@@ -400,6 +440,7 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
         'price_type': _priceType,
         if (_priceType != 'quote') 'price': _price.text.trim(),
         if (duration > 0) 'duration': duration,
+        'modes': _modes,
       });
       await dash.load();
       if (!mounted) return;
@@ -512,6 +553,9 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
                   ],
                   const SizedBox(height: TtSpace.s3),
                   TratraInput(controller: _duration, label: 'Durée estimée (minutes)', optional: true, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+                  const SizedBox(height: TtSpace.s4),
+                  _StepLabel(n: askPrestation ? 5 : 4, text: 'Modes proposés'),
+                  ServiceModesField(value: _modes, onChanged: (v) => setState(() => _modes = v), rules: _modeRules, error: _errors['modes']),
                   if (_error != null) ...[const SizedBox(height: TtSpace.s3), TratraAlert(tone: TratraAlertTone.danger, message: _error!)],
                   const SizedBox(height: TtSpace.s5),
                   TratraButton(key: const ValueKey('new-submit'), label: 'Créer l’offre', block: true, loading: _busy, onPressed: _submit),
