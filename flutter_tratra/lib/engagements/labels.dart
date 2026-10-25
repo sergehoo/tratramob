@@ -196,7 +196,7 @@ StatusView applicationStatus(String s) => switch (s) {
     };
 
 /// Page de l'application d'une tâche « à faire » (mêmes cibles que le web).
-enum TodoTarget { contract, contractPay, contractPlanning, posting, replacements }
+enum TodoTarget { contract, contractPay, contractPlanning, posting, replacements, offers }
 
 (TodoTarget, int?) todoTarget(Json t) {
   final contract = t['contract_id'] is num ? (t['contract_id'] as num).toInt() : null;
@@ -205,6 +205,7 @@ enum TodoTarget { contract, contractPay, contractPlanning, posting, replacements
     'confirm_payment' || 'answer_adjustment' || 'pay_installment' || 'late_installment' => (TodoTarget.contractPay, contract),
     'validate_event' || 'confirm_attendance' => (TodoTarget.contractPlanning, contract),
     'answer_replacement' => (TodoTarget.replacements, null),
+    'answer_invitation' => (TodoTarget.offers, null), // invitations reçues : en tête de l'écran des offres
     'review_applications' || 'answer_interview' => posting != null ? (TodoTarget.posting, posting) : (TodoTarget.contract, null),
     _ => (TodoTarget.contract, contract),
   };

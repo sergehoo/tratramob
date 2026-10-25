@@ -47,6 +47,8 @@ class _EngagementsHomeScreenState extends State<EngagementsHomeScreen> {
         if (id != null) _go(PostingScreen(id: id));
       case TodoTarget.replacements:
         _go(const ReplacementsScreen());
+      case TodoTarget.offers:
+        _go(const OffersScreen());
       case TodoTarget.contract:
         if (id != null) _go(ContractScreen(id: id));
     }
@@ -129,7 +131,7 @@ class _EngagementsHomeScreenState extends State<EngagementsHomeScreen> {
         const SizedBox(height: 12),
         EngLoader<EngPage>(
           reloadKey: '$_ended-$_version',
-          load: () => _api.getPage('/contracts/?status=${_ended ? 'terminated,completed,cancelled' : 'pending_acceptance,accepted,active,suspended,notice,draft'}&limit=50'),
+          load: () => _api.getPage('/contracts/?status=${_ended ? 'terminated,completed,cancelled' : 'pending_acceptance,accepted,signed,active,suspended,notice,draft'}&limit=50'),
           builder: (ctx, page, _) => page.results.isEmpty
               ? TratraEmptyState(
                   icon: Icons.description_outlined,

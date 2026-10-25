@@ -120,6 +120,8 @@ void main() {
       expect(todoTarget({'kind': 'answer_replacement'}), (TodoTarget.replacements, null));
       expect(todoTarget({'kind': 'review_applications', 'posting_id': 9}), (TodoTarget.posting, 9));
       expect(todoTarget({'kind': 'accept_contract', 'contract_id': 7}), (TodoTarget.contract, 7));
+      expect(todoTarget({'kind': 'sign_contract', 'contract_id': 7}), (TodoTarget.contract, 7));
+      expect(todoTarget({'kind': 'answer_invitation', 'posting_id': 3}), (TodoTarget.offers, null));
     });
 
     test('clé d’idempotence : stable pour un même contenu, différente sinon, format accepté par le serveur', () {

@@ -117,7 +117,7 @@ class _PostingScreenState extends State<PostingScreen> {
                   ('Rémunération', '${fcfa(p.sn('amount'), p.s('currency', 'XOF'))} ${periodFr[p.s('period')] ?? ''}'),
                   ('Nature', relationshipFr[p.s('work_relationship')]),
                   ('Début souhaité', p.sn('start_date') == null ? null : dateFr(p.sn('start_date'))),
-                  ('Fin souhaitée', p.sn('end_date') == null ? 'Durée indéterminée' : dateFr(p.sn('end_date'))),
+                  ('Fin souhaitée', p.sn('end_date') != null ? dateFr(p.sn('end_date')) : p.sn('duration_months') != null ? 'Selon la durée envisagée' : 'Durée indéterminée'),
                   ('Planning', scheduleLabel(p.l('schedule'))),
                   ('Heures par semaine', p.sn('hours_per_week') == null ? null : '${num.tryParse(p.s('hours_per_week'))} h'),
                   ('Candidatures jusqu’au', p.sn('application_deadline') == null ? 'Sans date limite' : dateFr(p.sn('application_deadline'))),
