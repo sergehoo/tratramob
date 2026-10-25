@@ -39,11 +39,26 @@ String catalogFold(String s) {
 }
 
 class Catalog {
-  Catalog(this.items, {this.version = ''});
+  Catalog(this.items, {this.version = '', this.families = const []});
 
   /// Entrées à plat, dans l'ordre d'affichage du serveur (métier, puis ses prestations).
   final List<Category> items;
   final String version;
+
+  /// Familles de navigation (12 au plus pour les métiers de réparation), dans l'ordre du serveur ; vide pour un ancien serveur.
+  final List<CatalogFamily> families;
+
+  /// Métiers d'une famille, dans l'ordre du catalogue.
+  List<Category> tradesOf(CatalogFamily family) {
+    final ids = family.tradeIds.toSet();
+    return [for (final c in trades) if (ids.contains(c.id)) c];
+  }
+
+  /// Métiers rangés dans aucune famille visible (« Autres métiers ») : aucun métier n'est jamais perdu.
+  List<Category> get tradesWithoutFamily {
+    final placed = {for (final f in families) ...f.tradeIds};
+    return [for (final c in trades) if (!placed.contains(c.id)) c];
+  }
 
   List<Category> get trades => [for (final c in items) if (c.isTrade) c];
 
@@ -68,22 +83,36 @@ class Catalog {
   List<String> get names => [for (final c in items) if (c.name.isNotEmpty) c.name];
 
   /// Autocomplétion : métiers et prestations dont le nom contient la saisie, sans tenir compte des accents ni des majuscules
-  /// (« electri » → Électricité, « fuite » → Réparation de fuite). Débuts de mot d'abord, puis ordre du catalogue ; saisie vide = tous
-  /// les métiers. `tradeId` restreint aux prestations d'un métier.
+  /// (« electri » → Électricité, « fuite » → Réparation de fuite), puis ceux dont un SYNONYME correspond (« clim » → Climatisation,
+  /// « frigo » → Réparation de réfrigérateur). Débuts de mot d'abord, puis ordre du catalogue ; saisie vide = tous les métiers.
+  /// `tradeId` restreint aux prestations d'un métier.
   List<Category> search(String query, {String? tradeId, int limit = 40}) {
     final pool = tradeId == null ? items : prestationsOf(tradeId);
     final q = catalogFold(query);
     if (q.isEmpty) return (tradeId == null ? trades : pool).take(limit).toList();
-    final starts = <Category>[], contains = <Category>[];
+    final starts = <Category>[], contains = <Category>[], synonyms = <Category>[];
     for (final c in pool) {
       final name = catalogFold(c.name);
       if (name.startsWith(q) || name.contains(' $q')) {
         starts.add(c);
       } else if (name.contains(q)) {
         contains.add(c);
+      } else if (synonymOf(c, query) != null) {
+        synonyms.add(c);
       }
     }
-    return [...starts, ...contains].take(limit).toList();
+    return [...starts, ...contains, ...synonyms].take(limit).toList();
+  }
+
+  /// Synonyme de la catégorie reconnu dans la saisie (« frigo »), ou null.
+  String? synonymOf(Category c, String query) {
+    final q = catalogFold(query);
+    if (q.length < 2) return null;
+    for (final k in c.keywords) {
+      final f = catalogFold(k);
+      if (f.startsWith(q) || f.contains(' $q')) return k;
+    }
+    return null;
   }
 
   /// « Plomberie » pour un métier, « Plomberie › Réparation de fuite » pour une prestation.
@@ -96,15 +125,22 @@ class Catalog {
   factory Catalog.fromJson(Map<String, dynamic> json) {
     final results = json['results'];
     final rows = results is List ? results : const [];
+    final fams = json['families'];
     return Catalog(
       [for (final r in rows) if (r is Map) Category.fromJson(Map<String, dynamic>.from(r))],
       version: json['version']?.toString() ?? '',
+      families: [
+        if (fams is List)
+          for (final f in fams)
+            if (f is Map) CatalogFamily.fromJson(Map<String, dynamic>.from(f)),
+      ]..sort((a, b) => a.order.compareTo(b.order)),
     );
   }
 
   Map<String, dynamic> toJson() => {
         'version': version,
         'results': [for (final c in items) c.toJson()],
+        'families': [for (final f in families) f.toJson()],
       };
 }
 

@@ -93,6 +93,12 @@ class _Shortcut {
 /// Chaque raccourci pointe vers une route enregistrée dans `main.dart`.
 const List<_Shortcut> _shortcuts = [
   _Shortcut(
+    icon: Icons.build_circle_outlined,
+    title: 'J’ai une panne',
+    description: 'Décrivez votre problème : Tratra trouve le métier et les artisans.',
+    route: RouteNames.panne,
+  ),
+  _Shortcut(
     icon: Icons.category_outlined,
     title: 'Toutes les catégories',
     description: 'Parcourez les métiers et recherchez par nom.',

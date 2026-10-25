@@ -14,10 +14,12 @@ import 'package:flutter_tratra/screens/service_list/service_list_kit.dart';
 import 'package:flutter_tratra/services/catalog_repository.dart';
 
 class AllServicesScreen extends StatefulWidget {
-  /// Métier ou prestation présélectionné (depuis le catalogue) ; un métier couvre ses prestations côté serveur.
-  const AllServicesScreen({super.key, this.initialCategory});
+  /// Métier ou prestation présélectionné (depuis le catalogue) ; un métier couvre ses prestations côté serveur. `initialCommune` :
+  /// commune ou quartier de l'artisan (« J'ai une panne »).
+  const AllServicesScreen({super.key, this.initialCategory, this.initialCommune});
 
   final String? initialCategory;
+  final String? initialCommune;
 
   @override
   State<AllServicesScreen> createState() => _AllServicesScreenState();
@@ -41,6 +43,7 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
   double _minPrice = 0;
   double _maxPrice = 100000;
   String? _selectedCategory;
+  String? _commune;
   List<String> _categories = [];
 
   // Inputs min/max prix
@@ -52,6 +55,7 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
     super.initState();
     _api = context.read<BaseApi>();
     _selectedCategory = widget.initialCategory;
+    _commune = (widget.initialCommune ?? '').trim().isEmpty ? null : widget.initialCommune!.trim();
     _loadInitial();
     _loadCategories();
   }
@@ -108,6 +112,7 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
         if (_maxPrice < 100000) 'max_price': _maxPrice.toStringAsFixed(0),
         if (_selectedCategory != null && _selectedCategory!.isNotEmpty)
           'category__name': _selectedCategory!,
+        if (_commune != null) 'commune': _commune!,
       };
 
       final uri = Uri.parse('${_api.baseUrl}${AppConstants.servicesEndpoint}/')
@@ -238,6 +243,7 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
       _minPrice > 0 ||
       _maxPrice < 100000 ||
       _selectedCategory != null ||
+      _commune != null ||
       _ordering != '-created_at';
 
   void _applyPriceFilter() {
@@ -268,6 +274,7 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
       _minPrice = 0;
       _maxPrice = 100000;
       _selectedCategory = null;
+      _commune = null;
       _ordering = '-created_at';
     });
     _loadInitial();
@@ -351,6 +358,7 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
   int get _activeFilterCount =>
       ((_minPrice > 0 || _maxPrice < 100000) ? 1 : 0) +
       (_selectedCategory != null ? 1 : 0) +
+      (_commune != null ? 1 : 0) +
       (_ordering != '-created_at' ? 1 : 0);
 
   String get _priceFilterLabel {
@@ -388,6 +396,13 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
     if (_selectedCategory != null) {
       filters.add(ServiceActiveFilter('Catégorie : $_selectedCategory', () {
         setState(() => _selectedCategory = null);
+        _loadInitial();
+      }));
+    }
+
+    if (_commune != null) {
+      filters.add(ServiceActiveFilter('Commune : $_commune', () {
+        setState(() => _commune = null);
         _loadInitial();
       }));
     }

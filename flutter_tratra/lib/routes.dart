@@ -23,6 +23,7 @@ class RouteNames {
   static const String allServices = '/all-services';
   static const String allUrgentServices = '/all-urgent-services';
   static const String allCategories = '/all-categories';
+  static const String panne = '/panne';
 }
 
 // ---- Arguments typés ----

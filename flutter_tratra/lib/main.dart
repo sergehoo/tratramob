@@ -67,6 +67,7 @@ import 'package:flutter_tratra/screens/auth/otp_screen.dart';
 import 'package:flutter_tratra/screens/auth/forgot_password_screen.dart';
 import 'package:flutter_tratra/screens/auth/register_screen.dart';
 import 'package:flutter_tratra/screens/all_categories_screen.dart';
+import 'package:flutter_tratra/screens/panne_screen.dart';
 import 'package:flutter_tratra/screens/all_nearby_artisans_screen.dart';
 import 'package:flutter_tratra/screens/all_services_screen.dart';
 import 'package:flutter_tratra/screens/all_urgent_services_screen.dart';
@@ -411,6 +412,8 @@ class _MyAppState extends State<MyApp> {
             builder: (_) => const AllUrgentServicesScreen());
       case RouteNames.allCategories:
         return MaterialPageRoute(builder: (_) => const AllCategoriesScreen());
+      case RouteNames.panne:
+        return MaterialPageRoute(builder: (_) => const PanneScreen());
 
       case RouteNames.serviceDetail:
         final args = settings.arguments;

@@ -1,7 +1,8 @@
 // lib/screens/all_categories_screen.dart
 //
-// « Tous les métiers » : le catalogue COMPLET, lu depuis le catalogue commun (`GET /handy/catalog/`, même réponse que le site). Un métier actif
-// est toujours affiché, avec ou sans offre ; ses prestations sont listées à l'ouverture de la carte.
+// « Tous les métiers » : le catalogue COMPLET, lu depuis le catalogue commun (`GET /handy/catalog/`, même réponse que le site), rangé par
+// FAMILLES (navigation compacte, « Autres métiers » en dernier). Un métier actif est toujours affiché, avec ou sans offre ; ses prestations
+// sont listées à l'ouverture de la carte. La recherche couvre noms, prestations et synonymes (« clim », « frigo »).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -14,7 +15,11 @@ import 'package:flutter_tratra/models/category.dart';
 import 'package:flutter_tratra/screens/all_services_screen.dart';
 import 'package:flutter_tratra/screens/browse/browse_parts.dart';
 import 'package:flutter_tratra/screens/home/home_icons.dart';
+import 'package:flutter_tratra/screens/panne_screen.dart';
 import 'package:flutter_tratra/services/catalog_repository.dart';
+
+/// Filtre « Autres métiers » : métiers rangés dans aucune famille.
+const String _otherFamily = '_autres';
 
 /// Tris proposés : l'ordre du catalogue (réglé dans l'administration) ou l'ordre alphabétique.
 const List<(String, String)> _orderingOptions = [
@@ -64,6 +69,9 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
   final TextEditingController _search = TextEditingController();
   String _ordering = 'order';
 
+  /// Famille choisie (identifiant), `_otherFamily` pour « Autres métiers », null = toutes.
+  String? _familyId;
+
   @override
   void initState() {
     super.initState();
@@ -102,19 +110,27 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
 
   Future<void> _refresh() => _load(force: true);
 
-  /// Métiers visibles : recherche (métier, prestations, description) puis tri.
+  List<Category> _familyTrades(Catalog catalog) {
+    final id = _familyId;
+    if (id == null) return catalog.trades;
+    if (id == _otherFamily) return catalog.tradesWithoutFamily;
+    for (final f in catalog.families) {
+      if (f.id == id) return catalog.tradesOf(f);
+    }
+    return catalog.trades;
+  }
+
+  /// Métiers visibles : famille, recherche (métier, prestations, description, synonymes) puis tri.
   List<Category> get _items {
     final catalog = _catalog;
     if (catalog == null) return const [];
     final q = _plain(_search.text.trim());
-    var trades = catalog.trades;
+    var trades = _familyTrades(catalog);
+    bool matches(Category c) => _plain(c.name).contains(q) || c.keywords.any((k) => _plain(k).contains(q));
     if (q.isNotEmpty) {
       trades = [
         for (final t in trades)
-          if (_plain(t.name).contains(q) ||
-              _plain(t.description ?? '').contains(q) ||
-              catalog.prestationsOf(t.id).any((p) => _plain(p.name).contains(q)))
-            t,
+          if (matches(t) || _plain(t.description ?? '').contains(q) || catalog.prestationsOf(t.id).any(matches)) t,
       ];
     }
     int byName(Category a, Category b) => _plain(a.name).compareTo(_plain(b.name));
@@ -126,12 +142,16 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
 
   // ============ ACTIONS ============
 
-  bool get _hasActiveFilters => _search.text.isNotEmpty || _ordering != 'order';
+  bool get _hasActiveFilters => _search.text.isNotEmpty || _ordering != 'order' || _familyId != null;
 
   void _clearFilters() => setState(() {
         _search.clear();
         _ordering = 'order';
+        _familyId = null;
       });
+
+  /// Sections par famille : seulement pour le catalogue complet, sans recherche ni tri alphabétique.
+  bool get _grouped => _familyId == null && _search.text.trim().isEmpty && _ordering == 'order' && (_catalog?.families.isNotEmpty ?? false);
 
   void _setOrdering(String value) {
     if (_ordering == value) return;
@@ -148,6 +168,11 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
         onClear: _clearFilters,
       ),
     );
+  }
+
+  void _openPanne() {
+    final q = _search.text.trim();
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PanneScreen(initialText: q.isEmpty ? null : q)));
   }
 
   /// Ouvre un métier : ses prestations (avec leurs offres) et l'accès aux offres.
@@ -294,9 +319,42 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
               ),
             ),
           ),
+          _buildFamilyRow(),
           _buildSortRow(),
           _buildActiveFilters(),
           const SizedBox(height: TtSpace.s2),
+        ],
+      ),
+    );
+  }
+
+  /// Familles de métiers (navigation compacte) : « Toutes », chaque famille, « Autres métiers ».
+  Widget _buildFamilyRow() {
+    final catalog = _catalog;
+    if (catalog == null || catalog.families.isEmpty) return const SizedBox.shrink();
+    final options = <(String?, String, String?)>[
+      (null, 'Toutes', null),
+      for (final f in catalog.families) (f.id, f.name, f.iconKey),
+      if (catalog.tradesWithoutFamily.isNotEmpty) (_otherFamily, 'Autres métiers', null),
+    ];
+    return SizedBox(
+      height: 48,
+      child: ListView(
+        key: const ValueKey('family-row'),
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: TtSpace.s4),
+        children: [
+          for (final (id, label, _) in options) ...[
+            Center(
+              child: TratraChip(
+                key: ValueKey('family-${id ?? 'all'}'),
+                label: label,
+                selected: _familyId == id,
+                onTap: () => setState(() => _familyId = id),
+              ),
+            ),
+            const SizedBox(width: TtSpace.s2),
+          ],
         ],
       ),
     );
@@ -412,25 +470,46 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
       );
     }
 
+    final catalog = _catalog!;
+    final groups = <(String, List<Category>)>[
+      if (_grouped) ...[
+        for (final f in catalog.families) (f.name, catalog.tradesOf(f)),
+        if (catalog.tradesWithoutFamily.isNotEmpty) ('Autres métiers', catalog.tradesWithoutFamily),
+      ] else
+        ('', items),
+    ];
     return BrowseFadeIn(
       key: const ValueKey('categories-grid'),
       child: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s2),
-            sliver: SliverGrid(
-              gridDelegate: _tileGrid,
-              delegate: SliverChildBuilderDelegate(
-                (context, i) => _CategoryTile(
-                  category: items[i],
-                  prestations: _catalog!.prestationsOf(items[i].id),
-                  onTap: () => _openTrade(items[i]),
+            padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s4, TtSpace.s4, 0),
+            sliver: SliverToBoxAdapter(child: _PanneBanner(onTap: () => _openPanne())),
+          ),
+          for (final (title, trades) in groups) ...[
+            if (title.isNotEmpty)
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s5, TtSpace.s4, 0),
+                sliver: SliverToBoxAdapter(
+                  child: Semantics(header: true, child: Text(title, style: TratraTheme.style(TtType.h2))),
                 ),
-                childCount: items.length,
+              ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s3, TtSpace.s4, TtSpace.s2),
+              sliver: SliverGrid(
+                gridDelegate: _tileGrid,
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) => _CategoryTile(
+                    category: trades[i],
+                    prestations: catalog.prestationsOf(trades[i].id),
+                    onTap: () => _openTrade(trades[i]),
+                  ),
+                  childCount: trades.length,
+                ),
               ),
             ),
-          ),
+          ],
           SliverToBoxAdapter(
             child: SizedBox(height: TtSpace.s6 + MediaQuery.paddingOf(context).bottom),
           ),
@@ -445,6 +524,34 @@ String _offersLabel(int? count) {
   if (count == null) return '';
   if (count <= 0) return 'Aucune offre';
   return count == 1 ? '1 offre' : '$count offres';
+}
+
+// ===== « J'ai une panne » =====
+
+/// Accès à « J'ai une panne » : décrire le problème plutôt que chercher le métier.
+class _PanneBanner extends StatelessWidget {
+  const _PanneBanner({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => TratraCard(
+        key: const ValueKey('panne-banner'),
+        variant: TratraCardVariant.accent,
+        padding: TratraCard.compact,
+        onTap: onTap,
+        semanticLabel: 'J’ai une panne : décrire mon problème',
+        child: Row(children: [
+          const Icon(Icons.build_circle_outlined, color: TtColors.primaryDark, size: 32),
+          const SizedBox(width: TtSpace.s3),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('J’ai une panne', style: TratraTheme.style(TtType.title)),
+              Text('Décrivez le problème : Tratra trouve le métier et les artisans.', style: TratraTheme.style(TtType.caption, color: TtColors.inkSoft)),
+            ]),
+          ),
+          const Icon(Icons.chevron_right_rounded, color: TtColors.fog),
+        ]),
+      );
 }
 
 // ===== Cellule métier =====

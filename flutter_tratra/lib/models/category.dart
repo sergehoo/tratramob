@@ -23,6 +23,12 @@ class Category {
   final int? offersTotal;
   final int prestationsCount;
 
+  /// Famille de navigation (identifiant) du métier ; null = « autres métiers ».
+  final String? family;
+
+  /// Synonymes et pannes courantes (« frigo », « écran cassé ») : recherche et « J'ai une panne ».
+  final List<String> keywords;
+
   Category({
     required this.id,
     required this.name,
@@ -40,6 +46,8 @@ class Category {
     this.offersCount,
     this.offersTotal,
     this.prestationsCount = 0,
+    this.family,
+    this.keywords = const [],
   });
 
   /// Métier (catégorie racine) ou prestation (sous-catégorie).
@@ -67,6 +75,12 @@ class Category {
       offersCount: asInt(json['offers_count']),
       offersTotal: asInt(json['offers_total'] ?? json['services_count']),
       prestationsCount: asInt(json['prestations_count']) ?? 0,
+      family: json['family']?.toString(),
+      keywords: [
+        if (json['keywords'] is List)
+          for (final k in json['keywords'] as List)
+            if ('$k'.trim().isNotEmpty) '$k'.trim(),
+      ],
     );
   }
 
@@ -87,6 +101,41 @@ class Category {
         'offers_count': offersCount,
         'offers_total': offersTotal,
         'prestations_count': prestationsCount,
+        'family': family,
+        'keywords': keywords,
+      };
+}
+
+/// Famille de métiers (`families` du catalogue) : regroupement de navigation (« Informatique & Numérique »), sans offre propre.
+class CatalogFamily {
+  const CatalogFamily({required this.id, required this.name, required this.slug, this.iconKey, this.description = '', this.order = 0,
+      this.tradeIds = const [], this.offersTotal});
+
+  final String id;
+  final String name;
+  final String slug;
+  final String? iconKey;
+  final String description;
+  final int order;
+
+  /// Métiers de la famille, dans l'ordre du catalogue.
+  final List<String> tradeIds;
+  final int? offersTotal;
+
+  factory CatalogFamily.fromJson(Map<String, dynamic> json) => CatalogFamily(
+        id: '${json['id'] ?? ''}',
+        name: '${json['name'] ?? ''}',
+        slug: '${json['slug'] ?? ''}',
+        iconKey: json['icon_key']?.toString(),
+        description: '${json['description'] ?? ''}',
+        order: json['order'] is int ? json['order'] as int : int.tryParse('${json['order']}') ?? 0,
+        tradeIds: [if (json['trades'] is List) for (final t in json['trades'] as List) '$t'],
+        offersTotal: json['offers_total'] is int ? json['offers_total'] as int : int.tryParse('${json['offers_total']}'),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id, 'name': name, 'slug': slug, 'icon_key': iconKey, 'description': description, 'order': order, 'trades': tradeIds,
+        'offers_total': offersTotal,
       };
 }
 

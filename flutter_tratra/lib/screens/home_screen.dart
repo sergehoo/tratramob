@@ -563,6 +563,20 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       SliverToBoxAdapter(child: body),
+      // « J'ai une panne » : décrire le problème plutôt que chercher le métier.
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s3, TtSpace.s4, 0),
+          child: TratraButton(
+            key: const ValueKey('home-panne'),
+            label: 'J’ai une panne',
+            variant: TratraButtonVariant.outline,
+            block: true,
+            leading: const Icon(Icons.build_circle_outlined),
+            onPressed: () => Navigator.pushNamed(context, RouteNames.panne),
+          ),
+        ),
+      ),
     ];
   }
 
