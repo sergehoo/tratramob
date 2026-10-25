@@ -28,6 +28,7 @@ const List<(String, String, IconData)> notificationCategories = [
   ('engagement', 'Contrats et engagements', Icons.description_outlined),
   ('flash', 'Nouvelles missions', Icons.bolt_rounded),
   ('announcement', 'Annonces', Icons.campaign_outlined),
+  ('tips', 'Conseils', Icons.tips_and_updates_outlined),
   ('system', 'Infos', Icons.info_outline_rounded),
 ];
 

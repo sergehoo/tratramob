@@ -20,6 +20,7 @@ import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/all_categories_screen.dart';
 import 'package:flutter_tratra/screens/all_services_screen.dart';
 import 'package:flutter_tratra/screens/all_urgent_services_screen.dart';
+import 'package:flutter_tratra/screens/panne_screen.dart';
 import 'package:flutter_tratra/screens/search_screen.dart';
 import 'package:flutter_tratra/screens/service_link_screen.dart';
 import 'package:flutter_tratra/services/catalog_repository.dart';
@@ -198,6 +199,8 @@ Future<void> _open(BuildContext context, DeepLink link) {
       return pushPage(context, const SearchScreen());
     case DeepLinkKind.urgent:
       return pushPage(context, const AllUrgentServicesScreen());
+    case DeepLinkKind.panne:
+      return pushPage(context, const PanneScreen());
     case DeepLinkKind.flashOrder:
       return pushPage(context, const FlashRequestFormScreen());
     case DeepLinkKind.favorites:

@@ -17,7 +17,7 @@ enum DeepLinkKind {
   flashOffer, flashRequest, availability, trustPenalty,
   // Destinations des annonces (registre central) : découvrir, commander, compte, espace professionnel, entreprises.
   home, categories, category, services, service, search, urgent, flashOrder, favorites, profile, addresses, reputation, badge,
-  engagements, business,
+  engagements, business, panne,
 }
 
 /// Rôle exigé par un écran : un compte qui ne l'a pas est ramené à l'accueil avec un message, jamais sur la page.
@@ -84,6 +84,7 @@ DeepLinkKind? _kind(String raw) => switch (raw) {
       'service' => DeepLinkKind.service,
       'search' => DeepLinkKind.search,
       'urgent' => DeepLinkKind.urgent,
+      'panne' => DeepLinkKind.panne,
       'flash_order' => DeepLinkKind.flashOrder,
       'favorites' => DeepLinkKind.favorites,
       'profile' => DeepLinkKind.profile,
@@ -125,5 +126,5 @@ const Set<String> knownLinkKeys = {
   'booking', 'mission', 'conversation', 'reviews', 'kyc', 'business_request', 'announcement', 'contract', 'posting', 'replacements',
   'notifications', 'explore', 'bookings', 'messages', 'pro', 'flash_offer', 'flash_request', 'availability', 'trust_penalty', 'home',
   'categories', 'category', 'services', 'service', 'search', 'urgent', 'flash_order', 'favorites', 'profile', 'addresses', 'reputation',
-  'badge', 'engagements', 'business',
+  'badge', 'engagements', 'business', 'panne',
 };

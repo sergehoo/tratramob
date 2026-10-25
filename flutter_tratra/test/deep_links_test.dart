@@ -43,12 +43,13 @@ void main() {
     expect(parseDeepLink({'deeplink': 'tratra://service'}).kind, DeepLinkKind.notifications);
     expect(parseDeepLink({'deeplink': 'tratra://flash_order'}).kind, DeepLinkKind.flashOrder);
     expect(parseDeepLink({'deeplink': 'tratra://home'}).kind, DeepLinkKind.home);
+    expect(parseDeepLink({'deeplink': 'tratra://panne'}).kind, DeepLinkKind.panne);
     // Même liste que le serveur (handy/destinations.py, announcements/test_destinations_push.py : APP_KEYS).
     const serverKeys = {
       'home', 'explore', 'categories', 'category', 'services', 'service', 'search', 'urgent', 'flash_order', 'favorites', 'bookings',
       'messages', 'notifications', 'announcement', 'reviews', 'engagements', 'profile', 'addresses', 'kyc', 'pro', 'reputation', 'badge',
       'availability', 'replacements', 'business', 'booking', 'mission', 'conversation', 'contract', 'posting', 'business_request',
-      'flash_offer', 'flash_request', 'trust_penalty',
+      'flash_offer', 'flash_request', 'trust_penalty', 'panne',
     };
     expect(knownLinkKeys, serverKeys);
     for (final key in knownLinkKeys) {
