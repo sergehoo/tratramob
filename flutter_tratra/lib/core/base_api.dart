@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/core/constants.dart';
 import 'package:flutter_tratra/core/auth_http_client.dart';
+import 'package:flutter_tratra/core/network_errors.dart';
 
 class BaseApi {
   final http.Client _raw;          // client brut (sans interception) pour le refresh
@@ -118,13 +119,16 @@ class BaseApi {
 
   /// Envoi multipart AVEC progression (0..1) : le corps est transmis par morceaux et compté (le client à rafraîchissement automatique
   /// met le corps en mémoire avant l'envoi, sans progression). Sur 401, UN rafraîchissement de session puis un nouvel essai.
-  /// Les envois de messages et de statuts portent un `client_id` : rejouer après une coupure réseau ne crée jamais de doublon.
+  /// Les envois de messages et de statuts portent un `client_id` : rejouer après une coupure réseau ne crée jamais de doublon
+  /// (`networkRetries` nouveaux essais automatiques, espacés de `retryDelay`, puis 2 × `retryDelay`…).
   Future<http.Response> uploadMultipart(
     String path, {
     Map<String, String> fields = const {},
     List<Future<http.MultipartFile> Function()> files = const [],
     void Function(double)? onProgress,
     Duration timeout = const Duration(minutes: 5),
+    int networkRetries = 0,
+    Duration retryDelay = const Duration(seconds: 1),
   }) async {
     Future<http.Response> attempt(String? access) async {
       final req = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'))
@@ -158,6 +162,19 @@ class BaseApi {
       return http.Response.fromStream(await _raw.send(streamed).timeout(timeout));
     }
 
+    // Envoi idempotent (`client_id`) : une coupure du transport est rejouée automatiquement (nouvelle connexion), jamais un délai dépassé
+    // ni une réponse du serveur.
+    Future<http.Response> attemptWithRetries(String? access) async {
+      for (var i = 0;; i++) {
+        try {
+          return await attempt(access);
+        } catch (e) {
+          if (i >= networkRetries || !isTransientNetworkError(e)) rethrow;
+          await Future<void>.delayed(retryDelay * (i + 1));
+        }
+      }
+    }
+
     await initialize();
     String? access;
     try {
@@ -165,10 +182,10 @@ class BaseApi {
     } catch (_) {
       access = _authToken;
     }
-    var r = await attempt(access);
+    var r = await attemptWithRetries(access);
     if (r.statusCode == 401) {
       final fresh = await _refreshAccess();
-      if (fresh != null) r = await attempt(fresh);
+      if (fresh != null) r = await attemptWithRetries(fresh);
     }
     return r;
   }

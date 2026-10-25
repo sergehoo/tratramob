@@ -48,7 +48,8 @@ class StatusApi {
     void Function(double)? onProgress,
   }) async {
     final fields = {'text': text, 'audience': audience, 'allow_replies': '$allowReplies', 'client_id': clientId, if (filePath == null) 'background': background};
-    final r = await _base.uploadMultipart('/statuses/', fields: fields, files: [if (filePath != null) () => multipartFromPath('file', filePath)], onProgress: onProgress);
+    final r = await _base.uploadMultipart('/statuses/',
+        fields: fields, files: [if (filePath != null) () => multipartFromPath('file', filePath)], onProgress: onProgress, networkRetries: 2);
     if (r.statusCode < 200 || r.statusCode >= 300) _base.handleError(r);
     return StatusItem.fromJson(_map(_map(_base.decodeBody(r))['status']));
   }

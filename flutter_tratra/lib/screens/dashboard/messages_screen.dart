@@ -10,6 +10,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:flutter_tratra/core/api_exception.dart';
+import 'package:flutter_tratra/core/network_errors.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/messaging/chat_models.dart';
 import 'package:flutter_tratra/messaging/inbox_controller.dart';
@@ -402,10 +404,13 @@ class _ConversationScreenState extends State<ConversationScreen> {
       });
       _toBottom();
     } catch (e) {
+      debugPrint('[messages] envoi échoué : ${e.runtimeType} $e');
       if (!mounted) return;
       setState(() {
         _messages = _messages?.map((m) => m.clientId == local.clientId ? m.copyWith(local: SendState.failed) : m).toList();
-        _notice = friendlyError(e, 'Connexion interrompue : le message est conservé, touchez « Renvoyer » (il ne sera envoyé qu’une fois).');
+        _notice = e is ApiException
+            ? e.message
+            : transferFailureMessage(e, retryHint: 'Le message est conservé : touchez « Renvoyer » (il ne sera envoyé qu’une fois).');
       });
     }
   }

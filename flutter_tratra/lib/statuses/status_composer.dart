@@ -11,9 +11,9 @@ import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
 import 'package:flutter_tratra/core/api_exception.dart';
+import 'package:flutter_tratra/core/network_errors.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/messaging/media_widgets.dart';
-import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart' show friendlyError;
 import 'package:flutter_tratra/statuses/status_api.dart';
 import 'package:flutter_tratra/statuses/status_models.dart';
 
@@ -118,8 +118,11 @@ class _StatusComposerScreenState extends State<StatusComposerScreen> {
       if (mounted) Navigator.of(context).pop(item);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
-    } catch (e) {
-      if (mounted) setState(() => _error = friendlyError(e, 'Connexion interrompue. Touchez « Réessayer » : votre statut ne sera publié qu’une seule fois.'));
+    } catch (e, st) {
+      debugPrint('[statuts] publication échouée : ${e.runtimeType} $e\n$st');
+      if (mounted) {
+        setState(() => _error = transferFailureMessage(e, retryHint: 'Touchez « Réessayer » : votre statut ne sera publié qu’une seule fois.'));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

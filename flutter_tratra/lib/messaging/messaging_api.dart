@@ -80,6 +80,7 @@ class MessagingApi {
       fields: {'content': content, 'client_id': clientId},
       files: [() => multipartFromPath('file', filePath)],
       onProgress: onProgress,
+      networkRetries: 2,
     );
     if (r.statusCode < 200 || r.statusCode >= 300) _base.handleError(r);
     return ChatMessage.fromJson(_map(_map(_base.decodeBody(r))['message']));
