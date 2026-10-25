@@ -182,6 +182,17 @@ class ContractSummary extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (status == 'pending_acceptance' && has('accept')) _AcceptCard(api: api, c: c, onChanged: reload),
+        // Avant la proposition (auteur) : cohérence métier / missions — avertissement, jamais un blocage.
+        if (c['quality_warnings'] is List && (c['quality_warnings'] as List).isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TratraAlert(
+              key: const ValueKey('quality-warnings'),
+              tone: TratraAlertTone.warning,
+              title: 'À vérifier avant de proposer',
+              message: (c['quality_warnings'] as List).map((w) => '• $w').join('\n'),
+            ),
+          ),
         SignContractCard(api: api, c: c, onChanged: reload),
         if (status == 'pending_acceptance' && iAccepted)
           TratraAlert(tone: TratraAlertTone.info, title: 'En attente de l’autre partie', message: '${c.m('counterpart').s('name')} doit relire et accepter ces conditions. Vous serez prévenu(e) dès sa réponse.'),

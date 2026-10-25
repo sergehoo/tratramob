@@ -313,6 +313,18 @@ void main() {
       expect(find.textContaining('Not found'), findsNothing);
     });
 
+    testWidgets('brouillon incohérent : l’auteur voit l’avertissement métier / missions', (t) async {
+      await t.binding.setSurfaceSize(const Size(800, 3000));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      final f = fakeApi((r) async => r.url.path.endsWith('/contracts/1/')
+          ? ok({...contract(status: 'draft', role: 'principal', actions: const ['propose']), 'quality_warnings': ['Les missions décrites ne semblent pas correspondre au métier « Nounou ».']})
+          : ok({'results': []}));
+      await t.pumpWidget(host(f.api, const ContractScreen(id: 1)));
+      await settle(t);
+      expect(find.byKey(const ValueKey('quality-warnings')), findsOneWidget);
+      expect(find.textContaining('métier « Nounou »'), findsOneWidget);
+    });
+
     testWidgets('contrat à signer : statut « à signer », signature seulement après lecture, consentement explicite envoyé', (t) async {
       await t.binding.setSurfaceSize(const Size(800, 3000));
       addTearDown(() => t.binding.setSurfaceSize(null));
