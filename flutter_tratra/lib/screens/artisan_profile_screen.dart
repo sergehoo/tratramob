@@ -13,6 +13,7 @@ import 'package:flutter_tratra/screens/detail_shared/detail_helpers.dart';
 import 'package:flutter_tratra/screens/detail_shared/service_mini_card.dart';
 import 'package:flutter_tratra/screens/service_detail_screen.dart';
 import 'package:flutter_tratra/screens/trust/passport_screen.dart';
+import 'package:flutter_tratra/statuses/status_presence.dart';
 
 class ArtisanProfileScreen extends StatefulWidget {
   const ArtisanProfileScreen({
@@ -514,7 +515,7 @@ class _ProfileHeader extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              TratraAvatar(name: name, photoUrl: realImageUrl(a.imageUrl), size: 76),
+              StatusAvatar(userId: a.userId, name: name, photoUrl: realImageUrl(a.imageUrl), size: 76),
               const SizedBox(width: TtSpace.s4),
               Expanded(
                 child: Column(

@@ -19,6 +19,7 @@ import 'package:flutter_tratra/messaging/media_widgets.dart';
 import 'package:flutter_tratra/messaging/messaging_api.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
+import 'package:flutter_tratra/statuses/status_presence.dart';
 
 /// Ouvre (ou crée) la conversation d'une réservation puis affiche le fil.
 Future<void> openBookingConversation(BuildContext context, int bookingId) async {
@@ -195,7 +196,7 @@ class _ConversationTile extends StatelessWidget {
       padding: TratraCard.compact,
       onTap: onOpen,
       child: Row(children: [
-        TratraAvatar(name: c.counterpart, size: 44),
+        StatusAvatar(userId: c.isSupport ? null : c.counterpartId, name: c.counterpart, size: 44),
         const SizedBox(width: TtSpace.s3),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

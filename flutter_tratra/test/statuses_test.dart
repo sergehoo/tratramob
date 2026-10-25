@@ -59,12 +59,22 @@ class Server {
   bool down = false;
   bool failFeed = false;
   Map<String, dynamic> feed = feedPayload();
+  List<Map<String, dynamic>> discover = [];
+  List<Map<String, dynamic>> presence = [];
+  Map<int, Map<String, dynamic>> authors = {};
   int publishFailures = 0;
   late final client = MockClient((r) async {
     requests.add(r);
     if (down) throw http.ClientException('réseau coupé');
     final p = r.url.path;
     if (p.endsWith('/statuses/feed/')) return failFeed ? json({'detail': 'indisponible'}, 503) : json(feed);
+    if (p.endsWith('/statuses/discover/')) return json({'results': discover, 'has_more': false, 'next_page': null});
+    if (p.endsWith('/statuses/presence/')) return json({'results': presence});
+    final author = RegExp(r'/statuses/authors/(\d+)/$').firstMatch(p);
+    if (author != null) {
+      final g = authors[int.parse(author.group(1)!)];
+      return g == null ? json({'detail': 'Aucun statut à afficher.', 'code': 'not_found'}, 404) : json(g);
+    }
     if (p.endsWith('/statuses/settings/')) return json({'audience': 'contacts', 'allow_replies': true});
     if (p.endsWith('/view/')) return json({'counted': true});
     if (p.endsWith('/viewers/')) {
@@ -169,18 +179,20 @@ void main() {
   });
 
   group('barre d\'accueil', () {
-    testWidgets('« Mon statut » d\'abord, puis les contacts (non lus avant les consultés) et l\'accès à Découvrir', (t) async {
+    testWidgets('« Mon statut » d\'abord, puis les contacts (non lus avant les consultés), les membres publics un par un et « Tout voir »', (t) async {
       final s = Server()
         ..feed = feedPayload(
           contacts: [authorGroup(7, 'Awa K.', [status(1)]), authorGroup(8, 'Moussa A.', [status(2, seen: true)])],
           discover: 4,
-        );
+        )
+        ..discover = [authorGroup(9, 'Koffi B.', [status(3), status(4)])];
       await t.pumpWidget(host(s, const StatusBar()));
       await t.pumpAndSettle();
       final labels = t.widgetList<Text>(find.byType(Text)).map((w) => w.data).whereType<String>().toList();
       expect(labels.indexOf('Mon statut'), lessThan(labels.indexOf('Awa K.')));       // « Mon statut » en première position
       expect(labels.indexOf('Awa K.'), lessThan(labels.indexOf('Moussa A.')));        // non lu avant consulté
-      expect(labels, contains('Découvrir (4)'));
+      expect(labels.indexOf('Moussa A.'), lessThan(labels.indexOf('Koffi B.')));      // membre qui partage avec tous : visible par son avatar
+      expect(labels, contains('Tout voir (4)'));                                       // 3 autres membres publics : accès à la liste complète
       expect(find.byWidgetPredicate((w) => w is Semantics && w.properties.label == 'Statuts de Awa K., 1 non lu'), findsOneWidget);   // anneau « non lu » annoncé aux lecteurs d'écran
       expect(s.requests.where((r) => r.url.path.endsWith('/view/')), isEmpty);       // l'affichage de la barre ne compte aucune vue
     });

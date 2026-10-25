@@ -19,6 +19,9 @@ class Artisan {
   final List<String> trustBadges;
   final int? trustScore;
 
+  /// Compte du membre (anneau de ses statuts sur l'avatar) ; absent des anciennes réponses.
+  final int? userId;
+
   Artisan({
     required this.id,
     required this.name,
@@ -36,6 +39,7 @@ class Artisan {
     required this.description,
     this.trustBadges = const [],
     this.trustScore,
+    this.userId,
   });
 
   // Méthode fromJson — tolère le snake_case du backend Django DRF
@@ -76,6 +80,7 @@ class Artisan {
       description: (pick(['description', 'bio']) ?? '').toString(),
       trustBadges: _trustCodes(json['badges']),
       trustScore: json['trust_score'] is num ? (json['trust_score'] as num).round() : null,
+      userId: _userId(json),
     );
   }
 
@@ -109,4 +114,10 @@ List<String> _trustCodes(dynamic raw) {
   const known = {'NOUVEAU', 'VERIFIE', 'EXPERT', 'SUR'};
   if (raw is! List) return const [];
   return raw.map((e) => e is Map ? '${e['code']}' : '$e').where(known.contains).toList();
+}
+
+/// Compte rattaché : `user` (identifiant), `user_detail.id` ou `user_id` selon la réponse.
+int? _userId(Map<String, dynamic> json) {
+  final raw = json['user'] is num ? json['user'] : (json['user_detail'] is Map ? (json['user_detail'] as Map)['id'] : json['user_id']);
+  return raw is num ? raw.toInt() : int.tryParse('${raw ?? ''}');
 }

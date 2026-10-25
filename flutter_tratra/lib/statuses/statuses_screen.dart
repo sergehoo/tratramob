@@ -1,7 +1,7 @@
 // lib/statuses/statuses_screen.dart
 //
-// « Statuts » : Découvrir (statuts élargis de membres qui ne sont pas des contacts, regroupés par auteur), Mes statuts (compteurs de vues,
-// suppression) et Confidentialité (audience par défaut, réponses, contacts à qui masquer ses statuts).
+// « Statuts » : Actualités (comme WhatsApp : Mon statut, Récentes, Vues — contacts et membres qui partagent avec tous), Mes statuts
+// (compteurs de vues, suppression) et Confidentialité (audience par défaut, réponses, contacts à qui masquer ses statuts).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -13,6 +13,7 @@ import 'package:flutter_tratra/statuses/status_api.dart';
 import 'package:flutter_tratra/statuses/status_bar.dart';
 import 'package:flutter_tratra/statuses/status_composer.dart';
 import 'package:flutter_tratra/statuses/status_models.dart';
+import 'package:flutter_tratra/statuses/status_presence.dart';
 
 class StatusesScreen extends StatelessWidget {
   const StatusesScreen({super.key});
@@ -25,22 +26,25 @@ class StatusesScreen extends StatelessWidget {
             backgroundColor: TtColors.surface,
             foregroundColor: TtColors.ink,
             title: Text('Statuts', style: TratraTheme.style(TtType.h3)),
-            bottom: const TabBar(tabs: [Tab(text: 'Découvrir'), Tab(text: 'Mes statuts'), Tab(text: 'Confidentialité')]),
+            bottom: const TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [Tab(text: 'Actualités'), Tab(text: 'Mes statuts'), Tab(text: 'Confidentialité')]),
           ),
-          body: const TabBarView(children: [_DiscoverTab(), _MineTab(), _PrivacyTab()]),
+          body: const TabBarView(children: [_UpdatesTab(), _MineTab(), _PrivacyTab()]),
         ),
       );
 }
 
-class _DiscoverTab extends StatefulWidget {
-  const _DiscoverTab();
+/// « Actualités », comme WhatsApp : « Mon statut », puis « Récentes » (au moins un statut non vu) et « Vues », contacts et membres qui
+/// partagent avec tous réunis, le plus récent d'abord. Chaque avatar porte l'anneau segmenté de ses statuts.
+class _UpdatesTab extends StatefulWidget {
+  const _UpdatesTab();
   @override
-  State<_DiscoverTab> createState() => _DiscoverTabState();
+  State<_UpdatesTab> createState() => _UpdatesTabState();
 }
 
-class _DiscoverTabState extends State<_DiscoverTab> {
+class _UpdatesTabState extends State<_UpdatesTab> {
   late final StatusApi _api = context.read<StatusApi>();
-  List<StatusGroup>? _groups;
+  StatusFeed? _feed;
+  List<StatusGroup> _public = const [];
   int? _next;
   String? _error;
 
@@ -50,52 +54,129 @@ class _DiscoverTabState extends State<_DiscoverTab> {
     _load();
   }
 
-  Future<void> _load({bool more = false}) async {
+  Future<void> _load() async {
     try {
-      final r = await _api.discover(page: more ? (_next ?? 1) : 1);
+      final results = await Future.wait([_api.feed(), _api.discover()]);
+      final f = results[0] as StatusFeed;
+      final d = results[1] as ({List<StatusGroup> groups, int? next});
       if (!mounted) return;
       setState(() {
-        _groups = more ? [...?_groups, ...r.groups] : r.groups;
-        _next = r.next;
+        _feed = f;
+        _public = d.groups;
+        _next = d.next;
         _error = null;
       });
     } catch (e) {
-      if (mounted) setState(() => _error = friendlyError(e, 'Les statuts à découvrir n’ont pas pu être chargés.'));
+      if (mounted) setState(() => _error = friendlyError(e, 'Les statuts n’ont pas pu être chargés.'));
     }
+    if (mounted) maybeStatusPresence(context, listen: false)?.refresh(force: true);
+  }
+
+  Future<void> _more() async {
+    final page = _next;
+    if (page == null) return;
+    try {
+      final d = await _api.discover(page: page);
+      if (mounted) setState(() { _public = [..._public, ...d.groups]; _next = d.next; });
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e, 'La suite n’a pas pu être chargée.'), error: true);
+    }
+  }
+
+  Future<void> _compose() async {
+    final f = _feed;
+    if (f == null) return;
+    final item = await Navigator.of(context).push<StatusItem>(MaterialPageRoute(builder: (_) => StatusComposerScreen(limits: f.limits)));
+    if (item != null) _load();
+  }
+
+  static String ago(DateTime when) {
+    final d = DateTime.now().difference(when);
+    if (d.inMinutes < 1) return 'À l’instant';
+    if (d.inMinutes < 60) return 'Il y a ${d.inMinutes} min';
+    if (d.inHours < 24) return 'Il y a ${d.inHours} h';
+    return 'Hier';
+  }
+
+  Widget _header(String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s1),
+        child: Text(text, style: TratraTheme.style(TtType.caption, color: TtColors.ash).copyWith(fontWeight: FontWeight.w700, letterSpacing: 0.4)),
+      );
+
+  Widget _row(List<StatusGroup> all, int i, Set<int> contactIds) {
+    final g = all[i];
+    return ListTile(
+      key: ValueKey('status-row-${g.author.id}'),
+      contentPadding: const EdgeInsets.symmetric(horizontal: TtSpace.s4),
+      leading: StatusRing(
+        unseen: !g.seen,
+        count: g.statuses.length,
+        unseenCount: g.unseen,
+        size: 58,
+        child: TratraAvatar(name: g.author.name, photoUrl: g.author.avatar == null ? null : resolveMediaUrl(g.author.avatar!), size: 46),
+      ),
+      title: Text(g.author.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TratraTheme.style(TtType.title).copyWith(fontWeight: g.seen ? FontWeight.w500 : FontWeight.w700)),
+      subtitle: Text('${ago(latestOf(g))}${contactIds.contains(g.author.id) ? '' : ' · Partagé avec tous'}', style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
+      onTap: () => openStatusViewer(context, all, i, onDone: _load),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final groups = _groups;
-    if (_error != null && groups == null) {
+    final f = _feed;
+    if (_error != null && f == null) {
       return TratraEmptyState(icon: Icons.cloud_off_rounded, title: 'Statuts indisponibles', description: _error, actions: [TratraButton(label: 'Réessayer', variant: TratraButtonVariant.outline, onPressed: _load)]);
     }
-    if (groups == null) return const TratraSkeletonList(count: 3);
-    if (groups.isEmpty) {
-      return const TratraEmptyState(icon: Icons.explore_outlined, title: 'Rien à découvrir pour le moment', description: 'Les statuts que des membres choisissent de partager avec tous apparaîtront ici.');
-    }
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: GridView.builder(
-        padding: const EdgeInsets.all(TtSpace.s4),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, mainAxisSpacing: 16, crossAxisSpacing: 8, childAspectRatio: 0.78),
-        itemCount: groups.length + (_next != null ? 1 : 0),
-        itemBuilder: (_, i) {
-          if (i == groups.length) return Center(child: TextButton(onPressed: () => _load(more: true), child: const Text('Voir plus')));
-          final g = groups[i];
-          return InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () => openStatusViewer(context, groups, i, onDone: _load),
-            child: Column(children: [
-              StatusRing(unseen: !g.seen, size: 72, child: TratraAvatar(name: g.author.name, photoUrl: g.author.avatar == null ? null : resolveMediaUrl(g.author.avatar!), size: 58)),
-              const SizedBox(height: 6),
-              Text(g.author.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TratraTheme.style(TtType.caption, color: g.seen ? TtColors.ash : TtColors.ink).copyWith(fontWeight: g.seen ? FontWeight.w500 : FontWeight.w700)),
-              Text('${g.statuses.length} statut${g.statuses.length > 1 ? 's' : ''}', style: TratraTheme.style(TtType.caption, color: TtColors.ash).copyWith(fontSize: 11)),
+    if (f == null) return const TratraSkeletonList(count: 4);
+    final contactIds = {for (final g in f.contacts) g.author.id};
+    final others = [...f.contacts, ..._public.where((g) => !contactIds.contains(g.author.id))];
+    final recent = others.where((g) => !g.seen).toList()..sort((a, b) => latestOf(b).compareTo(latestOf(a)));
+    final viewed = others.where((g) => g.seen).toList()..sort((a, b) => latestOf(b).compareTo(latestOf(a)));
+    final ordered = [...recent, ...viewed];
+    final mine = f.mine;
+    return Stack(children: [
+      RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(padding: const EdgeInsets.only(bottom: 96), children: [
+          ListTile(
+            key: const ValueKey('status-row-mine'),
+            contentPadding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s2, TtSpace.s4, 0),
+            leading: Stack(clipBehavior: Clip.none, children: [
+              mine.statuses.isEmpty
+                  ? TratraAvatar(name: mine.author.name, photoUrl: mine.author.avatar == null ? null : resolveMediaUrl(mine.author.avatar!), size: 52)
+                  : StatusRing(unseen: false, count: mine.statuses.length, size: 58, child: TratraAvatar(name: mine.author.name, photoUrl: mine.author.avatar == null ? null : resolveMediaUrl(mine.author.avatar!), size: 46)),
+              if (mine.statuses.isEmpty)
+                const Positioned(right: -2, bottom: -2, child: CircleAvatar(radius: 11, backgroundColor: TtColors.accent, child: Icon(Icons.add_rounded, size: 16, color: TtColors.night))),
             ]),
-          );
-        },
+            title: Text('Mon statut', style: TratraTheme.style(TtType.title)),
+            subtitle: Text(mine.statuses.isEmpty ? 'Appuyez pour ajouter un statut' : '${mine.statuses.length} statut${mine.statuses.length > 1 ? 's' : ''} · ${ago(latestOf(mine))}',
+                style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
+            onTap: () => mine.statuses.isEmpty ? _compose() : openStatusViewer(context, [mine], 0, onDone: _load),
+          ),
+          if (recent.isNotEmpty) ...[_header('RÉCENTES'), for (var i = 0; i < recent.length; i++) _row(ordered, i, contactIds)],
+          if (viewed.isNotEmpty) ...[_header('VUES'), for (var i = 0; i < viewed.length; i++) _row(ordered, recent.length + i, contactIds)],
+          if (others.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(TtSpace.s6),
+              child: Text('Aucun statut pour le moment. Les statuts de vos contacts Tratra et ceux que des membres partagent avec tous apparaîtront ici.',
+                  textAlign: TextAlign.center, style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
+            ),
+          if (_next != null) Center(child: TextButton(onPressed: _more, child: const Text('Voir plus'))),
+        ]),
       ),
-    );
+      Positioned(
+        right: TtSpace.s4,
+        bottom: TtSpace.s4,
+        child: FloatingActionButton(
+          heroTag: 'status-compose',
+          tooltip: 'Nouveau statut',
+          backgroundColor: TtColors.primary,
+          foregroundColor: Colors.white,
+          onPressed: _compose,
+          child: const Icon(Icons.add_a_photo_outlined),
+        ),
+      ),
+    ]);
   }
 }
 

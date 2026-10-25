@@ -14,6 +14,7 @@ import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/messaging/inbox_controller.dart';
 import 'package:flutter_tratra/routes.dart';
+import 'package:flutter_tratra/statuses/status_presence.dart';
 import 'package:flutter_tratra/statuses/statuses_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/bookings_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
@@ -108,6 +109,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     // Non lus en temps réel (WebSocket) ; à défaut, le compteur du tableau de bord.
     final live = context.select<InboxController, int>((c) => c.unread);
     final unreadMessages = live > 0 ? live : (data?.unreadMessages ?? 0);
+    final hasNewStatuses = maybeStatusPresence(context)?.hasUnseen ?? false;
     return Scaffold(
       backgroundColor: TtColors.canvas,
       // L'onglet Explorer porte sa propre en-tête (catalogue).
@@ -130,9 +132,16 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
               ]),
               actions: [
                 IconButton(
-                  tooltip: 'Statuts',
+                  tooltip: hasNewStatuses ? 'Statuts : nouveaux statuts' : 'Statuts',
                   onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StatusesScreen())),
-                  icon: const Icon(Icons.motion_photos_on_outlined),
+                  // Pastille verte, comme l'onglet « Actus » de WhatsApp : un contact ou un membre a publié un statut non vu.
+                  icon: Badge(
+                    key: const ValueKey('statuses-badge'),
+                    isLabelVisible: hasNewStatuses,
+                    smallSize: 9,
+                    backgroundColor: TtColors.primary,
+                    child: const Icon(Icons.motion_photos_on_outlined),
+                  ),
                 ),
                 IconButton(
                   tooltip: 'Messages',

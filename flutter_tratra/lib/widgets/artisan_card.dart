@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/models/artisan.dart';
 import 'card_parts.dart';
+import 'package:flutter_tratra/statuses/status_presence.dart';
 
 /// Carte d'artisan (photo réelle sinon initiales, disponibilité, nom, métier, note, tarif).
 ///
@@ -41,7 +42,8 @@ class ArtisanCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 30),
             child: Center(
-              child: TratraAvatar(
+              child: StatusAvatar(
+                userId: artisan.userId,
                 name: artisan.name,
                 photoUrl: CardPhoto.isUsable(artisan.imageUrl) ? artisan.imageUrl : null,
                 size: 64,

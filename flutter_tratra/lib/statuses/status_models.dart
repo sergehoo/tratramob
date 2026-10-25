@@ -119,3 +119,20 @@ const statusBackgrounds = <String, ({Color bg, Color fg, String label})>{
   'rose': (bg: Color(0xFFC2410C), fg: Colors.white, label: 'Orange'),
   'violet': (bg: Color(0xFF6B46C1), fg: Colors.white, label: 'Violet'),
 };
+
+/// Un membre dont je peux voir au moins un statut actif : anneau sur son avatar partout dans l'application (`/statuses/presence/`).
+class StatusPresenceEntry {
+  StatusPresenceEntry.fromJson(Map<String, dynamic> j)
+      : userId = (j['id'] as num).toInt(),
+        count = ((j['count'] ?? 1) as num).toInt(),
+        unseen = ((j['unseen'] ?? 0) as num).toInt(),
+        mine = j['mine'] == true;
+  final int userId;
+  final int count;
+  final int unseen;
+  final bool mine;
+}
+
+/// Date du statut le plus récent d'un groupe (tri « Récentes » / « Vues » de l'écran des statuts).
+DateTime latestOf(StatusGroup g) => g.statuses.isEmpty ? DateTime.fromMillisecondsSinceEpoch(0) : g.statuses.map((s) => s.createdAt).reduce((a, b) => a.isAfter(b) ? a : b);
+

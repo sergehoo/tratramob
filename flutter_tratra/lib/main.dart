@@ -59,6 +59,7 @@ import 'package:flutter_tratra/messaging/inbox_controller.dart';
 import 'package:flutter_tratra/messaging/messaging_api.dart';
 import 'package:flutter_tratra/onboarding/onboarding_api.dart';
 import 'package:flutter_tratra/statuses/status_api.dart';
+import 'package:flutter_tratra/statuses/status_presence.dart';
 import 'package:flutter_tratra/screens/tracking_screen.dart';
 import 'package:flutter_tratra/screens/payment_screen.dart';
 import 'package:flutter_tratra/screens/auth/profile_screen.dart';
@@ -167,6 +168,15 @@ void main() {
               final c = prev ?? InboxController(base, api);
               unawaited(c.bindUser(session.user?.id));
               return c;
+            },
+          ),
+          // Anneaux des statuts sur les avatars (accueil, messagerie, profils), comme WhatsApp
+          ChangeNotifierProxyProvider3<StatusApi, InboxController, Session, StatusPresence>(
+            create: (ctx) => StatusPresence(ctx.read<StatusApi>(), ctx.read<InboxController>()),
+            update: (_, api, inbox, session, prev) {
+              final p = prev ?? StatusPresence(api, inbox);
+              p.bindUser(session.user?.id);
+              return p;
             },
           ),
 

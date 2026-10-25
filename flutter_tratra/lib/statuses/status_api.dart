@@ -38,6 +38,15 @@ class StatusApi {
     );
   }
 
+  /// Membres qui ont un statut que je peux voir (anneaux des avatars). Serveur plus ancien sans ce point d'accès : liste vide.
+  Future<List<StatusPresenceEntry>> presence() async {
+    final d = _map(await _call('GET', '/statuses/presence/'));
+    return ((d['results'] as List?) ?? const []).whereType<Map>().map((e) => StatusPresenceEntry.fromJson(e.cast<String, dynamic>())).toList();
+  }
+
+  /// Statuts actifs d'un membre (toucher son avatar), avec les droits du serveur.
+  Future<StatusGroup> author(int userId) async => StatusGroup.fromJson(_map(await _call('GET', '/statuses/authors/$userId/')));
+
   Future<StatusItem> publish({
     String text = '',
     String? filePath,
