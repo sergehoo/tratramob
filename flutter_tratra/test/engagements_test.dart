@@ -293,6 +293,26 @@ void main() {
       expect(find.text('Retirée'), findsOneWidget);
     });
 
+    testWidgets('serveur sans invitations (application plus récente que l’API) : aucun bloc d’erreur, le besoin s’affiche', (t) async {
+      await t.binding.setSurfaceSize(const Size(800, 3000));
+      addTearDown(() => t.binding.setSurfaceSize(null));
+      final f = fakeApi((r) async {
+        if (r.url.path.endsWith('/postings/5/invitations/')) return ok({'detail': 'Not found.'}, 404);
+        if (r.url.path.endsWith('/postings/5/')) {
+          return ok({'id': 5, 'title': 'Nounou à domicile', 'status': 'open', 'mine': true, 'category': {'id': 1, 'name': 'Garde d’enfants'}, 'city': 'Abidjan',
+            'mission_type': 'long_term', 'work_relationship': 'independent', 'amount': '120000.00', 'period': 'monthly', 'currency': 'XOF', 'schedule': [],
+            'description': '', 'conditions': '', 'publisher': {'name': 'Awa C.'}, 'organization': null});
+        }
+        return ok({'results': []});
+      });
+      await t.pumpWidget(host(f.api, const PostingScreen(id: 5)));
+      await settle(t);
+      expect(find.text('Nounou à domicile'), findsWidgets);
+      expect(find.text('Inviter un professionnel'), findsNothing);
+      expect(find.text('Chargement impossible'), findsNothing);
+      expect(find.textContaining('Not found'), findsNothing);
+    });
+
     testWidgets('contrat à signer : statut « à signer », signature seulement après lecture, consentement explicite envoyé', (t) async {
       await t.binding.setSurfaceSize(const Size(800, 3000));
       addTearDown(() => t.binding.setSurfaceSize(null));

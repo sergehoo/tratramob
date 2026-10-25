@@ -115,7 +115,7 @@ class _Invitations extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => EngLoader<Json>(
-        load: () => api.getMap('/invitations/mine/'),
+        load: () => orIfUnsupported(api.getMap('/invitations/mine/'), const <String, dynamic>{}),
         builder: (ctx, data, reload) {
           final open = data.l('results').where((i) => i.b('can_respond')).toList();
           if (open.isEmpty) return const SizedBox.shrink();

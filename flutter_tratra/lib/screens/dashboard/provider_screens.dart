@@ -289,13 +289,15 @@ class _ServiceRow extends StatelessWidget {
           alignment: WrapAlignment.spaceBetween,
           children: [
             TratraBadge(label, tone: tone, dot: true),
-            TratraButton(
-              key: ValueKey('service-modes-${service['id']}'),
-              label: 'Modes',
-              size: TratraButtonSize.sm,
-              variant: TratraButtonVariant.ghost,
-              onPressed: onModes,
-            ),
+            // Modes modifiables seulement si le serveur les gère (il les renvoie alors avec l'offre).
+            if (service.containsKey('modes'))
+              TratraButton(
+                key: ValueKey('service-modes-${service['id']}'),
+                label: 'Modes',
+                size: TratraButtonSize.sm,
+                variant: TratraButtonVariant.ghost,
+                onPressed: onModes,
+              ),
             TratraButton(
               label: active ? 'Désactiver' : 'Activer',
               size: TratraButtonSize.sm,
@@ -433,7 +435,7 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
     final dash = context.read<DashboardController>();
     try {
       final duration = int.tryParse(_duration.text) ?? 0;
-      await _api.post('/services/', {
+      final created = await _api.post('/services/', {
         'title': _title.text.trim(),
         'description': _description.text.trim(),
         'category': int.parse(_categoryId!),
@@ -445,7 +447,11 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
       await dash.load();
       if (!mounted) return;
       final published = dash.data?.provider?.eligibility?.authorized ?? dash.data?.provider?.publishable ?? false;
-      showMessage(context, published ? 'Offre créée et publiée.' : 'Offre créée : elle sera publiée dès que votre publication sera autorisée.');
+      // Serveur pas encore à jour (il ne renvoie pas les modes) : l'offre est ponctuelle, on le dit au lieu de laisser croire le contraire.
+      final modesIgnored = !created.containsKey('modes') && _modes.any((m) => m != 'one_off');
+      showMessage(context, modesIgnored
+          ? 'Offre créée en mode ponctuel : les modes récurrent et contractuel ne sont pas encore disponibles sur le serveur.'
+          : published ? 'Offre créée et publiée.' : 'Offre créée : elle sera publiée dès que votre publication sera autorisée.');
       Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {

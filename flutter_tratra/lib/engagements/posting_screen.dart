@@ -130,7 +130,7 @@ class _PostingScreenState extends State<PostingScreen> {
               ]),
             ),
             const SizedBox(height: 16),
-            if (mine && p.s('status') == 'open') ...[_InvitePanel(api: _api, postingId: p.i('id')), const SizedBox(height: 16)],
+            if (mine && p.s('status') == 'open') _InvitePanel(api: _api, postingId: p.i('id')),
             if (mine) _Applications(api: _api, posting: p, version: _apps, onChanged: _load) else _ApplyBlock(api: _api, posting: p, mine: _mine, onChanged: _load),
           ],
         ),
@@ -184,44 +184,47 @@ class _InvitePanelState extends State<_InvitePanel> {
     }
   }
 
+  /// Invitations du besoin ; `unsupported` si le serveur ne propose pas encore les invitations (le bloc est alors masqué).
+  Future<Json> _load() => orIfUnsupported<Json>(widget.api.getMap('/postings/${widget.postingId}/invitations/'), const {'unsupported': true});
+
   @override
-  Widget build(BuildContext context) => TratraCard(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Inviter un professionnel', style: TratraTheme.style(TtType.h2)),
-          const SizedBox(height: 4),
-          Text('Seuls les professionnels vérifiés peuvent être invités. L’invitation leur propose de candidater ; vous choisissez ensuite.',
-              style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
-          const SizedBox(height: 12),
-          WorkerPicker(key: ValueKey('invite-picker-$_pickerKey'), api: widget.api, label: 'Professionnel vérifié', onPicked: (w) => setState(() => _worker = w)),
-          const SizedBox(height: 10),
-          TratraInput(key: ValueKey('invite-message-$_pickerKey'), label: 'Message', optional: true, maxLength: 500, maxLines: 3, minLines: 2, onChanged: (v) => _message = v),
-          if (_error != null) ...[const SizedBox(height: 8), TratraAlert(tone: TratraAlertTone.danger, message: _error!)],
-          const SizedBox(height: 10),
-          TratraButton(key: const ValueKey('invite-send'), label: 'Envoyer l’invitation', block: true, loading: _busy, onPressed: _worker == null || _busy ? null : _invite),
-          EngLoader<Json>(
-            reloadKey: _version,
-            load: () => widget.api.getMap('/postings/${widget.postingId}/invitations/'),
-            builder: (ctx, data, reload) {
-              final rows = data.l('results');
-              if (rows.isEmpty) return const SizedBox.shrink();
-              return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const SizedBox(height: 12),
-                for (final i in rows)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(i.m('invitee').s('name'), style: TratraTheme.style(TtType.bodySm).copyWith(fontWeight: FontWeight.w700)),
-                    subtitle: Text(_invitationStatusFr[i.s('status')] ?? i.s('status'), style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
-                    trailing: i.s('status') == 'sent'
-                        ? AsyncAction(label: 'Retirer', variant: TratraButtonVariant.ghost, confirm: 'Le professionnel ne pourra plus répondre à cette invitation.', run: () async {
-                            await widget.api.post('/invitations/${i.i('id')}/cancel/');
-                            await reload();
-                          })
-                        : null,
-                  ),
-              ]);
-            },
-          ),
-        ]),
+  Widget build(BuildContext context) => EngLoader<Json>(
+        reloadKey: _version,
+        load: _load,
+        builder: (ctx, data, reload) => data.b('unsupported')
+            ? const SizedBox.shrink()
+            : Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: TratraCard(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Inviter un professionnel', style: TratraTheme.style(TtType.h2)),
+                    const SizedBox(height: 4),
+                    Text('Seuls les professionnels vérifiés peuvent être invités. L’invitation leur propose de candidater ; vous choisissez ensuite.',
+                        style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
+                    const SizedBox(height: 12),
+                    WorkerPicker(key: ValueKey('invite-picker-$_pickerKey'), api: widget.api, label: 'Professionnel vérifié', onPicked: (w) => setState(() => _worker = w)),
+                    const SizedBox(height: 10),
+                    TratraInput(key: ValueKey('invite-message-$_pickerKey'), label: 'Message', optional: true, maxLength: 500, maxLines: 3, minLines: 2, onChanged: (v) => _message = v),
+                    if (_error != null) ...[const SizedBox(height: 8), TratraAlert(tone: TratraAlertTone.danger, message: _error!)],
+                    const SizedBox(height: 10),
+                    TratraButton(key: const ValueKey('invite-send'), label: 'Envoyer l’invitation', block: true, loading: _busy, onPressed: _worker == null || _busy ? null : _invite),
+                    for (final i in data.l('results')) ...[
+                      if (i == data.l('results').first) const SizedBox(height: 12),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(i.m('invitee').s('name'), style: TratraTheme.style(TtType.bodySm).copyWith(fontWeight: FontWeight.w700)),
+                        subtitle: Text(_invitationStatusFr[i.s('status')] ?? i.s('status'), style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
+                        trailing: i.s('status') == 'sent'
+                            ? AsyncAction(label: 'Retirer', variant: TratraButtonVariant.ghost, confirm: 'Le professionnel ne pourra plus répondre à cette invitation.', run: () async {
+                                await widget.api.post('/invitations/${i.i('id')}/cancel/');
+                                await reload();
+                              })
+                            : null,
+                      ),
+                    ],
+                  ]),
+                ),
+              ),
       );
 }
 

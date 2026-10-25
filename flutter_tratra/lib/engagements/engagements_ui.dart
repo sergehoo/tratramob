@@ -41,6 +41,17 @@ class FormError implements Exception {
   final String message;
 }
 
+/// Fonction pas encore servie par l'API interrogée (application plus récente que le serveur déployé) : 404/405 → `fallback`, sans
+/// bloc d'erreur. Les autres erreurs restent signalées.
+Future<T> orIfUnsupported<T>(Future<T> request, T fallback) async {
+  try {
+    return await request;
+  } on ApiException catch (e) {
+    if (e.statusCode == 404 || e.statusCode == 405) return fallback;
+    rethrow;
+  }
+}
+
 String messageOf(Object e, [String fallback = 'Opération impossible. Rien n’a été modifié.']) => e is ApiException ? e.message : (e is FormError ? e.message : fallback);
 
 class StatusChip extends StatelessWidget {
