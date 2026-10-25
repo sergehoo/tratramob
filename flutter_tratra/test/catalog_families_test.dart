@@ -131,4 +131,12 @@ void main() {
     await t.pumpAndSettle();
     expect(find.text('Problème non reconnu'), findsOneWidget);
   });
+
+  test('tuile : un mot long réduit la taille du nom au lieu d’être coupé en plein mot', () {
+    expect(fittedNameSize('Nounou', 100, TextScaler.noScaling), 13);
+    final size = fittedNameSize('Cybersécurité', 60, TextScaler.noScaling);
+    expect(size, lessThan(13));
+    expect(size, greaterThanOrEqualTo(10));
+    expect(fittedNameSize('Développement', 1, TextScaler.noScaling), 10); // plancher de lisibilité
+  });
 }

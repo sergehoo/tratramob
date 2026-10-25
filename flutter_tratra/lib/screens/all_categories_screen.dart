@@ -519,6 +519,24 @@ class _AllCategoriesScreenState extends State<AllCategoriesScreen> {
   }
 }
 
+/// Taille du nom d'une tuile : 13 par défaut, réduite (jusqu'à 10) pour que le mot le plus long tienne sur une ligne — jamais
+/// « Cybersécurit / é » coupé en plein mot.
+double fittedNameSize(String name, double maxWidth, TextScaler scaler, {double base = 13, double min = 10}) {
+  if (!maxWidth.isFinite || maxWidth <= 0) return base;
+  var widest = 0.0;
+  for (final word in name.split(RegExp(r'\s+'))) {
+    final painter = TextPainter(
+      text: TextSpan(text: word, style: TratraTheme.style(TtType.h3).copyWith(fontSize: base)),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    if (painter.width > widest) widest = painter.width;
+  }
+  if (widest <= maxWidth) return base;
+  return (base * maxWidth / widest).clamp(min, base);
+}
+
 /// « 12 offres », « 1 offre » ou « Aucune offre » (un métier sans offre reste affiché).
 String _offersLabel(int? count) {
   if (count == null) return '';
@@ -583,13 +601,12 @@ class _CategoryTile extends StatelessWidget {
             child: Center(child: homeCategoryIcon(c, color: TtColors.primaryDark)),
           ),
           const SizedBox(height: TtSpace.s2),
-          Text(
-            c.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.15),
-            style: TratraTheme.style(TtType.h3).copyWith(fontSize: 13, height: 1.25),
+          LayoutBuilder(
+            builder: (context, box) {
+              final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.15);
+              final style = TratraTheme.style(TtType.h3).copyWith(fontSize: fittedNameSize(c.name, box.maxWidth, scaler), height: 1.25);
+              return Text(c.name, maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center, textScaler: scaler, style: style);
+            },
           ),
           const SizedBox(height: 2),
           Text(

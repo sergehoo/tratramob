@@ -66,6 +66,8 @@ class _PanneScreenState extends State<PanneScreen> {
   late final BaseApi _api = context.read<BaseApi>();
   late final TextEditingController _text = TextEditingController(text: widget.initialText ?? '');
   final TextEditingController _commune = TextEditingController();
+  final ScrollController _scroll = ScrollController();
+  final GlobalKey _resultsKey = GlobalKey();
   bool _busy = false;
   String? _error;
   List<PanneMatch>? _results;
@@ -80,6 +82,7 @@ class _PanneScreenState extends State<PanneScreen> {
   void dispose() {
     _text.dispose();
     _commune.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -93,7 +96,15 @@ class _PanneScreenState extends State<PanneScreen> {
     });
     try {
       final results = await fetchPanneMatches(_api, text);
-      if (mounted) setState(() => _results = results);
+      if (!mounted) return;
+      setState(() => _results = results);
+      // Les résultats arrivent sous le formulaire : on les amène à l'écran.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final target = _resultsKey.currentContext;
+        if (target != null && mounted) {
+          Scrollable.ensureVisible(target, duration: const Duration(milliseconds: 350), curve: Curves.easeOutCubic, alignment: 0.05);
+        }
+      });
     } catch (_) {
       if (mounted) setState(() => _error = 'L’analyse n’a pas pu être faite. Vérifiez votre connexion et réessayez.');
     } finally {
@@ -114,6 +125,7 @@ class _PanneScreenState extends State<PanneScreen> {
       backgroundColor: TtColors.canvas,
       appBar: const TratraAppBar(title: 'J’ai une panne'),
       body: ListView(
+        controller: _scroll,
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s4, TtSpace.s4, TtSpace.s8 + MediaQuery.paddingOf(context).bottom),
         children: [
@@ -162,7 +174,7 @@ class _PanneScreenState extends State<PanneScreen> {
           ),
           if (_error != null) ...[const SizedBox(height: TtSpace.s4), TratraAlert(tone: TratraAlertTone.danger, message: _error!)],
           if (results != null && results.isEmpty) ...[
-            const SizedBox(height: TtSpace.s5),
+            SizedBox(key: _resultsKey, height: TtSpace.s5),
             const TratraEmptyState(
               compact: true,
               icon: Icons.help_outline_rounded,
@@ -171,7 +183,7 @@ class _PanneScreenState extends State<PanneScreen> {
             ),
           ],
           if (results != null && results.isNotEmpty) ...[
-            const SizedBox(height: TtSpace.s5),
+            SizedBox(key: _resultsKey, height: TtSpace.s5),
             Text('Prestations correspondant à votre panne', style: TratraTheme.style(TtType.h2)),
             const SizedBox(height: TtSpace.s2),
             for (final m in results)
