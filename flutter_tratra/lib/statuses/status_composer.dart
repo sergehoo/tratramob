@@ -229,7 +229,20 @@ class _StatusComposerScreenState extends State<StatusComposerScreen> {
         ),
         SwitchListTile(contentPadding: EdgeInsets.zero, value: _replies, onChanged: _busy ? null : (v) => setState(() => _replies = v), title: const Text('Autoriser les réponses par message')),
         if (_error != null) Padding(padding: const EdgeInsets.only(top: TtSpace.s2), child: TratraAlert(tone: TratraAlertTone.danger, message: _error!)),
-        if (_busy) Padding(padding: const EdgeInsets.only(top: TtSpace.s3), child: LinearProgressIndicator(value: _progress == 0 ? null : _progress, color: TtColors.primary, minHeight: 6)),
+        if (_busy)
+          Padding(
+            padding: const EdgeInsets.only(top: TtSpace.s3),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              LinearProgressIndicator(value: _progress == 0 || _progress >= 1 ? null : _progress, color: TtColors.primary, minHeight: 6),
+              const SizedBox(height: TtSpace.s2),
+              // Envoi suivi octet par octet, puis attente de la réponse du serveur (enregistrement de la photo ou de la vidéo).
+              Text(
+                _mode == _Mode.text ? 'Publication en cours…' : (_progress >= 1 ? 'Envoi terminé, publication en cours…' : 'Envoi en cours… ${(_progress * 100).round()} %'),
+                key: const ValueKey('status-progress-label'),
+                style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft),
+              ),
+            ]),
+          ),
         const SizedBox(height: TtSpace.s4),
         TratraButton(label: _error != null && !_busy ? 'Réessayer' : 'Publier', block: true, loading: _busy, onPressed: _empty ? null : _publish),
         const SizedBox(height: TtSpace.s8),

@@ -3,6 +3,8 @@
 // ===============================
 import 'dart:convert';
 import 'dart:typed_data';
+
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_tratra/core/api_exception.dart';
@@ -141,25 +143,26 @@ class BaseApi {
       final total = req.contentLength;
       // finalize() pose l'en-tête « multipart/form-data; boundary=… » : il doit précéder la copie des en-têtes, sinon la requête part sans
       // Content-Type et le serveur répond « Type de média « » non supporté ».
-      final body = req.finalize();
-      final streamed = http.StreamedRequest(req.method, req.url)
+      // Progression RÉELLE : chaque morceau est compté quand le client HTTP le prend pour l'écrire sur la connexion (il suspend la lecture
+      // tant que le réseau n'a pas absorbé le précédent) — et non quand il est mis en mémoire, ce qui affichait 100 % aussitôt.
+      var sent = 0;
+      final body = req.finalize().map((chunk) {
+        sent += chunk.length;
+        if (total > 0) onProgress?.call((sent / total).clamp(0.0, 1.0));
+        return chunk;
+      });
+      final request = _StreamBodyRequest(req.method, req.url, body)
         ..headers.addAll(req.headers)
         ..contentLength = total;
-      var sent = 0;
-      body.listen(
-        (chunk) {
-          sent += chunk.length;
-          streamed.sink.add(chunk);
-          if (total > 0) onProgress?.call((sent / total).clamp(0.0, 1.0));
-        },
-        onDone: streamed.sink.close,
-        onError: (Object e, StackTrace st) {
-          streamed.sink.addError(e, st);
-          streamed.sink.close();
-        },
-        cancelOnError: true,
-      );
-      return http.Response.fromStream(await _raw.send(streamed).timeout(timeout));
+      final sw = Stopwatch()..start();
+      try {
+        final response = await http.Response.fromStream(await _raw.send(request).timeout(timeout));
+        if (kDebugMode) debugPrint('[envoi] $path : HTTP ${response.statusCode} en ${sw.elapsedMilliseconds} ms ($sent/$total octets)');
+        return response;
+      } catch (e) {
+        if (kDebugMode) debugPrint('[envoi] $path : ${e.runtimeType} après ${sw.elapsedMilliseconds} ms ($sent/$total octets) : $e');
+        rethrow;
+      }
     }
 
     // Envoi idempotent (`client_id`) : une coupure du transport est rejouée automatiquement (nouvelle connexion), jamais un délai dépassé
@@ -235,5 +238,18 @@ class BaseApi {
       return {'count': decoded.length, 'next': null, 'previous': null};
     }
     return const {'count': 0, 'next': null, 'previous': null};
+  }
+}
+
+
+/// Requête dont le corps est un flux déjà construit (multipart finalisé et compté) : lu à la demande par le client HTTP.
+class _StreamBodyRequest extends http.BaseRequest {
+  _StreamBodyRequest(super.method, super.url, this._body);
+  final Stream<List<int>> _body;
+
+  @override
+  http.ByteStream finalize() {
+    super.finalize();
+    return http.ByteStream(_body);
   }
 }
