@@ -10,6 +10,7 @@ import 'package:http/testing.dart';
 
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
+import 'package:flutter_tratra/core/deep_links.dart';
 import 'package:flutter_tratra/services/push_service.dart';
 
 class FakeGateway implements PushGateway {
@@ -105,8 +106,9 @@ void main() {
     expect(calls.single.method, 'POST');
     expect(calls.single.path, '/handy/devices/');
     expect(calls.single.auth, 'Bearer access-A');
-    // Aucun identifiant utilisateur envoyé ; l'application Android annonce qu'elle affiche elle-même l'alerte Tratra Flash.
-    expect(calls.single.body, {'device_token': 'tok-1', 'device_type': 'android', 'capabilities': ['flash1', 'rich1']});
+    // Aucun identifiant utilisateur envoyé ; l'application Android annonce qu'elle affiche elle-même l'alerte Tratra Flash, puis les
+    // fonctions récentes dont elle a l'écran (messages et push qui y conduisent).
+    expect(calls.single.body, {'device_token': 'tok-1', 'device_type': 'android', 'capabilities': ['flash1', 'rich1', ...appFeatures]});
     expect(push.status, PushStatus.registered);
     expect(await const FlutterSecureStorage().read(key: PushService.deviceIdKey), '41');
   });
@@ -118,6 +120,16 @@ void main() {
     await push.start();
     await push.bindUser('1');
     expect(calls.single.body!['device_type'], 'ios');
+    expect(calls.single.body!['capabilities'], appFeatures);          // pas d'alerte native, mais les mêmes écrans
+  });
+
+  test('fonctions annoncées : mêmes codes que le serveur, et chaque écran annoncé s’ouvre vraiment', () {
+    expect(appFeatures.toSet(), {'flash', 'favorites', 'tratra_id', 'engagements', 'panne', 'catalogue_families', 'service_modes'});
+    expect(appFeatures.every((c) => c.length <= 20), isTrue);
+    // Écrans du registre qui relèvent d'une fonction (handy/features.py) : aucun ne retombe sur le centre de notifications.
+    for (final key in ['flash_order', 'favorites', 'badge', 'engagements', 'panne', 'categories']) {
+      expect(parseDeepLink({'deeplink': 'tratra://$key'}).kind, isNot(DeepLinkKind.notifications), reason: key);
+    }
   });
 
   test('notifications refusées : l’appareil est tout de même enregistré (réglage modifiable ensuite)', () async {

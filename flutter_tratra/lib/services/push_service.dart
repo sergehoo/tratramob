@@ -22,6 +22,11 @@ import 'package:flutter_tratra/services/firebase_config.dart';
 /// Capacités annoncées au serveur par l'application Android (POST /devices/).
 const List<String> pushCapabilities = ['flash1', 'rich1'];
 
+/// Fonctions récentes dont cette version a l'écran, annoncées à chaque démarrage (mêmes codes que le registre du serveur,
+/// handy/features.py) : les messages et les push qui y conduisent ne partent que vers les téléphones qui les annoncent — jamais un
+/// bouton qui n'ouvre rien sur une ancienne version. Une fonction ajoutée ici doit avoir son écran (test/push_test.dart).
+const List<String> appFeatures = ['flash', 'favorites', 'tratra_id', 'engagements', 'panne', 'catalogue_families', 'service_modes'];
+
 enum PushStatus {
   /// Pas encore démarré.
   idle,
@@ -228,8 +233,8 @@ class PushService extends ChangeNotifier {
           'device_token': token,
           'device_type': defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android',
           // Android : l'application construit elle-même l'alerte Tratra Flash (actions, compte à rebours, retrait à l'échéance) et
-          // celle des annonces (grande image téléchargée, logo Tratra, bouton d'action).
-          if (defaultTargetPlatform == TargetPlatform.android) 'capabilities': pushCapabilities,
+          // celle des annonces (grande image téléchargée, logo Tratra, bouton d'action). Toutes plateformes : fonctions récentes.
+          'capabilities': [if (defaultTargetPlatform == TargetPlatform.android) ...pushCapabilities, ...appFeatures],
           if (previous != null && previous.isNotEmpty && previous != token) 'previous_token': previous,
         }),
       );
