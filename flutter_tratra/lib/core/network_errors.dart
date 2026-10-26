@@ -12,6 +12,17 @@ import 'package:http/http.dart' as http;
 bool isTransientNetworkError(Object e) =>
     e is SocketException || e is HttpException || e is HandshakeException || e is TlsException || e is http.ClientException;
 
+/// L'envoi n'a jamais atteint le serveur : adresse introuvable, connexion refusée ou impossible, certificat refusé. Le rejouer vers une
+/// autre adresse du même service ne crée aucun doublon.
+bool neverReachedServer(Object e) {
+  if (e is HandshakeException) return true;
+  if (e is SocketException) {
+    final text = '${e.message} ${e.osError?.message ?? ''}'.toLowerCase();
+    return const ['failed host lookup', 'connection refused', 'network is unreachable', 'no route to host'].any(text.contains);
+  }
+  return false;
+}
+
 /// Référence courte de l'échec : « NET-104 » (code système), « CONN », « TLS », « DELAI », « REPONSE ».
 String transferErrorRef(Object e) {
   if (e is SocketException) {

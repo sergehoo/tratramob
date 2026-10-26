@@ -25,13 +25,15 @@ class CashService extends BaseApi implements PrivateDownloader {
 
   /// Déclare un paiement (multipart : photo du reçu facultative). `idempotencyKey` identique = même intention rejouée sans doublon.
   Future<Map<String, dynamic>> declare(int bookingId, Map<String, String> fields, {String? filePath, required String idempotencyKey}) async {
-    final req = http.MultipartRequest('POST', Uri.parse('$baseUrl/bookings/$bookingId/payment/cash/'));
-    final h = await headers;
-    h.remove('Content-Type');
-    req.headers.addAll({...h, 'Idempotency-Key': idempotencyKey});
-    req.fields.addAll({for (final e in fields.entries) if (e.value.isNotEmpty) e.key: e.value});
-    if (filePath != null) req.files.add(await multipartFromPath('receipt', filePath));
-    final r = await http.Response.fromStream(await client.send(req));
+    final r = await http.Response.fromStream(await sendFile((base) async {
+      final req = http.MultipartRequest('POST', Uri.parse('$base/bookings/$bookingId/payment/cash/'));
+      final h = await headers;
+      h.remove('Content-Type');
+      req.headers.addAll({...h, 'Idempotency-Key': idempotencyKey});
+      req.fields.addAll({for (final e in fields.entries) if (e.value.isNotEmpty) e.key: e.value});
+      if (filePath != null) req.files.add(await multipartFromPath('receipt', filePath));
+      return req;
+    }));
     if (r.statusCode < 200 || r.statusCode >= 300) handleError(r);
     return _map(decodeBody(r));
   }

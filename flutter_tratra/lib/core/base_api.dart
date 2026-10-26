@@ -4,7 +4,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_tratra/core/api_exception.dart';
@@ -27,6 +27,54 @@ class BaseApi {
   }
 
   String get baseUrl => AppConstants.baseUrl;
+
+  // ----- Hôte d'envoi direct des fichiers (AppConstants.uploadBaseUrl, hors Cloudflare) -----
+  // Injoignable (adresse inconnue, connexion refusée, certificat, route absente du proxy) : les envois repassent par l'API habituelle
+  // pendant `uploadHostRetryAfter`, sans nouvelle tentative à chaque fichier.
+  static DateTime? _uploadHostDownUntil;
+  static const uploadHostRetryAfter = Duration(minutes: 10);
+
+  @visibleForTesting
+  static void resetUploadHost() => _uploadHostDownUntil = null;
+
+  static void _uploadHostUnreachable() => _uploadHostDownUntil = DateTime.now().add(uploadHostRetryAfter);
+
+  /// Base des envois de fichiers : l'hôte d'envoi direct, ou l'API habituelle s'il est injoignable depuis peu.
+  String get uploadBaseUrl {
+    final down = _uploadHostDownUntil;
+    return down != null && DateTime.now().isBefore(down) ? baseUrl : AppConstants.uploadBaseUrl;
+  }
+
+  /// Réponse que l'API n'a pas produite : route absente du proxy (404 non JSON) ou hôte mal dirigé (421).
+  static bool _notFromApi(http.BaseResponse r) =>
+      r.statusCode == 421 || (r.statusCode == 404 && !(r.headers['content-type'] ?? '').contains('json'));
+
+  /// L'hôte d'envoi a refusé CET envoi (chemin pas encore ouvert sur cet hôte côté serveur) : il repart par l'API habituelle.
+  static bool _refusedByUploadHost(http.BaseResponse r) => r.headers['x-upload-host'] == 'refused';
+
+  /// Par l'hôte d'envoi direct, puis par l'API habituelle s'il n'a pas pu recevoir l'envoi : injoignable, route absente du proxy, ou
+  /// chemin refusé. La requête n'a alors jamais atteint le traitement : la rejouer ne crée aucun doublon. Une coupure EN COURS d'envoi
+  /// ou une réponse de l'API n'est jamais rejouée ailleurs. `attempt` envoie pour une base donnée (une requête ne se renvoie pas).
+  Future<R> _viaUploadHost<R extends http.BaseResponse>(Future<R> Function(String base) attempt) async {
+    final direct = uploadBaseUrl;
+    if (direct != baseUrl) {
+      try {
+        final r = await attempt(direct);
+        final refused = _refusedByUploadHost(r);
+        if (!refused && !_notFromApi(r)) return r;
+        if (r is http.StreamedResponse) await r.stream.drain<void>();
+        if (!refused) _uploadHostUnreachable();
+      } catch (e) {
+        if (!neverReachedServer(e)) rethrow;
+        _uploadHostUnreachable();
+      }
+    }
+    return attempt(baseUrl);
+  }
+
+  /// Envoi d'un fichier (photo de profil, justificatif, reçu…) par l'hôte d'envoi direct, avec le client à rafraîchissement de session.
+  Future<http.StreamedResponse> sendFile(Future<http.BaseRequest> Function(String base) build) =>
+      _viaUploadHost((base) async => client.send(await build(base)));
 
   /// Télécharge un document PRIVÉ (justificatif, reçu) avec la session. Le jeton n'est envoyé QU'À l'origine de l'API : une URL d'une
   /// autre origine est refusée sans requête (jamais de fuite du jeton). L'URL renvoyée par l'API est relative à l'origine.
@@ -122,7 +170,8 @@ class BaseApi {
   /// Envoi multipart AVEC progression (0..1) : le corps est transmis par morceaux et compté (le client à rafraîchissement automatique
   /// met le corps en mémoire avant l'envoi, sans progression). Sur 401, UN rafraîchissement de session puis un nouvel essai.
   /// Les envois de messages et de statuts portent un `client_id` : rejouer après une coupure réseau ne crée jamais de doublon
-  /// (`networkRetries` nouveaux essais automatiques, espacés de `retryDelay`, puis 2 × `retryDelay`…).
+  /// (`networkRetries` nouveaux essais automatiques, espacés de `retryDelay`, puis 2 × `retryDelay`…). Part par l'hôte d'envoi direct
+  /// (hors Cloudflare), puis par l'API habituelle s'il est injoignable.
   Future<http.Response> uploadMultipart(
     String path, {
     Map<String, String> fields = const {},
@@ -132,8 +181,8 @@ class BaseApi {
     int networkRetries = 0,
     Duration retryDelay = const Duration(seconds: 1),
   }) async {
-    Future<http.Response> attempt(String? access) async {
-      final req = http.MultipartRequest('POST', Uri.parse('$baseUrl$path'))
+    Future<http.Response> attempt(String? access, String base) async {
+      final req = http.MultipartRequest('POST', Uri.parse('$base$path'))
         ..fields.addAll(fields)
         ..headers['Accept'] = 'application/json';
       if (access != null && access.isNotEmpty) req.headers['Authorization'] = 'Bearer $access';
@@ -167,12 +216,13 @@ class BaseApi {
 
     // Envoi idempotent (`client_id`) : une coupure du transport est rejouée automatiquement (nouvelle connexion), jamais un délai dépassé
     // ni une réponse du serveur.
-    Future<http.Response> attemptWithRetries(String? access) async {
+    Future<http.Response> attemptWithRetries(String? access, String base) async {
       for (var i = 0;; i++) {
         try {
-          return await attempt(access);
+          return await attempt(access, base);
         } catch (e) {
-          if (i >= networkRetries || !isTransientNetworkError(e)) rethrow;
+          // Hôte d'envoi injoignable : pas de nouvel essai sur lui, l'API habituelle prend le relais (_viaUploadHost).
+          if (i >= networkRetries || !isTransientNetworkError(e) || (base != baseUrl && neverReachedServer(e))) rethrow;
           await Future<void>.delayed(retryDelay * (i + 1));
         }
       }
@@ -185,10 +235,10 @@ class BaseApi {
     } catch (_) {
       access = _authToken;
     }
-    var r = await attemptWithRetries(access);
+    var r = await _viaUploadHost((base) => attemptWithRetries(access, base));
     if (r.statusCode == 401) {
       final fresh = await _refreshAccess();
-      if (fresh != null) r = await attemptWithRetries(fresh);
+      if (fresh != null) r = await _viaUploadHost((base) => attemptWithRetries(fresh, base));
     }
     return r;
   }

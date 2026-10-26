@@ -119,15 +119,17 @@ class BiometricApi {
   Future<BiometricSessionInfo> startSession() async => BiometricSessionInfo.fromJson(await _send('POST', '/kyc/biometric/sessions/', body: const {}));
 
   Future<void> uploadCapture(BiometricSessionInfo s, {required int index, required String kind, required Uint8List bytes}) async {
-    final req = http.MultipartRequest('POST', Uri.parse('${_base.baseUrl}/kyc/biometric/sessions/${s.id}/captures/'));
-    final h = await _base.headers;
-    h.remove('Content-Type');
-    req.headers.addAll(h);
-    req.headers['X-Biometric-Token'] = s.token;
-    req.fields['index'] = '$index';
-    req.fields['kind'] = kind;
-    req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: 'capture.jpg', contentType: MediaType('image', 'jpeg')));
-    _decode(await http.Response.fromStream(await _base.client.send(req)));
+    _decode(await http.Response.fromStream(await _base.sendFile((base) async {
+      final req = http.MultipartRequest('POST', Uri.parse('$base/kyc/biometric/sessions/${s.id}/captures/'));
+      final h = await _base.headers;
+      h.remove('Content-Type');
+      req.headers.addAll(h);
+      req.headers['X-Biometric-Token'] = s.token;
+      req.fields['index'] = '$index';
+      req.fields['kind'] = kind;
+      req.files.add(http.MultipartFile.fromBytes('file', bytes, filename: 'capture.jpg', contentType: MediaType('image', 'jpeg')));
+      return req;
+    })));
   }
 
   /// Soumet la session. Renvoie `outcome` (passed | failed | inconclusive | pending_review | provider_error) ; aucun score.

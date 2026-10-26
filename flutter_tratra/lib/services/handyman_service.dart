@@ -99,21 +99,19 @@ class HandymanService extends BaseApi {
     required String filePath,
     String? description,
   }) async {
-    final req = http.MultipartRequest(
-      'POST',
-      Uri.parse('$baseUrl${AppConstants.handymanDocsEndpoint}/'),
-    );
-    // En multipart, on laisse http poser le Content-Type (avec boundary).
-    final h = await headers;
-    h.remove('Content-Type');
-    req.headers.addAll(h);
-    req.fields['document_type'] = documentType;
-    if (description != null && description.isNotEmpty) {
-      req.fields['description'] = description;
-    }
-    req.files.add(await multipartFromPath('file', filePath));
-
-    final streamed = await client.send(req);
+    final streamed = await sendFile((base) async {
+      final req = http.MultipartRequest('POST', Uri.parse('$base${AppConstants.handymanDocsEndpoint}/'));
+      // En multipart, on laisse http poser le Content-Type (avec boundary).
+      final h = await headers;
+      h.remove('Content-Type');
+      req.headers.addAll(h);
+      req.fields['document_type'] = documentType;
+      if (description != null && description.isNotEmpty) {
+        req.fields['description'] = description;
+      }
+      req.files.add(await multipartFromPath('file', filePath));
+      return req;
+    });
     final r = await http.Response.fromStream(streamed);
     if (r.statusCode != 201 && r.statusCode != 200) handleError(r);
     return Map<String, dynamic>.from(decodeBody(r) as Map);

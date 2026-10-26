@@ -34,6 +34,17 @@ class AppConstants {
     defaultValue: 'https://api.tratra.net/handy',
   );
 
+  // Hôte d'envoi DIRECT des fichiers (photos, vidéos, pièces), en « DNS seulement » hors Cloudflare : sur certains Wi-Fi, les envois d'un
+  // téléphone vers Cloudflare sont coupés au bout de 15 s (mesuré le 26 oct. 2026) alors qu'ils passent en direct. Même API ; le serveur
+  // n'y accepte que les envois de fichiers. Surchargeable au build via --dart-define=TRATRA_UPLOAD_BASE=... ; avec une autre API
+  // (TRATRA_API_BASE, recette locale), les fichiers partent vers cette même API.
+  static const String _uploadBaseOverride = String.fromEnvironment('TRATRA_UPLOAD_BASE');
+  static String get uploadBaseUrl => uploadBaseFor(baseUrl, _uploadBaseOverride);
+  static String uploadBaseFor(String apiBase, String override) {
+    if (override.isNotEmpty) return override;
+    return apiBase == 'https://api.tratra.net/handy' ? 'https://upload.tratra.net/handy' : apiBase;
+  }
+
   // Fonctions financières (portefeuille, gains, retraits, écran de paiement). DÉSACTIVÉES par défaut : la version publiée sur
   // Google Play n'en propose aucune (Play réserve ces fonctions aux comptes organisation). Activables au build :
   // --dart-define=TRATRA_FINANCIAL=true. Les réservations en espèces et leur suivi restent disponibles.

@@ -62,13 +62,15 @@ class EngagementsApi implements PrivateDownloader {
 
   /// POST multipart avec pièce jointe facultative (justificatif de paiement ou d'ajustement) : `http` pose la frontière.
   Future<Map<String, dynamic>> postForm(String path, Map<String, String> fields, {String? filePath, String? idempotencyKey}) async {
-    final req = http.MultipartRequest('POST', _uri(path));
-    final h = await _base.headers;
-    h.remove('Content-Type');
-    req.headers.addAll({...h, if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey});
-    req.fields.addAll({for (final e in fields.entries) if (e.value.isNotEmpty) e.key: e.value});
-    if (filePath != null) req.files.add(await multipartFromPath('evidence', filePath));
-    final r = await http.Response.fromStream(await _base.client.send(req));
+    final r = await http.Response.fromStream(await _base.sendFile((base) async {
+      final req = http.MultipartRequest('POST', Uri.parse('$base$_root$path'));
+      final h = await _base.headers;
+      h.remove('Content-Type');
+      req.headers.addAll({...h, if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey});
+      req.fields.addAll({for (final e in fields.entries) if (e.value.isNotEmpty) e.key: e.value});
+      if (filePath != null) req.files.add(await multipartFromPath('evidence', filePath));
+      return req;
+    }));
     if (r.statusCode < 200 || r.statusCode >= 300) _base.handleError(r);
     return _map(_base.decodeBody(r));
   }
