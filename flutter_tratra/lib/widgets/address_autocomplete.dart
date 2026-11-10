@@ -24,11 +24,20 @@ class AddressPick {
   final double? lng;
   final String source;
 
+  /// Lieu nommé (pharmacie, école…), rue, quartier, commune, ville — sans doublon ni élément vide.
+  static String describe(Map<String, dynamic> s) {
+    final parts = <String>[];
+    for (final key in const ['name', 'street', 'quartier', 'commune', 'city']) {
+      final v = '${s[key] ?? ''}'.trim();
+      if (v.isNotEmpty && !parts.any((p) => p.toLowerCase() == v.toLowerCase())) parts.add(v);
+    }
+    return parts.join(', ');
+  }
+
   static AddressPick fromSuggestion(Map<String, dynamic> s, String source) {
-    final street = '${s['street'] ?? ''}'.trim();
     final commune = '${s['commune'] ?? ''}'.trim();
     final city = '${s['city'] ?? ''}'.trim();
-    final label = [if (street.isNotEmpty) street, if (commune.isNotEmpty) commune, if (city.isNotEmpty) city].join(', ');
+    final label = describe(s);
     return AddressPick(label: label.isNotEmpty ? label : '${s['label'] ?? ''}', commune: commune, city: city,
         lat: (s['latitude'] as num?)?.toDouble(), lng: (s['longitude'] as num?)?.toDouble(), source: source);
   }
@@ -200,9 +209,7 @@ class _AddressAutocompleteFieldState extends State<AddressAutocompleteField> {
                 key: ValueKey('address-suggestion-$i'),
                 dense: true,
                 leading: const Icon(Icons.place_outlined, color: TtColors.ash),
-                title: Text([sug['street'], sug['commune']].where((x) => '${x ?? ''}'.isNotEmpty).join(', ').isEmpty
-                    ? '${sug['label']}'
-                    : [sug['street'], sug['commune']].where((x) => '${x ?? ''}'.isNotEmpty).join(', ')),
+                title: Text(AddressPick.describe({...sug, 'city': ''}).isEmpty ? '${sug['label']}' : AddressPick.describe({...sug, 'city': ''})),
                 subtitle: Text('${sug['city'] ?? ''}'),
                 onTap: () => _choose(AddressPick.fromSuggestion(sug, 'geocoder')),
               ),
