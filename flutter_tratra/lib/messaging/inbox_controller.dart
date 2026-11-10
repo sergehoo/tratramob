@@ -19,7 +19,7 @@ enum InboxStatus { connecting, live, offline }
 
 class InboxEvent {
   InboxEvent(this.type, {this.message, this.conversation, this.conversationId, this.upto, this.ids = const [], this.raw = const {}});
-  final String type; // message | read | delivered | status | status_view | resync
+  final String type; // message | read | delivered | status | status_view | resync | flash_request | flash_offer
   final ChatMessage? message;
   final ChatConversation? conversation;
   final int? conversationId;
@@ -276,6 +276,9 @@ class InboxController extends ChangeNotifier with WidgetsBindingObserver {
       case 'delivered':
         _emit(InboxEvent('delivered', ids: ((m['ids'] as List?) ?? const []).map((e) => (e as num).toInt()).toList(), raw: m));
       case 'status' || 'status_view':
+        _emit(InboxEvent('${m['type']}', raw: m));
+      case 'flash_request' || 'flash_offer':
+        // Tratra Flash : état d'une recherche (client) ou d'une proposition (professionnel) ; l'API reste la référence.
         _emit(InboxEvent('${m['type']}', raw: m));
     }
   }

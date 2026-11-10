@@ -12,7 +12,7 @@ import 'package:flutter_tratra/flash/flash_api.dart';
 import 'package:flutter_tratra/flash/flash_controller.dart';
 import 'package:flutter_tratra/screens/worker/mission_detail_screen.dart';
 
-enum _Outcome { none, accepted, quoted, declined, closed, expired }
+enum _Outcome { none, accepted, quoted, countered, declined, closed, expired }
 
 class FlashOfferScreen extends StatefulWidget {
   const FlashOfferScreen({super.key, required this.offerId, required this.controller, this.ring = false, this.initialAction});
@@ -70,10 +70,16 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
         _left = offer.secondsLeft;
         if (offer.accepted) _outcome = _Outcome.accepted;
         if (offer.status == 'quoted') _outcome = _Outcome.quoted;
+        if (offer.countered) _outcome = _Outcome.countered;
         if (offer.status == 'declined') _outcome = _Outcome.declined;
-        if (const {'expired', 'withdrawn'}.contains(offer.status)) {
+        if (const {'expired', 'withdrawn', 'lapsed', 'resigned'}.contains(offer.status)) {
           _outcome = offer.status == 'expired' ? _Outcome.expired : _Outcome.closed;
-          _notice = offer.status == 'expired' ? 'Le délai de réponse est écoulé.' : 'Cette mission n’est plus disponible.';
+          _notice = switch (offer.status) {
+            'expired' => 'Le délai de réponse est écoulé.',
+            'lapsed' => 'Votre proposition de prix a expiré sans être choisie.',
+            'resigned' => 'Vous vous êtes désisté de cette mission.',
+            _ => 'Cette mission n’est plus disponible.',
+          };
         }
       });
       if (offer.pending && _left > 0) {
@@ -126,7 +132,7 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
       setState(() => _offer = offer);
       _finish(success);
     } on FlashApiError catch (e) {
-      if (const {'already_assigned', 'request_closed', 'offer_expired', 'offer_closed'}.contains(e.code)) {
+      if (const {'already_assigned', 'request_closed', 'offer_expired', 'offer_closed', 'counter_closed', 'counter_expired'}.contains(e.code)) {
         _finish(e.code == 'offer_expired' ? _Outcome.expired : _Outcome.closed, e.message);
       } else if (mounted) {
         setState(() {
@@ -145,6 +151,8 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
   }
 
   Future<void> _accept() => _run(() => _c.api.accept(widget.offerId), _Outcome.accepted);
+  Future<void> _acceptCounter() => _run(() => _c.api.acceptCounter(widget.offerId), _Outcome.accepted);
+  Future<void> _declineCounter() => _run(() => _c.api.declineCounter(widget.offerId), _Outcome.quoted);
 
   Future<void> _decline() async {
     final offer = _offer;
@@ -333,6 +341,27 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
             tone: TratraAlertTone.success,
             message: 'Devis envoyé${o.quoteAmount != null ? ' (${_money(o.quoteAmount!)})' : ''}. Le client choisit : vous serez prévenu.',
           ),
+        ];
+      case _Outcome.countered:
+        final counter = o.counter ?? const {};
+        return [
+          TratraCard(
+            key: const ValueKey('flash-counter-card'),
+            variant: TratraCardVariant.accent,
+            padding: TratraCard.compact,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Contre-offre du client : ${counter['amount_label'] ?? ''}', style: TratraTheme.style(TtType.h3)),
+              const SizedBox(height: TtSpace.s1),
+              Text('Votre proposition : ${o.quoteAmount != null ? _money(o.quoteAmount!) : '—'}. Accepter vous confirme la mission à ce montant ; '
+                  'sinon votre proposition reste valable et le client peut encore la choisir.', style: TratraTheme.style(TtType.bodySm)),
+            ]),
+          ),
+          const SizedBox(height: TtSpace.s3),
+          TratraButton(key: const ValueKey('flash-counter-accept'), label: 'Accepter ${counter['amount_label'] ?? ''}', size: TratraButtonSize.lg,
+              block: true, loading: _busy, onPressed: _busy ? null : _acceptCounter),
+          const SizedBox(height: TtSpace.s2),
+          TratraButton(key: const ValueKey('flash-counter-decline'), label: 'Garder ma proposition', variant: TratraButtonVariant.outline,
+              block: true, onPressed: _busy ? null : _declineCounter),
         ];
       case _Outcome.declined:
         return [

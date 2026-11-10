@@ -2,6 +2,7 @@
 //
 // API Tratra Flash (`/handy/flash/…`). Les règles (qui peut accepter, délais, attribution unique) restent côté serveur ; les écritures
 // envoient une `Idempotency-Key` stable par intention : un double appui ou un renvoi après coupure ne répond jamais deux fois.
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -38,6 +39,9 @@ class FlashOffer {
       .whereType<Map>()
       .map((e) => {'code': '${e['code']}', 'label': '${e['label']}'})
       .toList();
+  /// Contre-offre du client en attente de réponse (mode Propositions) : montant, libellé, secondes restantes.
+  Map<String, dynamic>? get counter => raw['counter'] is Map ? (raw['counter'] as Map).cast<String, dynamic>() : null;
+  bool get countered => status == 'countered' && counter != null;
   List<Map<String, dynamic>> get why => ((raw['why'] as List?) ?? const []).whereType<Map>().map((e) => e.cast<String, dynamic>()).toList();
 }
 
@@ -51,17 +55,20 @@ class FlashApiError implements Exception {
 }
 
 class FlashApi {
-  FlashApi(this._base);
+  FlashApi(this._base, {this.timeout = const Duration(seconds: 15)});
   final BaseApi _base;
+  /// Délai maximal d'une requête : jamais de chargement infini (réseau coupé, Wi-Fi captif). Les écritures portent une
+  /// `Idempotency-Key` : un renvoi après un délai dépassé ne répond jamais deux fois.
+  final Duration timeout;
 
   Future<Map<String, dynamic>> _send(String method, String path, {Object? body, String? key}) async {
     final uri = Uri.parse('${_base.baseUrl}$path');
     final headers = {...await _base.headers, if (key != null) 'Idempotency-Key': key};
-    final http.Response r = switch (method) {
-      'POST' => await _base.client.post(uri, headers: headers, body: json.encode(body ?? const {})),
-      'DELETE' => await _base.client.delete(uri, headers: headers),
-      _ => await _base.client.get(uri, headers: headers),
-    };
+    final http.Response r = await switch (method) {
+      'POST' => _base.client.post(uri, headers: headers, body: json.encode(body ?? const {})),
+      'DELETE' => _base.client.delete(uri, headers: headers),
+      _ => _base.client.get(uri, headers: headers),
+    }.timeout(timeout);
     final decoded = r.bodyBytes.isEmpty ? null : jsonDecode(utf8.decode(r.bodyBytes));
     final map = decoded is Map ? decoded.cast<String, dynamic>() : <String, dynamic>{};
     if (r.statusCode < 200 || r.statusCode >= 300) {
@@ -82,6 +89,11 @@ class FlashApi {
       FlashOffer(await _send('POST', '/flash/offers/$id/decline/', body: {'reason': reason}, key: 'flash-decline-$id'));
   Future<FlashOffer> quote(int id, int amount, String message) async => FlashOffer(
       await _send('POST', '/flash/offers/$id/quote/', body: {'amount': amount, 'message': message}, key: 'flash-quote-$id-$amount'));
+  /// Contre-offre du client : l'accepter attribue la mission à ce montant ; la refuser garde la proposition initiale.
+  Future<FlashOffer> acceptCounter(int id) async =>
+      FlashOffer(await _send('POST', '/flash/offers/$id/counter/accept/', key: 'flash-counter-accept-$id'));
+  Future<FlashOffer> declineCounter(int id) async =>
+      FlashOffer(await _send('POST', '/flash/offers/$id/counter/decline/', key: 'flash-counter-decline-$id'));
   Future<Map<String, dynamic>> availability() => _send('GET', '/flash/availability/');
   /// Bouton Disponible / Indisponible (point d'accès historique), puis état détaillé (éligibilité, silences, propositions en attente).
   Future<Map<String, dynamic>> setAvailability(bool online) async {
@@ -96,6 +108,11 @@ class FlashApi {
   Future<Map<String, dynamic>> cancelRequest(int id) => _send('POST', '/flash/requests/$id/cancel/', key: 'flash-cancel-$id');
   Future<Map<String, dynamic>> relaunch(int id, String key, {int? amount}) =>
       _send('POST', '/flash/requests/$id/relaunch/', body: {if (amount != null) 'amount': amount}, key: key);
+  /// Accord du client pour élargir la recherche au-delà du seuil (30 km par défaut).
+  Future<Map<String, dynamic>> extend(int id) => _send('POST', '/flash/requests/$id/extend/', key: 'flash-extend-$id');
+  /// Contre-offre sur une proposition de prix (montant plus bas) ; ni sélection, ni confirmation.
+  Future<Map<String, dynamic>> counter(int requestId, int offerId, int amount) => _send('POST',
+      '/flash/requests/$requestId/quotes/$offerId/counter/', body: {'amount': amount}, key: 'flash-counter-$requestId-$offerId-$amount');
   Future<Map<String, dynamic>> chooseQuote(int requestId, int offerId) =>
       _send('POST', '/flash/requests/$requestId/quotes/$offerId/accept/', key: 'flash-choose-$requestId-$offerId');
 
