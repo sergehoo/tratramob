@@ -131,7 +131,8 @@ void main() {
     await t.tap(find.byKey(const ValueKey('flash-request-cancel')));
     await t.pump(const Duration(milliseconds: 400));
     expect(find.text('Annuler la demande ?'), findsOneWidget);                             // confirmation exigée
-    await t.tap(find.text('Annuler la demande'));
+    expect(find.text('Oui, annuler'), findsOneWidget);                                     // libellés courts : jamais tronqués
+    await t.tap(find.text('Oui, annuler'));
     await t.pump(const Duration(milliseconds: 400));
     expect(s.posts.keys, contains('/handy/flash/requests/9/cancel/'));
     expect(s.keys.last, 'flash-cancel-9');
@@ -173,7 +174,7 @@ void main() {
     await t.tap(find.byKey(const ValueKey('flash-choose-32')));
     await t.pumpAndSettle();
     expect(find.text('Choisir Pro 32 ?'), findsOneWidget);                                // choix explicite, confirmé
-    await t.tap(find.text('Confirmer ce choix'));
+    await t.tap(find.text('Confirmer'));
     await t.pumpAndSettle();
     expect(s.posts.keys, contains('/handy/flash/requests/9/quotes/32/accept/'));
     expect(find.text('Confirmé'), findsWidgets);
@@ -209,6 +210,60 @@ void main() {
     expect(live.isOpen, isFalse);
   });
 
+  testWidgets('course : une lecture API partie avant un évènement WebSocket plus récent ne l’écrase jamais', (t) async {
+    final s = Server(request(s: search(seq: 56, radius: 1000, contacted: 1)));
+    final events = StreamController<InboxEvent>.broadcast();
+    addTearDown(events.close);
+    final live = FlashRequestLive(api: FlashApi(BaseApi(client: s.client)), requestId: 9, events: events.stream, observeLifecycle: false);
+    await live.start();
+    s.hang = Completer<void>();                                                          // la lecture suivante tarde (réseau)
+    final slow = live.refresh();
+    events.add(InboxEvent('flash_request', raw: {'type': 'flash_request', 'id': 9, 'status': 'searching', 'version': 1,
+        'search': search(seq: 60, radius: 5000, contacted: 3)}));                          // vague suivante reçue en direct
+    await t.pump();
+    expect(live.search.radiusM, 5000);
+    s.current = request(s: search(seq: 60, radius: 5000, contacted: 3));
+    final stale = request(s: search(seq: 56, radius: 1000, contacted: 1));
+    final fresh = s.current;
+    s.current = stale;                                                                   // la lecture en vol renvoie l'état ANCIEN
+    s.hang!.complete();
+    s.hang = null;
+    await slow;
+    expect(live.search.radiusM, 5000, reason: 'état plus récent conservé');
+    s.current = fresh;
+    await t.pump(const Duration(milliseconds: 800));                                     // relecture de rattrapage
+    await t.pump();
+    expect(live.search.seq, 60);
+    expect(live.search.count('contacted'), 3);
+    live.dispose();                                                                      // minuteries arrêtées avant la fin du test
+  });
+
+  testWidgets('accord demandé en direct : la carte « Élargir » apparaît sans attendre une lecture, étapes conservées', (t) async {
+    final s = await pump(t, Server(request(mode: 'quote', s: search(proposals: 1), quotes: [quote(31, 18000)])));
+    expect(find.byKey(const ValueKey('flash-extend-card')), findsNothing);
+    final live = Server(request(mode: 'quote', s: search(phase: 'extension', radius: 30000, consent: true, proposals: 1), quotes: [quote(31, 18000)]));
+    s.current = live.current;
+    await t.pump(const Duration(seconds: 6));                                            // lecture périodique (pas de WebSocket ici)
+    await t.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const ValueKey('flash-extend-card')), findsOneWidget);
+    expect(find.textContaining('Aucun autre professionnel'), findsOneWidget);
+  });
+
+  testWidgets('désistement : la reprise est annoncée ; prix convenu affiché après une contre-offre acceptée', (t) async {
+    final s = await pump(t, Server({...request(), 'reopened': {'pro': 'Ibrahim T.'}}));
+    expect(find.byKey(const ValueKey('flash-reopened')), findsOneWidget);
+    expect(find.textContaining('Ibrahim T. s’est désisté'), findsOneWidget);
+    s.current = {
+      ...request(status: 'assigned', mode: 'quote', s: search(phase: 'confirmed', proposals: 2), quotes: [quote(31, 18000, status: 'accepted')], version: 3),
+      'assigned_to': {'id': 131, 'name': 'Koffi T.'}, 'booking': 2, 'agreed_label': '15 000 FCFA',
+    };
+    await t.pump(const Duration(seconds: 6));
+    await t.pump(const Duration(milliseconds: 100));
+    expect(find.text('Prix convenu : 15 000 FCFA'), findsOneWidget);
+    expect(find.textContaining('Proposé : 18000 FCFA · contre-offre acceptée'), findsOneWidget);
+    expect(find.byKey(const ValueKey('flash-reopened')), findsNothing);
+  });
+
   testWidgets('réseau bloqué : délai maximal puis message et « Réessayer », jamais de chargement infini', (t) async {
     final server = Server(request())..hang = Completer<void>();
     await pump(t, server, timeout: const Duration(milliseconds: 200));
@@ -231,7 +286,7 @@ void main() {
           'status': status, 'seconds_left': 0, 'description': '', 'why': const [], 'quote_amount': 30000,
           'client_reputation': const {'count': 0, 'average': null, 'public': false}, 'decline_reasons': const [],
           if (status == 'countered') 'counter': {'amount': 25000, 'amount_label': '25 000 FCFA', 'seconds_left': 240},
-          if (status == 'accepted') ...{'address': 'Rue 1', 'client_name': 'Awa', 'booking': 55},
+          if (status == 'accepted') ...{'address': 'Rue 1', 'client_name': 'Awa', 'booking': 55, 'agreed_label': '25 000 FCFA'},
         };
     var current = offer('countered');
     final client = MockClient((r) async {
@@ -251,10 +306,12 @@ void main() {
     unawaited(c.present(7));
     await t.pumpAndSettle(const Duration(milliseconds: 100));
     expect(find.text('Contre-offre du client : 25 000 FCFA'), findsOneWidget);
+    expect(find.text('CONTRE-OFFRE DU CLIENT'), findsOneWidget);
     expect(find.byKey(const ValueKey('flash-counter-decline')), findsOneWidget);
     await t.tap(find.byKey(const ValueKey('flash-counter-accept')));
     await t.pumpAndSettle(const Duration(milliseconds: 100));
     expect(posts, ['/handy/flash/offers/7/counter/accept/ flash-counter-accept-7']);
     expect(find.byKey(const ValueKey('flash-accepted')), findsOneWidget);
+    expect(find.text('Prix convenu : 25 000 FCFA'), findsOneWidget);                    // montant de la contre-offre, pas la proposition
   });
 }

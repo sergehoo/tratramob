@@ -264,7 +264,7 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
       decoration: BoxDecoration(gradient: TtGradients.brand, borderRadius: BorderRadius.circular(TtRadius.card)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Text(o.direct ? 'UN CLIENT VOUS A CHOISI' : 'NOUVELLE MISSION', key: const ValueKey('flash-eyebrow'),
+          Text(o.countered ? 'CONTRE-OFFRE DU CLIENT' : o.direct ? 'UN CLIENT VOUS A CHOISI' : 'NOUVELLE MISSION', key: const ValueKey('flash-eyebrow'),
               style: TratraTheme.style(TtType.eyebrow, color: TtColors.accent)),
           const Spacer(),
           if (pending)
@@ -320,6 +320,8 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
                 Expanded(child: Text('Mission confirmée !', style: TratraTheme.style(TtType.h3))),
               ]),
               const SizedBox(height: TtSpace.s2),
+              if ('${o.raw['agreed_label'] ?? ''}'.isNotEmpty)
+                Text('Prix convenu : ${o.raw['agreed_label']}', key: const ValueKey('flash-agreed'), style: TratraTheme.style(TtType.title)),
               if (o.clientName.isNotEmpty) Text('Client : ${o.clientName}', style: TratraTheme.style(TtType.body)),
               if (o.address.isNotEmpty) Text('Adresse : ${o.address}', style: TratraTheme.style(TtType.body)),
               const SizedBox(height: TtSpace.s3),

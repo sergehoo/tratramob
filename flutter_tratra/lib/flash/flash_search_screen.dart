@@ -95,7 +95,7 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
   Future<void> _cancel() async {
     if (!await showTratraConfirm(context, title: 'Annuler la demande ?',
         message: 'La recherche s’arrête et les professionnels sollicités sont prévenus. Aucun frais.',
-        confirmLabel: 'Annuler la demande', cancelLabel: 'Continuer la recherche', danger: true)) {
+        confirmLabel: 'Oui, annuler', cancelLabel: 'Non', danger: true)) {
       return;
     }
     await _act(() => _api.cancelRequest(widget.requestId), done: 'Demande annulée.');
@@ -121,7 +121,7 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
     final pro = (q['pro'] as Map?) ?? const {};
     if (!await showTratraConfirm(context, title: 'Choisir ${pro['name'] ?? 'ce professionnel'} ?',
         message: 'La mission lui est confirmée à ${q['amount_label']} et la réservation est créée. Les autres propositions sont retirées.',
-        confirmLabel: 'Confirmer ce choix')) {
+        confirmLabel: 'Confirmer', cancelLabel: 'Retour')) {
       return;
     }
     await _act(() => _api.chooseQuote(widget.requestId, int.parse('${q['offer']}')), done: 'Professionnel confirmé.');
@@ -229,7 +229,7 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
         const SizedBox(height: TtSpace.s3),
         _Counters(search: s, quoteMode: quoteMode),
       ],
-      if (s.needsConsent && d['can_extend'] == true) ...[
+      if (s.needsConsent && status == 'searching') ...[
         const SizedBox(height: TtSpace.s3),
         TratraCard(
           key: const ValueKey('flash-extend-card'),
@@ -238,7 +238,7 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Élargir au-delà de ${s.farKm.round()} km ?', style: TratraTheme.style(TtType.h3)),
             const SizedBox(height: TtSpace.s1),
-            Text('Personne n’est disponible à moins de ${s.farKm.round()} km. '
+            Text('Aucun autre professionnel n’est disponible à moins de ${s.farKm.round()} km. '
                 '${s.availableBeyond} professionnel${s.availableBeyond > 1 ? 's' : ''} disponible${s.availableBeyond > 1 ? 's' : ''} plus loin '
                 '(déplacement plus long). Rien n’est envoyé sans votre accord.',
                 style: TratraTheme.style(TtType.bodySm)),
@@ -248,6 +248,13 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
                 onPressed: _busy ? null : () => _act(() => _api.extend(widget.requestId), done: 'Recherche élargie.')),
           ]),
         ),
+      ],
+      if (d['reopened'] is Map) ...[
+        const SizedBox(height: TtSpace.s3),
+        TratraAlert(key: const ValueKey('flash-reopened'), tone: TratraAlertTone.info,
+            message: kFlashOpen.contains(status)
+                ? '${(d['reopened'] as Map)['pro']} s’est désisté : nous reprenons la recherche avec votre demande, sans rien ressaisir.'
+                : '${(d['reopened'] as Map)['pro']} s’est désisté. La recherche a repris avec votre demande.'),
       ],
       if (status == 'awaiting') ...[
         const SizedBox(height: TtSpace.s3),
@@ -279,6 +286,8 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
               const SizedBox(width: TtSpace.s2),
               Expanded(child: Text('${pro['name']} est confirmé pour votre mission', style: TratraTheme.style(TtType.h3))),
             ]),
+            if (d['agreed_label'] != null)
+              Text('Prix convenu : ${d['agreed_label']}', key: const ValueKey('flash-agreed'), style: TratraTheme.style(TtType.title)),
             if (pro['trust_score'] != null) Text('Score Tratra Trust : ${pro['trust_score']}/100', style: TratraTheme.style(TtType.bodySm)),
             const SizedBox(height: TtSpace.s3),
             if (d['booking'] != null)
@@ -296,7 +305,7 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
         Text(status == 'quoting' ? 'Choisissez une proposition' : 'Propositions reçues', style: TratraTheme.style(TtType.h3)),
         const SizedBox(height: TtSpace.s2),
         for (final q in quotes) ...[
-          _quoteTile(q),
+          _quoteTile(q, agreed: d['agreed_label'] as String?),
           const SizedBox(height: TtSpace.s2),
         ],
       ],
@@ -313,9 +322,10 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
     ];
   }
 
-  Widget _quoteTile(Map<String, dynamic> q) {
+  Widget _quoteTile(Map<String, dynamic> q, {String? agreed}) {
     final pro = (q['pro'] as Map?)?.cast<String, dynamic>() ?? const {};
     final status = '${q['status']}';
+    final price = status == 'accepted' && agreed != null ? agreed : '${q['amount_label']}';
     final countered = status == 'countered';
     final live = status == 'quoted' || countered;
     return Opacity(
@@ -326,8 +336,10 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Expanded(child: Text('${pro['name'] ?? 'Professionnel'}', style: TratraTheme.style(TtType.title))),
-            Text('${q['amount_label']}', style: TratraTheme.style(TtType.title, color: TtColors.primary)),
+            Text(price, style: TratraTheme.style(TtType.title, color: TtColors.primary)),
           ]),
+          if (price != '${q['amount_label']}')
+            Text('Proposé : ${q['amount_label']} · contre-offre acceptée', style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
           Text([
             if (pro['rating'] != null) '${pro['rating']}/5 (${pro['reviews']} avis)',
             if (pro['trust_score'] != null) 'Trust ${pro['trust_score']}/100',
@@ -337,8 +349,14 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
           if (countered)
             Padding(
               padding: const EdgeInsets.only(top: TtSpace.s2),
-              child: TratraBadge('Votre contre-offre : ${q['counter_label']} — réponse attendue', key: ValueKey('flash-countered-${q['offer']}'),
-                  tone: TratraTone.warning),
+              child: Container(
+                key: ValueKey('flash-countered-${q['offer']}'),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: TtColors.warningSoft, borderRadius: BorderRadius.circular(TtRadius.control)),
+                child: Text('Votre contre-offre : ${q['counter_label']}. En attente de la réponse du professionnel.',
+                    style: TratraTheme.style(TtType.caption, color: TtColors.warningInk)),
+              ),
             )
           else if (!live)
             Padding(
@@ -405,11 +423,13 @@ class _PhaseHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final phase = search.raw.isEmpty ? _fallbackPhase(status) : search.phase;
+    final steps0 = search.stepsM;
+    final canGrow = steps0.isNotEmpty && search.radiusM < steps0.last;
     final (IconData icon, Color color, String subtitle) = switch (phase) {
       'search' => (Icons.radar_rounded, TtColors.primary, direct
           ? 'Le professionnel choisi a reçu votre demande.'
           : search.progressive
-              ? 'Rayon actuel : ${search.radiusLabel}. ${search.nextStepIn != null && search.count('pending') > 0 ? 'Sans réponse, la recherche s’élargit automatiquement.' : 'Les professionnels sollicités répondent.'}'
+              ? 'Rayon actuel : ${search.radiusLabel}. ${search.count('pending') == 0 ? 'Recherche des professionnels disponibles…' : canGrow ? 'Sans réponse, la recherche s’élargit automatiquement.' : 'Rayon maximal atteint : les professionnels sollicités répondent.'}'
               : 'Les professionnels vérifiés et disponibles de votre zone sont sollicités.'),
       'extension' => (Icons.zoom_out_map_rounded, TtColors.warning, 'Votre accord est nécessaire pour chercher plus loin.'),
       'proposals' => (Icons.local_offer_rounded, TtColors.primary, 'D’autres propositions peuvent encore arriver. Vous choisissez.'),
@@ -422,10 +442,9 @@ class _PhaseHeader extends StatelessWidget {
     };
     final steps = quoteMode ? const ['Recherche', 'Propositions', 'Sélection', 'Confirmé'] : const ['Recherche', 'Confirmé'];
     final reached = switch (phase) {
-      'proposals' => 1,
       'selection' => 2,
       'confirmed' => steps.length - 1,
-      _ => 0,
+      _ => quoteMode && search.count('proposals') > 0 ? 1 : 0,     // propositions reçues : l'étape reste acquise pendant l'extension
     };
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [

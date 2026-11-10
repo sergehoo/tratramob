@@ -65,6 +65,7 @@ class FlashRequestLive extends ChangeNotifier with WidgetsBindingObserver {
   bool loading = false;
   StreamSubscription<InboxEvent>? _sub;
   Timer? _poll;
+  Timer? _catchUp;
   bool _disposed = false;
   int _gen = 0;
 
@@ -81,6 +82,14 @@ class FlashRequestLive extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final d = await api.request(requestId);
       if (_disposed || gen != _gen) return;
+      final incoming = d['search'] is Map ? FlashSearch((d['search'] as Map).cast<String, dynamic>()).seq : 0;
+      if (data != null && incoming < search.seq) {
+        // Lecture partie AVANT un évènement déjà reçu par la WebSocket (ex. devis reçu puis vague suivante) : elle ne doit pas
+        // écraser l'état plus récent ; une nouvelle lecture suit aussitôt.
+        _catchUp?.cancel();
+        _catchUp = Timer(const Duration(milliseconds: 700), () => unawaited(refresh()));
+        return;
+      }
       _apply(d);
       offline = false;
       error = null;
@@ -135,7 +144,8 @@ class FlashRequestLive extends ChangeNotifier with WidgetsBindingObserver {
     offline = false;
     _notify();
     // Propositions reçues, professionnel retenu, demande close : le détail complet vient de l'API.
-    if (versionChanged || incoming.count('proposals') != previous.count('proposals') || incoming.count('responses') != previous.count('responses')) {
+    if (versionChanged || incoming.phase != previous.phase || incoming.count('proposals') != previous.count('proposals') ||
+        incoming.count('responses') != previous.count('responses')) {
       unawaited(refresh());
     }
   }
@@ -159,6 +169,7 @@ class FlashRequestLive extends ChangeNotifier with WidgetsBindingObserver {
   void dispose() {
     _disposed = true;
     _poll?.cancel();
+    _catchUp?.cancel();
     _sub?.cancel();
     if (observeLifecycle) WidgetsBinding.instance.removeObserver(this);
     super.dispose();
