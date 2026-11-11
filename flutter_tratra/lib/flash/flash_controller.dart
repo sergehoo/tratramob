@@ -4,6 +4,8 @@
 //  * push « new_mission » reçu application OUVERTE → écran Tratra Flash (une seule fois par proposition, une à la fois) avec la
 //    sonnerie et la vibration synchronisées (réglages Son / Vibration respectés, mode du téléphone respecté) ;
 //  * push « flash_closed » → l'alerte s'arrête et l'écran affiche que la mission n'est plus disponible ;
+//  * évènement temps réel « flash_offer » (WebSocket) → même arrêt si la proposition est close, et l'écran ouvert relit l'état
+//    réel ; WebSocket rétablie (« resync ») → relecture aussi : un push tardif ou perdu ne laisse jamais « Accepter » affiché ;
 //  * action touchée sur l'alerte système (Accepter / Refuser / Voir) → exécutée avec la session de l'application ;
 //  * application fermée : c'est le code natif qui affiche l'alerte (FlashMessageReceiver) — jamais deux sons pour un même message.
 import 'dart:async';
@@ -13,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tratra/flash/flash_api.dart';
 import 'package:flutter_tratra/flash/flash_native.dart';
 import 'package:flutter_tratra/flash/flash_offer_screen.dart';
+import 'package:flutter_tratra/messaging/inbox_controller.dart' show InboxEvent;
 
 class FlashController extends ChangeNotifier {
   FlashController({required this.api, required this.native, required this.navigatorKey, required this.isAuthenticated});
@@ -32,7 +35,13 @@ class FlashController extends ChangeNotifier {
   /// Propositions fermées par le serveur (attribuées à un autre, expirées, annulées) : l'écran ouvert se met à jour.
   final ValueNotifier<Set<int>> closedOffers = ValueNotifier<Set<int>>(<int>{});
   StreamSubscription<FlashAction>? _actions;
+  StreamSubscription<InboxEvent>? _live;
+  final _offerChanges = StreamController<int>.broadcast();
   bool _started = false;
+
+  /// Une proposition a changé côté serveur (contre-offre reçue ou close, attribution, expiration) : son identifiant ; `0` quand
+  /// la liaison temps réel vient d'être rétablie (tout peut avoir changé). Les écrans ouverts relisent alors l'API.
+  Stream<int> get offerChanges => _offerChanges.stream;
 
   int? get showing => _showing;
 
@@ -69,6 +78,26 @@ class FlashController extends ChangeNotifier {
     if (id == null || !isAuthenticated()) return true;
     unawaited(present(id, ring: true));
     return true;
+  }
+
+  /// Branche les évènements temps réel de la messagerie (une seule écoute, remplacée si elle est rebranchée).
+  void attachLive(Stream<InboxEvent> events) {
+    _live?.cancel();
+    _live = events.listen(handleLive);
+  }
+
+  /// Évènement temps réel : proposition modifiée ou close, ou liaison rétablie.
+  void handleLive(InboxEvent e) {
+    if (_offerChanges.isClosed) return;
+    if (e.type == 'resync') {
+      _offerChanges.add(0);
+      return;
+    }
+    if (e.type != 'flash_offer') return;
+    final id = int.tryParse('${e.raw['id'] ?? ''}');
+    if (id == null) return;
+    if (const {'withdrawn', 'lapsed', 'expired'}.contains('${e.raw['status']}')) markClosed(id);
+    _offerChanges.add(id);
   }
 
   void markClosed(int offerId) {
@@ -143,6 +172,8 @@ class FlashController extends ChangeNotifier {
   @override
   void dispose() {
     _actions?.cancel();
+    _live?.cancel();
+    _offerChanges.close();
     closedOffers.dispose();
     super.dispose();
   }

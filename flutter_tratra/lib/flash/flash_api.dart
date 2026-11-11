@@ -5,14 +5,30 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:clock/clock.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:flutter_tratra/core/base_api.dart';
+import 'package:flutter_tratra/flash/flash_deadline.dart';
 
 /// Proposition de mission telle que le professionnel la voit (avant acceptation : ni nom, ni téléphone, ni adresse du client).
 class FlashOffer {
-  FlashOffer(this.raw);
+  FlashOffer(this.raw) : receivedAt = clock.now();
   final Map<String, dynamic> raw;
+
+  /// Instant (téléphone) où cet état a été reçu : les délais du serveur sont comptés à partir de là.
+  final DateTime receivedAt;
+
+  /// Délai de réponse d'une proposition en attente, calé sur l'heure du serveur (nul si le serveur ne le situe pas).
+  late final FlashDeadline? deadline = FlashDeadline.from(
+      expiresAt: raw['expires_at'], startedAt: raw['sent_at'], serverNow: raw['server_now'], secondsLeft: raw['seconds_left'], receivedAt: receivedAt);
+
+  /// Délai de réponse à la contre-offre du client.
+  late final FlashDeadline? counterDeadline = counter == null
+      ? null
+      : FlashDeadline.from(
+          expiresAt: counter!['expires_at'], startedAt: counter!['at'], serverNow: raw['server_now'], secondsLeft: counter!['seconds_left'],
+          receivedAt: receivedAt);
 
   int get id => int.tryParse('${raw['id']}') ?? 0;
   int get requestId => int.tryParse('${raw['request']}') ?? 0;

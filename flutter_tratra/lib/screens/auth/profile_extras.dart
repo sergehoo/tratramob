@@ -32,6 +32,7 @@ class _ProfileEditFormState extends State<ProfileEditForm> {
   late final TextEditingController _email = TextEditingController(text: widget.user.email);
   late PhoneValue _phone = PhoneValue.fromE164(widget.user.phoneNumber);
   String? _phoneError;
+  late String _gender = widget.user.gender;   // '' : non indiqué
   bool _busy = false;
   String? _error;
 
@@ -63,6 +64,7 @@ class _ProfileEditFormState extends State<ProfileEditForm> {
       await context.read<DashboardApi>().patch('/users/${widget.user.id}/', {
         'first_name': _first.text.trim(),
         'last_name': _last.text.trim(),
+        'gender': _gender,
         'email': _email.text.trim().isEmpty ? null : _email.text.trim(),
         if (changed) 'phone': number,
         if (changed) 'phone_country': _phone.iso.name,
@@ -83,6 +85,18 @@ class _ProfileEditFormState extends State<ProfileEditForm> {
         TratraInput(label: 'Prénom', controller: _first, required: true, onChanged: (_) => setState(() {})),
         const SizedBox(height: TtSpace.s3),
         TratraInput(label: 'Nom', controller: _last, required: true, onChanged: (_) => setState(() {})),
+        const SizedBox(height: TtSpace.s3),
+        // Facultatif, déclaré par la personne : un second appui retire le choix.
+        Text('Vous êtes', style: TratraTheme.style(TtType.bodySm, color: TtColors.ink).copyWith(fontWeight: FontWeight.w600)),
+        const SizedBox(height: TtSpace.s2),
+        Wrap(spacing: TtSpace.s2, children: [
+          for (final (code, label) in const [('F', 'Une femme'), ('M', 'Un homme')])
+            TratraChip(key: ValueKey('profile-gender-$code'), label: label, selected: _gender == code,
+                onTap: () => setState(() => _gender = _gender == code ? '' : code)),
+        ]),
+        const SizedBox(height: TtSpace.s1),
+        Text('Facultatif. Sert au pictogramme affiché sur la carte d’une recherche (travailleuse ou travailleur).',
+            style: TratraTheme.style(TtType.caption, color: TtColors.inkSoft)),
         const SizedBox(height: TtSpace.s3),
         TratraPhoneField(
           key: const ValueKey('profile-phone'),

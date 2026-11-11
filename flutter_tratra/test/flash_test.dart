@@ -110,6 +110,14 @@ Future<(FlashController, FakeNative, Server, GlobalKey<NavigatorState>)> pumpApp
   return (c, native, s, key);
 }
 
+/// La barre de délai d'une proposition en attente est une animation continue : `pumpAndSettle` n'aboutirait jamais tant que
+/// l'écran l'affiche. On laisse donc passer un temps fixe (transition d'écran + réponses du faux serveur).
+Future<void> settle(WidgetTester t) async {
+  for (var i = 0; i < 8; i++) {
+    await t.pump(const Duration(milliseconds: 100));
+  }
+}
+
 void main() {
   setUp(() => FlutterSecureStorage.setMockInitialValues({'auth_token': 'acc'}));
 
@@ -117,7 +125,7 @@ void main() {
     final (c, native, _, _) = await pumpApp(t);
     expect(c.handlePush({'t': 'new_mission', 'id': '7'}), isTrue);
     expect(c.handlePush({'t': 'new_mission', 'id': '7'}), isTrue);   // même push reçu deux fois
-    await t.pumpAndSettle(const Duration(milliseconds: 100));
+    await settle(t);
     expect(find.text('Plomberie'), findsOneWidget);
     expect(find.text('15 000 FCFA'), findsOneWidget);
     expect(find.text('Cocody'), findsOneWidget);
@@ -131,9 +139,9 @@ void main() {
   testWidgets('accepter : mission confirmée, adresse révélée, sonnerie arrêtée, clé d’idempotence stable', (t) async {
     final (c, native, server, _) = await pumpApp(t);
     unawaited(c.present(7, ring: true));
-    await t.pumpAndSettle(const Duration(milliseconds: 100));
+    await settle(t);
     await t.tap(find.byKey(const ValueKey('flash-accept')));
-    await t.pumpAndSettle(const Duration(milliseconds: 100));
+    await settle(t);
     expect(find.byKey(const ValueKey('flash-accepted')), findsOneWidget);
     expect(find.text('Adresse : Rue des Jardins, villa 12'), findsOneWidget);
     expect(server.keys, ['flash-accept-7']);
@@ -144,7 +152,7 @@ void main() {
   testWidgets('mission prise par un autre pendant que l’écran est ouvert : alerte arrêtée, message clair', (t) async {
     final (c, native, server, _) = await pumpApp(t);
     unawaited(c.present(7, ring: true));
-    await t.pumpAndSettle(const Duration(milliseconds: 100));
+    await settle(t);
     server.current = offer(status: 'withdrawn');
     expect(c.handlePush({'t': 'flash_closed', 'offer': '7', 'status': 'withdrawn'}), isTrue);
     await t.pump();
@@ -157,8 +165,10 @@ void main() {
     final server = Server()..current = offer(seconds: 2);
     final (c, native, _, _) = await pumpApp(t, server: server);
     unawaited(c.present(7, ring: true));
-    await t.pumpAndSettle(const Duration(milliseconds: 100));
+    await settle(t);
     expect(find.byKey(const ValueKey('flash-accept')), findsOneWidget);
+    // À l'échéance l'écran relit l'état réel : le serveur aussi a dépassé le délai (il ne rend plus 2 s restantes).
+    server.current = offer(seconds: 0);
     await t.pump(const Duration(seconds: 3));
     expect(find.byKey(const ValueKey('flash-accept')), findsNothing);
     expect(find.textContaining('délai de réponse est écoulé'), findsOneWidget);
@@ -168,11 +178,11 @@ void main() {
   testWidgets('refuser : motif facultatif, message « aucune conséquence »', (t) async {
     final (c, _, server, _) = await pumpApp(t);
     unawaited(c.present(7));
-    await t.pumpAndSettle(const Duration(milliseconds: 100));
+    await settle(t);
     await t.tap(find.byKey(const ValueKey('flash-decline')));
-    await t.pumpAndSettle();
+    await settle(t);
     await t.tap(find.byKey(const ValueKey('decline-busy')));
-    await t.pumpAndSettle(const Duration(milliseconds: 100));
+    await settle(t);
     expect(server.posts['/handy/flash/offers/7/decline/'], {'reason': 'busy'});
     expect(find.byKey(const ValueKey('flash-declined')), findsOneWidget);
   });
@@ -180,7 +190,7 @@ void main() {
   testWidgets('actions des alertes système : « Accepter » exécute l’acceptation, « Refuser » sans ouvrir d’écran', (t) async {
     final (c, native, server, _) = await pumpApp(t);
     native.controller.add(const FlashAction('accept', 7));
-    await t.pumpAndSettle(const Duration(milliseconds: 100));
+    await settle(t);
     expect(server.posts.keys, contains('/handy/flash/offers/7/accept/'));
     expect(find.byKey(const ValueKey('flash-accepted')), findsOneWidget);
     expect(native.played, isEmpty, reason: 'l’alerte système a déjà sonné : aucune seconde sonnerie');
@@ -188,7 +198,7 @@ void main() {
     final server2 = Server();
     final (c2, native2, _, _) = await pumpApp(t, server: server2);
     native2.controller.add(const FlashAction('decline', 7));
-    await t.pumpAndSettle(const Duration(milliseconds: 100));
+    await settle(t);
     expect(server2.posts.keys, ['/handy/flash/offers/7/decline/']);
     expect(c2.showing, isNull);
     expect(find.text('Refus enregistré. Aucune conséquence sur votre réputation.'), findsOneWidget);
@@ -199,12 +209,12 @@ void main() {
     final server = Server()..current = offer(mode: 'quote');
     final (c, _, _, _) = await pumpApp(t, server: server);
     unawaited(c.present(7));
-    await t.pumpAndSettle(const Duration(milliseconds: 100));
+    await settle(t);
     expect(find.text('Sur devis'), findsWidgets);
     expect(find.byKey(const ValueKey('flash-accept')), findsNothing);
     await t.enterText(find.byKey(const ValueKey('flash-quote-amount')), '22 000');
     await t.tap(find.byKey(const ValueKey('flash-quote')));
-    await t.pumpAndSettle(const Duration(milliseconds: 100));
+    await settle(t);
     expect(server.posts['/handy/flash/offers/7/quote/'], {'amount': 22000, 'message': ''});
     expect(find.byKey(const ValueKey('flash-quoted')), findsOneWidget);
   });

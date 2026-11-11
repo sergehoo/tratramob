@@ -217,7 +217,7 @@ void main() {
               native: MethodChannelFlashNative(),
               navigatorKey: appNavigatorKey,
               isAuthenticated: () => ctx.read<Session>().isAuthenticated,
-            ),
+            )..attachLive(ctx.read<InboxController>().events),   // proposition close ou modifiée, liaison rétablie
           ),
 
           // Compat

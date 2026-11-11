@@ -8,6 +8,9 @@ class User {
   final String email;
   final String? firstName;
   final String? lastName;
+
+  /// Genre déclaré par la personne (`F`, `M`) ou vide : choisit le pictogramme travailleuse / travailleur sur la carte. Jamais déduit.
+  final String gender;
   final String? phoneNumber;
   final String? profileImage;
   final String userType; // 'client' | 'artisan' | autre
@@ -24,6 +27,7 @@ class User {
     required this.email,
     this.firstName,
     this.lastName,
+    this.gender = '',
     this.phoneNumber,
     this.profileImage,
     required this.userType,
@@ -103,6 +107,7 @@ class User {
       email: _asString(json['email']),
       firstName: _optionalString(json['first_name']),
       lastName: _optionalString(json['last_name']),
+      gender: _optionalString(json['gender']) ?? '',
       // L'API Django expose `phone` et `profile_picture`; les alias conservent
       // la compatibilité avec les anciennes réponses mobile.
       phoneNumber: _optionalString(_firstPresent(['phone', 'phone_number'])),
@@ -156,6 +161,7 @@ class User {
         'email': email,
         'first_name': firstName,
         'last_name': lastName,
+        'gender': gender,
         'phone': phoneNumber,
         'profile_picture': profileImage,
         'user_type': userType,

@@ -3,6 +3,10 @@
 // Écran Tratra Flash : une nouvelle mission à saisir. Métier, zone, date, montant et délai ; réputation du client (sans son nom) ;
 // « Pourquoi vous ? » (détail du classement). Accepter (prix ferme) ou Proposer un devis (sur devis), Refuser sans conséquence.
 // La sonnerie s'arrête à la réponse, à l'échéance ou dès que la mission est prise par un autre professionnel.
+//
+// Délai de réponse : une barre qui se décharge jusqu'à l'échéance DU SERVEUR (flash_deadline.dart). À zéro, les actions sont
+// retirées aussitôt puis l'état réel est relu par l'API. L'écran relit aussi cet état à chaque évènement temps réel sur la
+// proposition, quand la liaison est rétablie et au retour de l'application au premier plan.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -10,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/flash/flash_api.dart';
 import 'package:flutter_tratra/flash/flash_controller.dart';
+import 'package:flutter_tratra/flash/flash_deadline.dart';
 import 'package:flutter_tratra/screens/worker/mission_detail_screen.dart';
 
 enum _Outcome { none, accepted, quoted, countered, declined, closed, expired }
@@ -26,13 +31,18 @@ class FlashOfferScreen extends StatefulWidget {
   State<FlashOfferScreen> createState() => _FlashOfferScreenState();
 }
 
-class _FlashOfferScreenState extends State<FlashOfferScreen> {
+const _counterOverNotice = 'Le délai de la contre-offre est écoulé : votre proposition reste valable.';
+
+class _FlashOfferScreenState extends State<FlashOfferScreen> with WidgetsBindingObserver {
   FlashOffer? _offer;
   String? _error;
   String? _notice;
   bool _busy = false;
-  int _left = 0;
-  Timer? _timer;
+  bool _loading = false;
+  bool _reloadAfter = false;
+  bool _started = false;        // première lecture réussie : sonnerie et action de l'alerte, une seule fois
+  bool _counterOver = false;    // délai de la contre-offre écoulé : plus de réponse possible
+  StreamSubscription<int>? _changes;
   _Outcome _outcome = _Outcome.none;
   final _amount = TextEditingController();
   final _message = TextEditingController();
@@ -43,12 +53,17 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
   void initState() {
     super.initState();
     _c.closedOffers.addListener(_onClosed);
+    _changes = _c.offerChanges.listen((id) {
+      if (id == 0 || id == widget.offerId) unawaited(_load());
+    });
+    WidgetsBinding.instance.addObserver(this);
     _load();
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _changes?.cancel();
     _c.closedOffers.removeListener(_onClosed);
     _amount.dispose();
     _message.dispose();
@@ -61,55 +76,101 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
     _finish(_Outcome.closed, 'Cette mission n’est plus disponible : elle a été attribuée ou retirée.');
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_load());   // retour au premier plan : l'état du serveur fait foi
+  }
+
+  /// Vrai tant que l'échéance n'est pas atteinte (faux aussi quand le serveur ne la situe pas).
+  static bool _running(FlashDeadline? d) => d != null && !d.over();
+
+  /// État affiché pour un état du serveur. Une proposition encore « en attente » dont le délai est écoulé est déjà perdue.
+  static _Outcome _outcomeOf(FlashOffer o) => switch (o.status) {
+        'accepted' => _Outcome.accepted,
+        'quoted' => _Outcome.quoted,
+        'countered' => o.countered ? _Outcome.countered : _Outcome.quoted,
+        'declined' => _Outcome.declined,
+        'expired' => _Outcome.expired,
+        'withdrawn' || 'lapsed' || 'resigned' => _Outcome.closed,
+        _ => _running(o.deadline) ? _Outcome.none : _Outcome.expired,
+      };
+
+  static String? _noticeOf(FlashOffer o) => switch (o.status) {
+        'expired' => 'Le délai de réponse est écoulé.',
+        'lapsed' => 'Votre proposition de prix a expiré sans être choisie.',
+        'resigned' => 'Vous vous êtes désisté de cette mission.',
+        'withdrawn' => 'Cette mission n’est plus disponible.',
+        'pending' => _running(o.deadline) ? null : 'Le délai de réponse est écoulé.',
+        _ => null,
+      };
+
+  /// Lit l'état réel de la proposition. Appelé à l'ouverture puis à chaque fois qu'il a pu changer ; une lecture demandée
+  /// pendant une autre est rejouée juste après, et une lecture ratée n'efface jamais ce qui est affiché.
   Future<void> _load() async {
+    if (_loading) {
+      _reloadAfter = true;
+      return;
+    }
+    _loading = true;
     try {
       final offer = await _c.api.offer(widget.offerId);
-      if (!mounted) return;
+      if (!mounted || _busy) return;      // une réponse est en cours d'envoi : c'est son résultat qui fera foi
+      final first = !_started;
+      _started = true;
+      final was = _outcome;
+      final outcome = _outcomeOf(offer);
+      final counterOver = outcome == _Outcome.countered && offer.counterDeadline != null && !_running(offer.counterDeadline);
       setState(() {
+        var notice = _noticeOf(offer);
+        if (counterOver || (_counterOver && outcome == _Outcome.quoted)) notice = _counterOverNotice;
+        if (notice == null && outcome == _outcome) notice = _notice;   // même état : le message affiché reste
         _offer = offer;
-        _left = offer.secondsLeft;
-        if (offer.accepted) _outcome = _Outcome.accepted;
-        if (offer.status == 'quoted') _outcome = _Outcome.quoted;
-        if (offer.countered) _outcome = _Outcome.countered;
-        if (offer.status == 'declined') _outcome = _Outcome.declined;
-        if (const {'expired', 'withdrawn', 'lapsed', 'resigned'}.contains(offer.status)) {
-          _outcome = offer.status == 'expired' ? _Outcome.expired : _Outcome.closed;
-          _notice = switch (offer.status) {
-            'expired' => 'Le délai de réponse est écoulé.',
-            'lapsed' => 'Votre proposition de prix a expiré sans être choisie.',
-            'resigned' => 'Vous vous êtes désisté de cette mission.',
-            _ => 'Cette mission n’est plus disponible.',
-          };
-        }
+        _error = null;
+        _outcome = outcome;
+        _counterOver = counterOver;
+        _notice = notice;
       });
-      if (offer.pending && _left > 0) {
-        _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
-        if (widget.ring) {
-          final playback = await _c.ring();
-          if (mounted && playback.explanation != null) setState(() => _notice = playback.explanation);
-        }
-        if (widget.initialAction == 'accept' && !offer.quoteMode) await _accept();
-      } else if (offer.pending) {
-        _finish(_Outcome.expired, 'Le délai de réponse est écoulé.');
+      if (outcome != _Outcome.none) {
+        // Plus rien à saisir : la sonnerie et l'alerte système s'arrêtent (délai écoulé, mission close, réponse donnée ailleurs).
+        if (outcome == _Outcome.expired || outcome == _Outcome.closed || (!first && was == _Outcome.none)) unawaited(_c.silence(widget.offerId));
+        return;
       }
+      if (!first) return;
+      if (widget.ring) {
+        final playback = await _c.ring();
+        if (mounted && playback.explanation != null && _outcome == _Outcome.none) setState(() => _notice = playback.explanation);
+      }
+      if (mounted && widget.initialAction == 'accept' && !offer.quoteMode) await _accept();
     } on FlashApiError catch (e) {
-      if (mounted) setState(() => _error = e.status == 404 ? 'Cette proposition n’existe pas sur ce compte.' : e.message);
+      if (mounted && _offer == null) setState(() => _error = e.status == 404 ? 'Cette proposition n’existe pas sur ce compte.' : e.message);
     } catch (_) {
-      if (mounted) setState(() => _error = 'Connexion impossible. Vérifiez votre réseau.');
+      if (mounted && _offer == null) setState(() => _error = 'Connexion impossible. Vérifiez votre réseau.');
+    } finally {
+      _loading = false;
+      if (_reloadAfter) {
+        _reloadAfter = false;
+        if (mounted) unawaited(_load());
+      }
     }
   }
 
-  void _tick() {
-    if (!mounted) return;
-    if (_left <= 1) {
+  /// Échéance atteinte (barre à zéro) : les actions disparaissent tout de suite, puis l'état réel est relu.
+  void _onDeadline() {
+    final o = _offer;
+    if (!mounted || o == null || _busy) return;   // réponse déjà partie : le serveur tranche
+    if (_outcome == _Outcome.none && o.pending && !_running(o.deadline)) {
       _finish(_Outcome.expired, 'Le délai de réponse est écoulé : la mission est proposée à un autre professionnel.');
-      return;
+      unawaited(_load());
+    } else if (_outcome == _Outcome.countered && !_counterOver && o.counterDeadline != null && !_running(o.counterDeadline)) {
+      setState(() {
+        _counterOver = true;
+        _notice = _counterOverNotice;
+      });
+      unawaited(_load());
     }
-    setState(() => _left--);
   }
 
   void _finish(_Outcome outcome, [String? notice]) {
-    _timer?.cancel();
     unawaited(_c.silence(widget.offerId));
     if (!mounted) return;
     setState(() {
@@ -139,6 +200,7 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
           _busy = false;
           _error = e.message;
         });
+        _onDeadline();      // le délai a pu s'écouler pendant l'envoi
       }
     } catch (_) {
       if (mounted) {
@@ -146,6 +208,7 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
           _busy = false;
           _error = 'Connexion impossible : réessayez.';
         });
+        _onDeadline();
       }
     }
   }
@@ -191,11 +254,6 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
     await _run(() => _c.api.quote(widget.offerId, amount, _message.text.trim()), _Outcome.quoted);
   }
 
-  String get _countdown {
-    final m = _left ~/ 60, s = _left % 60;
-    return m > 0 ? '$m min ${s.toString().padLeft(2, '0')}' : '$s s';
-  }
-
   @override
   Widget build(BuildContext context) {
     final offer = _offer;
@@ -227,6 +285,16 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
       padding: EdgeInsets.fromLTRB(TtSpace.s4, 0, TtSpace.s4, TtSpace.s8 + pad),
       children: [
         _header(o),
+        // Délai de réponse : sous l'en-tête (une barre verte ne se lirait pas sur le dégradé vert). Reste affichée, vide, tant que
+        // le serveur n'a pas clos la proposition.
+        if (o.pending && o.deadline != null && (_outcome == _Outcome.none || _outcome == _Outcome.expired)) ...[
+          const SizedBox(height: TtSpace.s3),
+          TratraCard(
+            padding: const EdgeInsets.symmetric(horizontal: TtSpace.s4, vertical: TtSpace.s3),
+            child: FlashCountdownBar(
+                key: const ValueKey('flash-countdown'), deadline: o.deadline!, label: 'Temps pour répondre', onExpired: _onDeadline),
+          ),
+        ],
         const SizedBox(height: TtSpace.s4),
         if (_notice != null) ...[
           TratraAlert(key: const ValueKey('flash-notice'), tone: _outcome == _Outcome.none ? TratraAlertTone.info : TratraAlertTone.warning, message: _notice!),
@@ -256,29 +324,14 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
   }
 
   Widget _header(FlashOffer o) {
-    final pending = _outcome == _Outcome.none && o.pending;
     return Container(
       key: const ValueKey('flash-header'),
       margin: const EdgeInsets.only(top: TtSpace.s4),
       padding: const EdgeInsets.all(TtSpace.s5),
       decoration: BoxDecoration(gradient: TtGradients.brand, borderRadius: BorderRadius.circular(TtRadius.card)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Text(o.countered ? 'CONTRE-OFFRE DU CLIENT' : o.direct ? 'UN CLIENT VOUS A CHOISI' : 'NOUVELLE MISSION', key: const ValueKey('flash-eyebrow'),
-              style: TratraTheme.style(TtType.eyebrow, color: TtColors.accent)),
-          const Spacer(),
-          if (pending)
-            Container(
-              key: const ValueKey('flash-countdown'),
-              padding: const EdgeInsets.symmetric(horizontal: TtSpace.s3, vertical: TtSpace.s1),
-              decoration: BoxDecoration(color: TtColors.accent, borderRadius: BorderRadius.circular(TtRadius.pill)),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.timer_outlined, size: 16, color: TtColors.night),
-                const SizedBox(width: 4),
-                Text(_countdown, style: TratraTheme.style(TtType.caption, color: TtColors.night).copyWith(fontWeight: FontWeight.w800)),
-              ]),
-            ),
-        ]),
+        Text(o.countered ? 'CONTRE-OFFRE DU CLIENT' : o.direct ? 'UN CLIENT VOUS A CHOISI' : 'NOUVELLE MISSION', key: const ValueKey('flash-eyebrow'),
+            style: TratraTheme.style(TtType.eyebrow, color: TtColors.accent)),
         const SizedBox(height: TtSpace.s2),
         Text(o.category, style: TratraTheme.style(TtType.h1, color: Colors.white)),
         const SizedBox(height: TtSpace.s3),
@@ -356,14 +409,19 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> {
               const SizedBox(height: TtSpace.s1),
               Text('Votre proposition : ${o.quoteAmount != null ? _money(o.quoteAmount!) : '—'}. Accepter vous confirme la mission à ce montant ; '
                   'sinon votre proposition reste valable et le client peut encore la choisir.', style: TratraTheme.style(TtType.bodySm)),
+              if (o.counterDeadline != null) ...[
+                const SizedBox(height: TtSpace.s3),
+                FlashCountdownBar(key: const ValueKey('flash-counter-countdown'), deadline: o.counterDeadline!,
+                    label: 'Temps pour répondre à la contre-offre', onExpired: _onDeadline),
+              ],
             ]),
           ),
           const SizedBox(height: TtSpace.s3),
           TratraButton(key: const ValueKey('flash-counter-accept'), label: 'Accepter ${counter['amount_label'] ?? ''}', size: TratraButtonSize.lg,
-              block: true, loading: _busy, onPressed: _busy ? null : _acceptCounter),
+              block: true, loading: _busy, onPressed: _busy || _counterOver ? null : _acceptCounter),
           const SizedBox(height: TtSpace.s2),
           TratraButton(key: const ValueKey('flash-counter-decline'), label: 'Garder ma proposition', variant: TratraButtonVariant.outline,
-              block: true, onPressed: _busy ? null : _declineCounter),
+              block: true, onPressed: _busy || _counterOver ? null : _declineCounter),
         ];
       case _Outcome.declined:
         return [

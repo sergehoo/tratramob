@@ -1,13 +1,18 @@
 // lib/flash/flash_pro.dart
 //
 // Côté professionnel : bouton Disponible / Indisponible (règle d'éligibilité unique côté serveur ; aucune mission IMMÉDIATE n'est proposée
-// à un professionnel « Indisponible »), propositions en attente et historique de ses réponses.
+// à un professionnel « Indisponible »), propositions en attente et historique de ses réponses. Une proposition qui attend une réponse
+// (mission à accepter, contre-offre du client) porte sa barre de délai, calée sur l'heure du serveur ; à l'échéance, ou quand la
+// liaison annonce un changement, la liste est relue sur le serveur.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/flash/flash_api.dart';
 import 'package:flutter_tratra/flash/flash_controller.dart';
+import 'package:flutter_tratra/flash/flash_deadline.dart';
 import 'package:flutter_tratra/screens/worker/mission_detail_screen.dart';
 
 class FlashAvailabilityCard extends StatefulWidget {
@@ -134,27 +139,59 @@ class FlashOffersScreen extends StatefulWidget {
 }
 
 class _FlashOffersScreenState extends State<FlashOffersScreen> {
-  late Future<List<FlashOffer>> _future = context.read<FlashController>().api.offers();
+  late final FlashController _c = context.read<FlashController>();
+  late Future<List<FlashOffer>> _future = _fetch();
+  List<FlashOffer>? _shown;              // dernière liste reçue : elle reste affichée pendant une relecture (pas de clignotement)
+  StreamSubscription<int>? _changes;
 
-  void _reload() => setState(() => _future = context.read<FlashController>().api.offers());
+  @override
+  void initState() {
+    super.initState();
+    // Proposition close ou modifiée (attribuée à un autre, contre-offre reçue…), liaison rétablie : l'état réel est relu.
+    _changes = _c.offerChanges.listen((_) => _reload());
+  }
+
+  @override
+  void dispose() {
+    _changes?.cancel();
+    super.dispose();
+  }
+
+  Future<List<FlashOffer>> _fetch() async => _shown = await _c.api.offers();
+
+  void _reload() {
+    if (!mounted) return;
+    setState(() {
+      _future = _fetch();
+    });
+  }
 
   static const _labels = {
     'pending': ('En attente de votre réponse', TratraTone.accent),
     'accepted': ('Acceptée — mission confirmée', TratraTone.success),
     'quoted': ('Devis envoyé', TratraTone.info),
+    'countered': ('Contre-offre du client à traiter', TratraTone.accent),
     'declined': ('Refusée (sans conséquence)', TratraTone.gray),
     'expired': ('Sans réponse dans le délai', TratraTone.gray),
     'withdrawn': ('Attribuée à un autre ou annulée', TratraTone.gray),
+    'lapsed': ('Proposition échue', TratraTone.gray),
+    'resigned': ('Désistement après attribution', TratraTone.gray),
   };
 
   Future<void> _open(FlashOffer o) async {
-    final c = context.read<FlashController>();
     if (o.accepted && o.bookingId != null) {
       await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => MissionDetailScreen(bookingId: '${o.bookingId}')));
     } else {
-      await c.present(o.id);
+      await _c.present(o.id);
     }
     _reload();
+  }
+
+  /// Délai encore ouvert sur cette proposition : réponse à la mission, ou réponse à la contre-offre du client.
+  static (FlashDeadline, String)? _deadlineOf(FlashOffer o) {
+    if (o.pending && o.deadline != null) return (o.deadline!, 'Temps pour répondre');
+    if (o.countered && o.counterDeadline != null) return (o.counterDeadline!, 'Temps pour répondre à la contre-offre');
+    return null;
   }
 
   @override
@@ -164,11 +201,12 @@ class _FlashOffersScreenState extends State<FlashOffersScreen> {
       body: FutureBuilder<List<FlashOffer>>(
         future: _future,
         builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-          if (snap.hasError) {
+          final done = snap.connectionState == ConnectionState.done;
+          if (!done && _shown == null) return const Center(child: CircularProgressIndicator());
+          if (done && snap.hasError && _shown == null) {
             return Center(child: TratraEmptyState(icon: Icons.wifi_off_rounded, title: 'Propositions indisponibles', description: '${snap.error}'));
           }
-          final items = snap.data ?? const [];
+          final items = _shown ?? const <FlashOffer>[];
           return RefreshIndicator(
             onRefresh: () async => _reload(),
             child: ListView.separated(
@@ -188,7 +226,10 @@ class _FlashOffersScreenState extends State<FlashOffersScreen> {
                   ]);
                 }
                 final o = items[index - 1];
-                final (label, tone) = _labels[o.status] ?? (o.status, TratraTone.gray);
+                final timed = _deadlineOf(o);
+                // Délai de réponse écoulé avant que le serveur n'ait clos la proposition : elle n'est déjà plus « en attente ».
+                final overdue = o.pending && (o.deadline?.over() ?? false);
+                final (label, tone) = _labels[overdue ? 'expired' : o.status] ?? (o.status, TratraTone.gray);
                 return TratraCard(
                   padding: TratraCard.compact,
                   onTap: () => _open(o),
@@ -200,6 +241,11 @@ class _FlashOffersScreenState extends State<FlashOffersScreen> {
                     Text('${o.zone} · ${o.whenLabel}', style: TratraTheme.style(TtType.bodySm, color: TtColors.ash)),
                     const SizedBox(height: TtSpace.s2),
                     TratraBadge(label, tone: tone),
+                    if (timed != null) ...[
+                      const SizedBox(height: TtSpace.s2),
+                      FlashCountdownBar(key: ValueKey('flash-offer-countdown-${o.id}'), deadline: timed.$1, label: timed.$2, compact: true,
+                          onExpired: _reload),
+                    ],
                   ]),
                 );
               },

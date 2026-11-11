@@ -16,8 +16,10 @@ import 'package:provider/provider.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/flash/flash_api.dart';
 import 'package:flutter_tratra/flash/flash_controller.dart';
+import 'package:flutter_tratra/flash/flash_deadline.dart';
 import 'package:flutter_tratra/flash/flash_hybrid.dart';
 import 'package:flutter_tratra/flash/flash_search.dart';
+import 'package:flutter_tratra/flash/flash_worker_pin.dart';
 import 'package:flutter_tratra/messaging/inbox_controller.dart';
 import 'package:flutter_tratra/screens/live/live_map.dart' show kMapTiles;
 import 'package:flutter_tratra/screens/tracking_screen.dart';
@@ -117,6 +119,21 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
     await _act(() => _api.switchMode(widget.requestId, kDirect, target: chosen.id, version: int.tryParse('${d['version']}')));
   }
 
+  /// Échéance d'une proposition passée : les boutons de sa tuile se ferment aussitôt, puis l'état réel est relu sur le serveur.
+  void _onQuoteDeadline() {
+    if (!mounted) return;
+    setState(() {});
+    unawaited(_live.refresh());
+  }
+
+  /// Proposition échue pendant que la confirmation ou la saisie du montant était ouverte : rien n'est envoyé.
+  bool _lapsed(Map<String, dynamic> q) {
+    if (!(_live.quoteDeadline(q)?.over() ?? false)) return false;
+    _snack('Le délai de cette proposition est écoulé.');
+    unawaited(_live.refresh());
+    return true;
+  }
+
   Future<void> _choose(Map<String, dynamic> q) async {
     final pro = (q['pro'] as Map?) ?? const {};
     if (!await showTratraConfirm(context, title: 'Choisir ${pro['name'] ?? 'ce professionnel'} ?',
@@ -124,6 +141,7 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
         confirmLabel: 'Confirmer', cancelLabel: 'Retour')) {
       return;
     }
+    if (!mounted || _lapsed(q)) return;
     await _act(() => _api.chooseQuote(widget.requestId, int.parse('${q['offer']}')), done: 'Professionnel confirmé.');
   }
 
@@ -134,7 +152,7 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
       showDragHandle: true,
       builder: (_) => _CounterSheet(proposal: (q['amount'] as num?)?.toInt() ?? 0, proName: '${(q['pro'] as Map?)?['name'] ?? 'Le professionnel'}'),
     );
-    if (amount == null || !mounted) return;
+    if (amount == null || !mounted || _lapsed(q)) return;
     await _act(() => _api.counter(widget.requestId, int.parse('${q['offer']}'), amount),
         done: 'Contre-offre envoyée : le professionnel l’accepte ou garde sa proposition.');
   }
@@ -142,7 +160,7 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
   @override
   Widget build(BuildContext context) {
     final d = _live.data;
-    final canCancel = d?['can_cancel'] == true;
+    final canCancel = d?['can_cancel'] == true && _live.isOpen;   // l'état en direct fait foi : plus d'annulation sur une demande attribuée ou close
     return Scaffold(
       appBar: AppBar(title: const Text('Ma demande Tratra Flash')),
       body: d == null
@@ -159,6 +177,7 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
                     stepsM: _live.search.stepsM,
                     searching: d['status'] == 'searching',
                     label: _live.search.radiusLabel,
+                    pros: _live.search.pros,
                   ),
                   if (_live.offline)
                     const Padding(
@@ -328,6 +347,10 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
     final price = status == 'accepted' && agreed != null ? agreed : '${q['amount_label']}';
     final countered = status == 'countered';
     final live = status == 'quoted' || countered;
+    // Délais calés sur l'heure du serveur : validité de la proposition ; réponse du professionnel à la contre-offre.
+    final validity = live ? _live.quoteDeadline(q) : null;
+    final answer = countered ? _live.quoteDeadline(q, counter: true) : null;
+    final over = validity?.over() ?? false;        // à 0 : plus de « Choisir » ni de « Contre-offre », l'état réel est relu
     return Opacity(
       opacity: live || status == 'accepted' ? 1 : 0.55,
       child: TratraCard(
@@ -354,8 +377,15 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(color: TtColors.warningSoft, borderRadius: BorderRadius.circular(TtRadius.control)),
-                child: Text('Votre contre-offre : ${q['counter_label']}. En attente de la réponse du professionnel.',
-                    style: TratraTheme.style(TtType.caption, color: TtColors.warningInk)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Votre contre-offre : ${q['counter_label']}. En attente de la réponse du professionnel.',
+                      style: TratraTheme.style(TtType.caption, color: TtColors.warningInk)),
+                  if (answer != null) ...[
+                    const SizedBox(height: 6),
+                    FlashCountdownBar(key: ValueKey('flash-quote-answer-countdown-${q['offer']}'), deadline: answer, compact: true,
+                        onExpired: _onQuoteDeadline),
+                  ],
+                ]),
               ),
             )
           else if (!live)
@@ -363,15 +393,20 @@ class _FlashRequestScreenState extends State<FlashRequestScreen> {
               padding: const EdgeInsets.only(top: TtSpace.s2),
               child: TratraBadge('${q['status_label'] ?? status}', tone: TratraTone.gray),
             ),
+          if (validity != null) ...[
+            const SizedBox(height: TtSpace.s2),
+            FlashCountdownBar(key: ValueKey('flash-quote-countdown-${q['offer']}'), deadline: validity, compact: true,
+                label: over ? 'Proposition échue' : 'Proposition valable encore', onExpired: _onQuoteDeadline),
+          ],
           if (q['can_choose'] == true || q['can_counter'] == true) ...[
             const SizedBox(height: TtSpace.s2),
             Wrap(spacing: TtSpace.s2, runSpacing: TtSpace.s2, children: [
               if (q['can_choose'] == true)
                 TratraButton(key: ValueKey('flash-choose-${q['offer']}'), label: 'Choisir', size: TratraButtonSize.sm,
-                    onPressed: _busy ? null : () => _choose(q)),
+                    onPressed: _busy || over ? null : () => _choose(q)),
               if (q['can_counter'] == true)
                 TratraButton(key: ValueKey('flash-counter-${q['offer']}'), label: 'Contre-offre', size: TratraButtonSize.sm,
-                    variant: TratraButtonVariant.outline, onPressed: _busy ? null : () => _counter(q)),
+                    variant: TratraButtonVariant.outline, onPressed: _busy || over ? null : () => _counter(q)),
             ]),
           ],
         ]),
@@ -585,10 +620,12 @@ class _CounterSheetState extends State<_CounterSheet> {
 }
 
 /// Carte de recherche : lieu de l'intervention, paliers de rayon, cercle courant et ondes animées pendant la recherche. Sans position
-/// (demande par commune), un radar sans fond de carte. Aucun repère de professionnel.
+/// (demande par commune), un radar sans fond de carte. Les professionnels SOLLICITÉS apparaissent à mesure des vagues : pictogramme
+/// travailleuse / travailleur, position approchée fournie par le serveur, aucune identité.
 class FlashSearchMap extends StatefulWidget {
   const FlashSearchMap({super.key, required this.center, required this.radiusM, required this.stepsM, required this.searching,
-      required this.label, this.height = 260});
+      required this.label, this.pros = const [], this.height = 260});
+  final List<FlashProPoint> pros;
   final LatLng? center;
   final int radiusM;
   final List<int> stepsM;
@@ -696,10 +733,19 @@ class _FlashSearchMapState extends State<FlashSearchMap> with TickerProviderStat
                     CircleMarker(point: c, radius: widget.radiusM.toDouble(), useRadiusInMeter: true,
                         color: TtColors.primary.withValues(alpha: 0.10), borderColor: TtColors.primary, borderStrokeWidth: 2),
                 ]),
-                MarkerLayer(markers: [
-                  Marker(point: c, width: 36, height: 36,
-                      child: const Icon(Icons.location_on_rounded, color: TtColors.night, size: 36)),
-                ]),
+                Builder(builder: (context) {
+                  // Échelle réelle de la carte (zoom animé ou pincé) : les repères trop serrés sont écartés à l'écran.
+                  final zoom = MapCamera.of(context).zoom;
+                  final at = spreadPros(c, widget.pros, 156543.03392 * math.cos(c.latitude * math.pi / 180) / math.pow(2, zoom));
+                  return MarkerLayer(markers: [
+                    // Estompés (refus, sans réponse) dessous ; le lieu de l'intervention toujours au-dessus.
+                    for (final p in [...widget.pros.where((p) => p.out), ...widget.pros.where((p) => !p.out)])
+                      Marker(key: ValueKey('flash-pro-${p.id}'), point: at[p.id] ?? p.point, width: FlashWorkerPin.size,
+                          height: FlashWorkerPin.size, child: FlashWorkerPin(pro: p, pulse: widget.searching ? _pulse : null)),
+                    Marker(point: c, width: 36, height: 36,
+                        child: const Icon(Icons.location_on_rounded, color: TtColors.night, size: 36)),
+                  ]);
+                }),
               ],
             )
           else
@@ -715,6 +761,17 @@ class _FlashSearchMapState extends State<FlashSearchMap> with TickerProviderStat
             child: _Chip(key: const ValueKey('flash-radius-label'), icon: Icons.radar_rounded,
                 text: widget.radiusM > 0 ? 'Rayon ${widget.label}' : widget.label.isEmpty ? 'Votre zone' : widget.label),
           ),
+          if (c != null && widget.pros.isNotEmpty)
+            Positioned(
+              right: TtSpace.s3,
+              bottom: TtSpace.s3,
+              child: Container(
+                key: const ValueKey('flash-pros-approx'),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: TtColors.surface.withValues(alpha: 0.85), borderRadius: BorderRadius.circular(999)),
+                child: Text('Positions approximatives', style: TratraTheme.style(TtType.caption, color: TtColors.inkSoft)),
+              ),
+            ),
           if (_banner != null)
             Positioned(
               top: TtSpace.s3,

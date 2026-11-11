@@ -9,6 +9,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/base_api.dart';
@@ -18,6 +19,7 @@ import 'package:flutter_tratra/flash/flash_client.dart';
 import 'package:flutter_tratra/flash/flash_controller.dart';
 import 'package:flutter_tratra/flash/flash_native.dart';
 import 'package:flutter_tratra/flash/flash_search.dart';
+import 'package:flutter_tratra/flash/flash_worker_pin.dart';
 import 'package:flutter_tratra/messaging/inbox_controller.dart';
 
 http.Response _json(Object body, [int status = 200]) =>
@@ -140,6 +142,77 @@ void main() {
     expect(find.text('Annulée'), findsWidgets);
   });
 
+  testWidgets('carte : les professionnels sollicités apparaissent au fil des vagues — travailleuse, travailleur, casque si non indiqué', (t) async {
+    Map<String, dynamic> pro(int id, String state, {String? gender, double dy = 0.002}) =>
+        {'id': id, 'lat': 5.36 + dy, 'lng': -3.99 + dy / 2, 'gender': gender, 'state': state};
+    final s = await pump(t, Server(request(s: {...search(), 'pros': [pro(41, 'contacted', gender: 'F')]})));
+    await t.pump(const Duration(milliseconds: 600));
+    FlashWorkerPin pin(int id) =>
+        t.widget<FlashWorkerPin>(find.descendant(of: find.byKey(ValueKey('flash-pro-$id')), matching: find.byType(FlashWorkerPin)));
+    expect(find.byType(FlashWorkerPin), findsOneWidget);                                    // 1re vague : une seule professionnelle
+    expect(find.byKey(const ValueKey('flash-pros-approx')), findsOneWidget);                // dit clairement : positions approximatives
+    expect(pin(41).pro.label, 'Professionnelle sollicitée');
+    expect(find.byWidgetPredicate((w) => w is Semantics && w.properties.label == 'Professionnelle sollicitée'), findsOneWidget);
+    // 2e vague : un travailleur et une personne qui n'a pas indiqué son genre (casque seul) ; la 1re a décliné, son repère s'estompe.
+    s.current = request(s: {...search(seq: 12), 'pros': [pro(41, 'declined', gender: 'F'), pro(42, 'contacted', gender: 'M', dy: -0.003),
+        pro(43, 'proposal', dy: 0.004)]});
+    await t.pump(const Duration(seconds: 6));
+    await t.pump(const Duration(milliseconds: 600));
+    expect(find.byType(FlashWorkerPin), findsNWidgets(3));
+    expect(pin(41).pro.out, isTrue);
+    expect(pin(42).pro.label, 'Professionnel sollicité');
+    expect(pin(43).pro.label, 'Professionnel : proposition reçue');
+    expect(pin(43).pro.gender, '');
+    // Mission attribuée : seul le professionnel retenu reste sur la carte.
+    s.current = request(status: 'assigned', s: {...search(phase: 'confirmed', seq: 20), 'pros': [pro(42, 'selected', gender: 'M', dy: -0.003)]},
+        version: 2);
+    await t.pump(const Duration(seconds: 6));
+    await t.pump(const Duration(milliseconds: 600));
+    expect(find.byType(FlashWorkerPin), findsOneWidget);
+    expect(pin(42).pro.label, 'Professionnel retenu');
+  });
+
+  test('carte : à grande échelle les repères ne se cachent ni sous le lieu de l’intervention ni les uns sous les autres', () {
+    const c = LatLng(5.36, -3.99);
+    FlashProPoint pro(int id, double dLat, double dLng) => FlashProPoint(id: id, point: LatLng(5.36 + dLat, -3.99 + dLng), gender: '', state: 'contacted');
+    Offset px(LatLng p, double mpp) => Offset((p.longitude + 3.99) * 111320 * 0.9956 / mpp, (p.latitude - 5.36) * 110540 / mpp);
+    // Rayon 30 km : ~290 m par pixel. Trois professionnels à moins d'un kilomètre, dont deux au même endroit et un sur le lieu même.
+    final pros = [pro(7, 0.004, 0.004), pro(8, 0.004, 0.004), pro(9, 0, 0), pro(10, 0.09, -0.12)];
+    final wide = spreadPros(c, pros, 290);
+    for (final p in pros.take(3)) {
+      expect(px(wide[p.id]!, 290).distance, greaterThanOrEqualTo(37), reason: 'repère ${p.id} sous le lieu');
+    }
+    for (final a in pros) {
+      for (final b in pros.where((b) => b.id > a.id)) {
+        expect((px(wide[a.id]!, 290) - px(wide[b.id]!, 290)).distance, greaterThanOrEqualTo(35), reason: '${a.id} et ${b.id} superposés');
+      }
+    }
+    final d = px(wide[7]!, 290);                                                            // direction réelle conservée (nord-est)
+    expect(d.dx > 0 && d.dy > 0, isTrue);
+    expect(wide[10], pros[3].point);                                                        // assez loin : non déplacé
+    expect(spreadPros(c, pros, 290), wide);                                                 // stable d'un affichage à l'autre
+    expect(spreadPros(c, [...pros, pro(11, 0.004, 0.004)], 290)[7], wide[7]);               // une nouvelle vague ne déplace pas les anciens
+    // Vue rapprochée (rayon 1 km, ~10 m par pixel) : un professionnel à 600 m est déjà lisible, il reste à sa place.
+    final near = [pro(7, 0.004, 0.004)];
+    expect(spreadPros(c, near, 10)[7], near.first.point);
+  });
+
+  testWidgets('carte en direct : les repères arrivent avec l’évènement WebSocket ; réponse sans repères tolérée', (t) async {
+    final s = Server(request());
+    final events = StreamController<InboxEvent>.broadcast();
+    addTearDown(events.close);
+    final live = FlashRequestLive(api: FlashApi(BaseApi(client: s.client)), requestId: 9, events: events.stream, observeLifecycle: false);
+    await live.start();
+    expect(live.search.pros, isEmpty);                                                     // serveur sans repères : carte sans professionnel
+    events.add(InboxEvent('flash_request', raw: {'type': 'flash_request', 'id': 9, 'status': 'searching', 'version': 1,
+        'search': {...search(seq: 12), 'pros': [{'id': 7, 'lat': 5.361, 'lng': -3.991, 'gender': 'M', 'state': 'contacted'},
+            {'id': 8, 'lat': null, 'lng': -3.99, 'gender': null, 'state': 'contacted'}]}}));
+    await t.pump();
+    expect(live.search.pros.map((p) => (p.id, p.gender, p.state, p.point.latitude)), [(7, 'M', 'contacted', 5.361)]);   // repère sans position : ignoré
+    expect(s.gets, 1);
+    live.dispose();
+  });
+
   testWidgets('au-delà de 30 km : rien sans l’accord du client, puis la recherche reprend plus loin', (t) async {
     final s = await pump(t, Server(request(s: search(phase: 'extension', radius: 30000, consent: true))));
     expect(find.text('Élargir au-delà de 30 km ?'), findsOneWidget);
@@ -238,6 +311,129 @@ void main() {
     live.dispose();                                                                      // minuteries arrêtées avant la fin du test
   });
 
+  testWidgets('synchronisation : messages en double, en retard ou dans le désordre ; une demande annulée ne redevient jamais active', (t) async {
+    final s = Server(request(s: search(seq: 10, radius: 500)));
+    final events = StreamController<InboxEvent>.broadcast();
+    addTearDown(events.close);
+    final live = FlashRequestLive(api: FlashApi(BaseApi(client: s.client)), requestId: 9, events: events.stream, observeLifecycle: false);
+    await live.start();
+    InboxEvent ws(int seq, int radius, {String status = 'searching', String phase = 'search'}) => InboxEvent('flash_request',
+        raw: {'type': 'flash_request', 'id': 9, 'status': status, 'version': 1, 'search': search(seq: seq, radius: radius, phase: phase)});
+    for (final e in [ws(13, 5000), ws(12, 1000), ws(13, 5000), ws(11, 500)]) {             // désordre, doublon, retard
+      events.add(e);
+    }
+    await t.pump();
+    expect(live.search.seq, 13);
+    expect(live.search.radiusM, 5000);
+    // Réponse d'une action arrivée APRÈS un état plus récent : jamais appliquée, l'état complet est relu.
+    s.current = request(s: search(seq: 13, radius: 5000));
+    final before = s.gets;
+    live.apply(request(s: search(seq: 12, radius: 1000)));
+    await t.pump();
+    await t.pump();
+    expect(live.search.radiusM, 5000);
+    expect(s.gets, before + 1);
+    // Annulation confirmée par le serveur, puis tout ce qui traîne encore sur le réseau.
+    live.apply(request(status: 'cancelled', s: search(phase: 'cancelled', seq: 14)));
+    expect(live.status, 'cancelled');
+    events.add(ws(13, 5000));                                                             // message d'avant l'annulation
+    events.add(ws(15, 10000));                                                            // même « plus récent », il ne rouvre rien
+    await t.pump();
+    expect(live.status, 'cancelled');
+    expect(live.isOpen, isFalse);
+    s.current = request(s: search(seq: 13, radius: 5000));                                // lecture périmée (cache, réplique en retard)
+    await live.refresh();
+    expect(live.status, 'cancelled');
+    expect(live.search.phase, 'cancelled');
+    s.current = request(status: 'cancelled', s: search(phase: 'cancelled', seq: 14));
+    await live.refresh();                                                                 // le même état, relu : accepté
+    expect(live.status, 'cancelled');
+    expect(live.offline, isFalse);
+    live.dispose();
+  });
+
+  testWidgets('coupure puis reconnexion : l’état affiché est conservé et signalé, puis l’état complet du serveur est relu', (t) async {
+    var down = false;
+    var gets = 0;
+    var current = request(s: search(seq: 10, radius: 1000));
+    final client = MockClient((r) async {
+      if (down) throw http.ClientException('réseau coupé');
+      gets++;
+      return _json(current);
+    });
+    final events = StreamController<InboxEvent>.broadcast();
+    addTearDown(events.close);
+    final live = FlashRequestLive(api: FlashApi(BaseApi(client: client)), requestId: 9, events: events.stream, observeLifecycle: false);
+    await live.start();
+    down = true;                                                                          // réseau coupé pendant la recherche
+    await live.refresh();
+    expect(live.offline, isTrue);
+    expect(live.error, isNull, reason: 'l’état connu reste affiché');
+    expect(live.search.seq, 10);
+    // Pendant la coupure, un professionnel a été retenu. Le réseau revient : la WebSocket se rétablit (`resync`).
+    current = request(status: 'assigned', s: search(phase: 'confirmed', seq: 31), version: 4);
+    down = false;
+    final before = gets;
+    events.add(InboxEvent('resync'));
+    await t.pump();
+    await t.pump();
+    expect(gets, before + 1);
+    expect(live.status, 'assigned');
+    expect(live.search.seq, 31);
+    expect(live.offline, isFalse);
+    // Application rouverte ou revenue au premier plan : même règle, l'état du serveur est relu.
+    current = request(status: 'searching', s: search(seq: 40, radius: 5000), version: 5);  // désistement : la recherche a repris
+    live.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await t.pump();
+    await t.pump();
+    expect(live.status, 'searching');
+    expect(live.search.seq, 40);
+    expect(live.isOpen, isTrue, reason: 'reprise légitime après un désistement (numéro plus récent)');
+    live.dispose();
+  });
+
+  testWidgets('attribution reçue en direct pendant une panne de lecture : relue toute seule jusqu’à l’état complet', (t) async {
+    var down = false;
+    var gets = 0;
+    var current = request(s: search(seq: 10, radius: 1000));
+    final client = MockClient((r) async {
+      if (down) throw http.ClientException('réseau coupé');
+      gets++;
+      return _json(current);
+    });
+    final events = StreamController<InboxEvent>.broadcast();
+    addTearDown(events.close);
+    final live = FlashRequestLive(api: FlashApi(BaseApi(client: client)), requestId: 9, events: events.stream, socketLive: () => true,
+        observeLifecycle: false);
+    await live.start();
+    // La WebSocket annonce l'attribution, mais la lecture du détail échoue (API injoignable à cet instant) — constaté sur téléphone.
+    down = true;
+    current = {...request(status: 'assigned', s: search(phase: 'confirmed', seq: 31), version: 4), 'booking': 77};
+    events.add(InboxEvent('flash_request',
+        raw: {'type': 'flash_request', 'id': 9, 'status': 'assigned', 'version': 4, 'search': search(phase: 'confirmed', seq: 31)}));
+    await t.pump();
+    await t.pump();
+    expect(live.status, 'assigned');
+    expect(live.offline, isTrue);
+    expect(live.data!['booking'], isNull, reason: 'le détail n’a pas encore pu être lu');
+    // Demande close mais état incomplet : la lecture est retentée sans action de l'utilisateur, au rythme court.
+    down = false;
+    final before = gets;
+    await t.pump(const Duration(seconds: 6));
+    await t.pump(const Duration(milliseconds: 100));
+    expect(gets, before + 1);
+    expect(live.offline, isFalse);
+    expect(live.data!['booking'], 77);
+    await t.pump(const Duration(seconds: 40));                                            // état complet, demande close : plus de lecture
+    expect(gets, before + 1);
+    live.dispose();
+  });
+
+  testWidgets('demande attribuée : « Annuler ma demande » n’est plus proposé, même si le détail affiché date d’avant', (t) async {
+    await pump(t, Server({...request(status: 'assigned', s: search(phase: 'confirmed')), 'can_cancel': true}));
+    expect(find.byKey(const ValueKey('flash-request-cancel')), findsNothing);
+  });
+
   testWidgets('accord demandé en direct : la carte « Élargir » apparaît sans attendre une lecture, étapes conservées', (t) async {
     final s = await pump(t, Server(request(mode: 'quote', s: search(proposals: 1), quotes: [quote(31, 18000)])));
     expect(find.byKey(const ValueKey('flash-extend-card')), findsNothing);
@@ -304,7 +500,10 @@ void main() {
     await t.pumpWidget(ChangeNotifierProvider<FlashController>.value(
         value: c, child: MaterialApp(navigatorKey: key, theme: TratraTheme.light(), home: const Scaffold())));
     unawaited(c.present(7));
-    await t.pumpAndSettle(const Duration(milliseconds: 100));
+    // La barre de délai de la contre-offre est une animation continue : `pumpAndSettle` n'aboutirait pas tant qu'elle court.
+    for (var i = 0; i < 8; i++) {
+      await t.pump(const Duration(milliseconds: 100));
+    }
     expect(find.text('Contre-offre du client : 25 000 FCFA'), findsOneWidget);
     expect(find.text('CONTRE-OFFRE DU CLIENT'), findsOneWidget);
     expect(find.byKey(const ValueKey('flash-counter-decline')), findsOneWidget);

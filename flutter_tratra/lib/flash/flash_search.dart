@@ -6,13 +6,43 @@
 // professionnel retenu). Sans WebSocket, lecture périodique. Chaque requête a un délai maximal : jamais de chargement infini.
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding, WidgetsBindingObserver;
+import 'package:latlong2/latlong.dart';
 
 import 'package:flutter_tratra/flash/flash_api.dart';
+import 'package:flutter_tratra/flash/flash_deadline.dart';
 import 'package:flutter_tratra/messaging/inbox_controller.dart';
 
 const Set<String> kFlashOpen = {'searching', 'quoting', 'awaiting'};
+/// États définitifs : le serveur ne rouvre jamais une demande annulée ou close sans professionnel (une relance crée une AUTRE demande).
+const Set<String> kFlashFinal = {'cancelled', 'unfulfilled'};
+
+/// Repère d'un professionnel SOLLICITÉ sur la carte du client : position approchée (jamais exacte), sans identité.
+@immutable
+class FlashProPoint {
+  const FlashProPoint({required this.id, required this.point, required this.gender, required this.state});
+  final int id;             // numéro de la proposition (stable : le repère ne « saute » pas d'un message à l'autre)
+  final LatLng point;
+  final String gender;      // 'F', 'M' ou '' (non indiqué : pictogramme neutre)
+  final String state;       // contacted | proposal | selected | declined | no_answer
+
+  /// Refus ou sans réponse : le repère reste, estompé.
+  bool get out => state == 'declined' || state == 'no_answer';
+
+  String get label {
+    final f = gender == 'F';
+    final who = f ? 'Professionnelle' : 'Professionnel';
+    return switch (state) {
+      'proposal' => '$who : proposition reçue',
+      'selected' => f ? '$who retenue' : '$who retenu',
+      'declined' => '$who : a décliné',
+      'no_answer' => '$who : sans réponse',
+      _ => f ? '$who sollicitée' : '$who sollicité',
+    };
+  }
+}
 
 /// Bloc « recherche » renvoyé par le serveur (API et WebSocket).
 class FlashSearch {
@@ -35,6 +65,14 @@ class FlashSearch {
   num get farKm => (far['threshold_km'] as num?) ?? 30;
   Map<String, dynamic> get counts => raw['counts'] is Map ? (raw['counts'] as Map).cast<String, dynamic>() : const {};
   int count(String key) => _int(counts[key]);
+
+  /// Professionnels sollicités, à mesure des vagues (positions approchées fournies par le serveur).
+  List<FlashProPoint> get pros => [
+        for (final p in (raw['pros'] as List?) ?? const [])
+          if (p is Map && p['lat'] is num && p['lng'] is num)
+            FlashProPoint(id: _int(p['id']), point: LatLng((p['lat'] as num).toDouble(), (p['lng'] as num).toDouble()),
+                gender: '${p['gender'] ?? ''}', state: '${p['state'] ?? 'contacted'}'),
+      ];
 }
 
 class FlashRequestLive extends ChangeNotifier with WidgetsBindingObserver {
@@ -60,6 +98,9 @@ class FlashRequestLive extends ChangeNotifier with WidgetsBindingObserver {
   final bool Function() _socketLive;
 
   Map<String, dynamic>? data;
+  /// Instant (téléphone) où le dernier état COMPLET a été reçu de l'API : les échéances des propositions sont situées par rapport à
+  /// l'heure du serveur de cette lecture (`server_now`), jamais par rapport à l'horloge du téléphone.
+  DateTime? dataAt;
   String? error;          // aucune donnée affichable (introuvable, ou jamais chargée)
   bool offline = false;   // la dernière mise à jour a échoué : l'état affiché peut être ancien
   bool loading = false;
@@ -68,12 +109,23 @@ class FlashRequestLive extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _catchUp;
   bool _disposed = false;
   int _gen = 0;
+  int _staleReads = 0;
 
   FlashSearch get search => FlashSearch(data?['search'] is Map ? (data!['search'] as Map).cast<String, dynamic>() : const {});
   String get status => '${data?['status'] ?? ''}';
   bool get isOpen => kFlashOpen.contains(status);
 
   Future<void> start() => refresh();
+
+  /// Échéance d'une proposition de prix (`counter: false` : validité de la proposition ; `counter: true` : réponse attendue du
+  /// professionnel à la contre-offre). Nul tant que le serveur n'a pas donné son heure : aucune barre n'est alors affichée.
+  FlashDeadline? quoteDeadline(Map q, {bool counter = false}) {
+    final at = dataAt, now = data?['server_now'];
+    if (at == null || now == null) return null;
+    return FlashDeadline.from(
+        expiresAt: counter ? q['counter_expires_at'] : q['expires_at'], startedAt: counter ? q['counter_at'] : q['at'],
+        serverNow: now, receivedAt: at);
+  }
 
   Future<void> refresh() async {
     final gen = ++_gen;
@@ -82,14 +134,14 @@ class FlashRequestLive extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final d = await api.request(requestId);
       if (_disposed || gen != _gen) return;
-      final incoming = d['search'] is Map ? FlashSearch((d['search'] as Map).cast<String, dynamic>()).seq : 0;
-      if (data != null && incoming < search.seq) {
+      if (_outdated(d)) {
         // Lecture partie AVANT un évènement déjà reçu par la WebSocket (ex. devis reçu puis vague suivante) : elle ne doit pas
-        // écraser l'état plus récent ; une nouvelle lecture suit aussitôt.
+        // écraser l'état plus récent ; une nouvelle lecture suit aussitôt (trois au plus, puis le rythme normal reprend).
         _catchUp?.cancel();
-        _catchUp = Timer(const Duration(milliseconds: 700), () => unawaited(refresh()));
+        if (++_staleReads <= 3) _catchUp = Timer(const Duration(milliseconds: 700), () => unawaited(refresh()));
         return;
       }
+      _staleReads = 0;
       _apply(d);
       offline = false;
       error = null;
@@ -112,6 +164,10 @@ class FlashRequestLive extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Réponse d'une action (annuler, élargir, contre-offre, choisir…) : même forme que la lecture.
   void apply(Map<String, dynamic> d) {
+    if (_outdated(d)) {                 // réponse arrivée après un état plus récent (réseau lent, second appareil) : relue, jamais appliquée
+      unawaited(refresh());
+      return;
+    }
     _apply(d);
     offline = false;
     error = null;
@@ -125,9 +181,24 @@ class FlashRequestLive extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     data = d;
+    if (d['server_now'] != null) dataAt = clock.now();
+  }
+
+  static int _seqOf(Map d) => d['search'] is Map ? FlashSearch((d['search'] as Map).cast<String, dynamic>()).seq : 0;
+
+  /// Un état reçu ne remplace jamais un état plus récent (`seq` du serveur), et une demande annulée ou close ne redevient jamais active.
+  bool _outdated(Map d, {bool strict = false}) {
+    if (data == null || d.isEmpty) return false;
+    final seq = _seqOf(d);
+    if (strict ? seq <= search.seq : seq < search.seq) return true;
+    return kFlashFinal.contains(status) && d['status'] != null && '${d['status']}' != status;
   }
 
   void _onEvent(InboxEvent e) {
+    if (e.type == 'resync') {           // WebSocket rétablie : l'état complet du serveur fait foi
+      unawaited(refresh());
+      return;
+    }
     if (e.type != 'flash_request') return;
     final raw = e.raw;
     if ('${raw['id']}' != '$requestId') return;
@@ -137,14 +208,18 @@ class FlashRequestLive extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     final previous = search;
-    if (incoming.seq <= previous.seq) return;                     // message en double ou arrivé en retard
+    if (_outdated(raw, strict: true)) return;                     // message en double, en retard, ou qui rouvrirait une demande close
     final versionChanged = '${raw['version']}' != '${data!['version']}';
     data = {...data!, 'status': raw['status'] ?? data!['status'], 'status_label': raw['status_label'] ?? data!['status_label'],
         'search': incoming.raw};
     offline = false;
     _notify();
-    // Propositions reçues, professionnel retenu, demande close : le détail complet vient de l'API.
-    if (versionChanged || incoming.phase != previous.phase || incoming.count('proposals') != previous.count('proposals') ||
+    // Propositions reçues, professionnel retenu, demande close : le détail complet vient de l'API. Dès qu'une proposition est
+    // affichée, un évènement peut la concerner sans changer aucun compteur (proposition échue, contre-offre refusée ou restée
+    // sans réponse) : son état réel est relu aussitôt, sans attendre la lecture périodique.
+    final quotes = data!['quotes'];
+    if ((quotes is List && quotes.isNotEmpty) || versionChanged || incoming.phase != previous.phase ||
+        incoming.count('proposals') != previous.count('proposals') ||
         incoming.count('responses') != previous.count('responses')) {
       unawaited(refresh());
     }
@@ -152,8 +227,10 @@ class FlashRequestLive extends ChangeNotifier with WidgetsBindingObserver {
 
   void _schedulePoll() {
     _poll?.cancel();
-    if (_disposed || (data != null && !isOpen)) return;
-    _poll = Timer(_socketLive() ? livePollEvery : pollEvery, () => unawaited(refresh()));
+    // Demande close ET état à jour : plus rien à lire. Une lecture échouée est retentée même sur une demande close : sinon l'écran
+    // resterait sur un état partiel (« Confirmé » reçu par la WebSocket, sans la réservation ni le professionnel retenu).
+    if (_disposed || (data != null && !isOpen && !offline)) return;
+    _poll = Timer(_socketLive() && !offline ? livePollEvery : pollEvery, () => unawaited(refresh()));
   }
 
   @override
