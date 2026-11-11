@@ -34,6 +34,9 @@ class FakeGateway implements PushGateway {
   }
 
   @override
+  Future<bool> permissionGranted() async => permission;
+
+  @override
   Future<String?> token() async => tokenValue;
   @override
   Future<void> deleteToken() async => tokensDeleted++;
@@ -60,12 +63,13 @@ class Recorded {
   bool supported = true,
   int status = 201,
   bool offline = false,
+  ValueNotifier<bool>? down,
 }) {
   FlutterSecureStorage.setMockInitialValues({AppConstants.authTokenKey: 'access-A'});
   final calls = <Recorded>[];
   var nextId = 40;
   final client = MockClient((http.Request r) async {
-    if (offline) throw http.ClientException('réseau coupé');
+    if (offline || (down?.value ?? false)) throw http.ClientException('réseau coupé');
     Map<String, dynamic>? body;
     if (r.body.isNotEmpty) body = (jsonDecode(r.body) as Map).cast<String, dynamic>();
     calls.add(Recorded(r.method, r.url.path, r.headers['Authorization'], body));
@@ -212,5 +216,61 @@ void main() {
     expect(fg.single.body, 'Suivez son arrivée.');
     expect(fg.single.data['id'], '12');
     expect(taps, hasLength(2));
+  });
+
+  test('jeton renouvelé alors que les notifications sont refusées : le statut reste « refusées »', () async {
+    final (push, gw, calls) = build(gateway: FakeGateway(permission: false));
+    await push.start();
+    await push.bindUser('1');
+    expect(push.status, PushStatus.denied);
+    gw.refresh.add('tok-2');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(calls.last.body!['device_token'], 'tok-2');
+    expect(push.status, PushStatus.denied);
+    expect(gw.permissionAsked, 1); // le renouvellement ne rouvre jamais le dialogue d'autorisation
+  });
+
+  test('retour au premier plan : l’autorisation modifiée dans les réglages est relue, sans nouvelle demande ni nouvel appel', () async {
+    final (push, gw, calls) = build(gateway: FakeGateway(permission: false));
+    await push.start();
+    await push.bindUser('1');
+    expect(push.status, PushStatus.denied);
+    gw.permission = true;                       // activées dans les réglages du téléphone
+    await push.recheck();
+    expect(push.status, PushStatus.registered);
+    gw.permission = false;                      // puis coupées
+    await push.recheck();
+    expect(push.status, PushStatus.denied);
+    expect(gw.permissionAsked, 1);
+    expect(calls, hasLength(1));
+  });
+
+  test('enregistrement en échec (hors ligne) : retenté au retour au premier plan, sans redemander l’autorisation', () async {
+    final down = ValueNotifier<bool>(true);
+    final (push, gw, calls) = build(down: down);
+    await push.start();
+    await push.bindUser('1');
+    expect(push.status, PushStatus.error);
+    expect(calls, isEmpty);
+    down.value = false;
+    await push.recheck();
+    expect(push.status, PushStatus.registered);
+    expect(calls.single.body!['device_token'], 'tok-1');
+    expect(gw.permissionAsked, 1);
+  });
+
+  test('sans compte connecté ou sans Firebase : le contrôle au retour au premier plan ne fait rien', () async {
+    final (push, gw, calls) = build();
+    await push.recheck();                       // pas encore démarré
+    await push.start();
+    await push.recheck();                       // personne n'est connecté
+    expect(calls, isEmpty);
+    expect(gw.permissionAsked, 0);
+  });
+
+  test('message : identifiant et heure d’envoi conservés (dédoublonnage, heure du ruban)', () {
+    final at = DateTime.utc(2026, 11, 11, 9, 30);
+    final m = pushMessageFrom(data: {'title': 'Titre', 'body': 'Texte', 'nid': '7'}, messageId: 'fcm-1', sentTime: at);
+    expect((m.title, m.body, m.messageId, m.sentTime), ('Titre', 'Texte', 'fcm-1', at));
   });
 }

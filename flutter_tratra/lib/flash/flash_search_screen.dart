@@ -21,6 +21,7 @@ import 'package:flutter_tratra/flash/flash_hybrid.dart';
 import 'package:flutter_tratra/flash/flash_search.dart';
 import 'package:flutter_tratra/flash/flash_worker_pin.dart';
 import 'package:flutter_tratra/messaging/inbox_controller.dart';
+import 'package:flutter_tratra/notifications/screen_presence.dart';
 import 'package:flutter_tratra/screens/live/live_map.dart' show kMapTiles;
 import 'package:flutter_tratra/screens/tracking_screen.dart';
 
@@ -35,7 +36,11 @@ class FlashRequestScreen extends StatefulWidget {
   State<FlashRequestScreen> createState() => _FlashRequestScreenState();
 }
 
-class _FlashRequestScreenState extends State<FlashRequestScreen> {
+class _FlashRequestScreenState extends State<FlashRequestScreen> with ScreenPresenceMixin<FlashRequestScreen> {
+  /// Demande suivie à l'écran : pas de ruban pour ses évènements ; sa notification touchée ramène ici.
+  @override
+  String get presenceTarget => 'flash_request:${widget.requestId}';
+
   late final FlashRequestLive _live;
   bool _busy = false;
 

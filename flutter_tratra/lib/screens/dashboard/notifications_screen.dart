@@ -11,10 +11,13 @@ import 'package:provider/provider.dart';
 import 'package:flutter_tratra/continuity/offline_queue.dart';
 import 'package:flutter_tratra/core/deep_links.dart';
 import 'package:flutter_tratra/design/design.dart';
+import 'package:flutter_tratra/notifications/notice_center.dart';
+import 'package:flutter_tratra/notifications/push_denied_alert.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/notification_preferences_screen.dart';
+import 'package:flutter_tratra/services/push_service.dart';
 
 /// Catégories du serveur (code → libellé, icône).
 const List<(String, String, IconData)> notificationCategories = [
@@ -53,6 +56,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   String? _category;
   int _version = 0;
   bool _busy = false;
+  // Notification reçue application ouverte, ou retour au premier plan : la liste affichée se relit (rien de manqué).
+  ValueNotifier<int>? _arrivals;
+
+  @override
+  void initState() {
+    super.initState();
+    _arrivals = context.read<NoticeCenter?>()?.arrivals?..addListener(_onArrival);
+  }
+
+  @override
+  void dispose() {
+    _arrivals?.removeListener(_onArrival);
+    super.dispose();
+  }
+
+  void _onArrival() {
+    if (mounted && !_busy) setState(() => _version++);
+  }
 
   Future<_NotificationsPage> _load() async {
     final query = '?ordering=-created_at&page_size=50${_category == null ? '' : '&category=$_category'}';
@@ -98,6 +119,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final pushDenied = context.watch<PushService?>()?.status == PushStatus.denied;
     return DashPage(
       title: 'Notifications',
       actions: [
@@ -117,6 +139,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(TtSpace.s4, TtSpace.s3, TtSpace.s4, TtSpace.s8),
             children: [
+              if (pushDenied)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: TtSpace.s3),
+                  child: PushDeniedAlert(
+                    message: 'Tratra ne peut pas vous alerter (nouvelle mission, message, paiement). Tout ce que vous '
+                        'recevez reste disponible ici.',
+                  ),
+                ),
               SizedBox(
                 height: 44,
                 child: ListView(

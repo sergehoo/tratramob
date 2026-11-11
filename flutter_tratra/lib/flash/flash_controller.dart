@@ -142,9 +142,9 @@ class FlashController extends ChangeNotifier {
       return;
     }
     if (ring && _seen.contains(offerId)) return;   // même push reçu deux fois : une seule alerte
-    _seen.add(offerId);
     final nav = navigatorKey.currentState;
-    if (nav == null) return;
+    if (nav == null) return;                       // navigation pas encore prête : la proposition n'est pas « vue », elle sera représentée
+    _seen.add(offerId);
     _showing = offerId;
     notifyListeners();
     try {

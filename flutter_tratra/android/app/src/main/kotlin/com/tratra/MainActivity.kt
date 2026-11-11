@@ -2,7 +2,10 @@ package com.tratra
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.telephony.TelephonyManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -83,6 +86,7 @@ class MainActivity : FlutterActivity() {
                         result.success(pendingLink)
                         pendingLink = null
                     }
+                    "openSettings" -> result.success(openNotificationSettings())
                     else -> result.notImplemented()
                 }
             }
@@ -125,6 +129,25 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    /** Réglages de notification de Tratra dans le téléphone (notifications refusées : l'utilisateur les réactive lui-même). */
+    private fun openNotificationSettings(): Boolean {
+        val details = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
+        val target = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        } else {
+            details
+        }
+        for (intent in listOf(target, details)) {
+            try {
+                startActivity(intent)
+                return true
+            } catch (e: Exception) {
+                // écran absent sur ce téléphone : fiche de l'application
+            }
+        }
+        return false
     }
 
     private fun simCountry(): String? = try {

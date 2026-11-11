@@ -17,6 +17,7 @@ import 'package:flutter_tratra/messaging/chat_models.dart';
 import 'package:flutter_tratra/messaging/inbox_controller.dart';
 import 'package:flutter_tratra/messaging/media_widgets.dart';
 import 'package:flutter_tratra/messaging/messaging_api.dart';
+import 'package:flutter_tratra/notifications/screen_presence.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/statuses/status_presence.dart';
@@ -231,7 +232,11 @@ class ConversationScreen extends StatefulWidget {
   State<ConversationScreen> createState() => _ConversationScreenState();
 }
 
-class _ConversationScreenState extends State<ConversationScreen> {
+class _ConversationScreenState extends State<ConversationScreen> with ScreenPresenceMixin<ConversationScreen> {
+  /// Conversation à l'écran : pas de ruban pour ses messages ; sa notification touchée ramène ici.
+  @override
+  String get presenceTarget => 'conversation:${widget.conversationId}';
+
   late final MessagingApi _api = context.read<MessagingApi>();
   late final InboxController _inbox = context.read<InboxController>();
   final _input = TextEditingController();

@@ -8,23 +8,28 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class NotificationTap {
-  const NotificationTap(this.link, {this.announcementId});
+  const NotificationTap(this.link, {this.announcementId, this.notificationId});
   final String link;
   final int? announcementId;
+
+  /// Notification du centre de notifications à marquer lue (quand le serveur l'a fournie).
+  final int? notificationId;
 
   static NotificationTap? fromMap(Object? raw) {
     if (raw is! Map) return null;
     final link = '${raw['link'] ?? ''}'.trim();
     if (!RegExp(r'^tratra://[a-z_]+(/[0-9]+)?$').hasMatch(link)) return null;
     final id = int.tryParse('${raw['announcement'] ?? ''}');
-    return NotificationTap(link, announcementId: id != null && id > 0 ? id : null);
+    final nid = int.tryParse('${raw['nid'] ?? ''}');
+    return NotificationTap(link, announcementId: id != null && id > 0 ? id : null, notificationId: nid != null && nid > 0 ? nid : null);
   }
 
   @override
-  bool operator ==(Object other) => other is NotificationTap && other.link == link && other.announcementId == announcementId;
+  bool operator ==(Object other) =>
+      other is NotificationTap && other.link == link && other.announcementId == announcementId && other.notificationId == notificationId;
 
   @override
-  int get hashCode => Object.hash(link, announcementId);
+  int get hashCode => Object.hash(link, announcementId, notificationId);
 }
 
 class NotificationLinks {
@@ -46,6 +51,19 @@ class NotificationLinks {
       if (tap != null) onTap(tap);
     } catch (_) {
       // plateforme sans canal (tests) : rien à remettre
+    }
+  }
+
+  /// Le téléphone sait ouvrir directement les réglages de notification de Tratra (Android).
+  static bool get canOpenSystemSettings => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  /// Ouvre les réglages de notification de Tratra dans le téléphone. Faux si rien n'a pu être ouvert.
+  static Future<bool> openSystemSettings() async {
+    if (!canOpenSystemSettings) return false;
+    try {
+      return await _channel.invokeMethod<bool>('openSettings') ?? false;
+    } catch (_) {
+      return false;
     }
   }
 }

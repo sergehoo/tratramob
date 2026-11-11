@@ -8,7 +8,8 @@ import 'package:flutter_tratra/services/push_service.dart';
 void main() {
   test('lien touché : tratra:// uniquement, identifiant d\'annonce facultatif', () {
     expect(NotificationTap.fromMap({'link': 'tratra://service/40', 'announcement': 7, 'nid': 3}),
-        const NotificationTap('tratra://service/40', announcementId: 7));
+        const NotificationTap('tratra://service/40', announcementId: 7, notificationId: 3));
+    expect(NotificationTap.fromMap({'link': 'tratra://booking/12', 'announcement': 0, 'nid': 0}), const NotificationTap('tratra://booking/12'));
     expect(NotificationTap.fromMap({'link': 'tratra://flash_order', 'announcement': 0}), const NotificationTap('tratra://flash_order'));
     for (final bad in ['https://evil.example', 'javascript:alert(1)', 'tratra://service/40?x=1', 'tratra://../kyc', 'tratra://', '']) {
       expect(NotificationTap.fromMap({'link': bad, 'announcement': 1}), isNull, reason: bad);

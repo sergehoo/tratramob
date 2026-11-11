@@ -49,10 +49,16 @@ enum PushStatus {
 
 /// Message reçu, réduit à ce que l'application exploite.
 class PushMessage {
-  const PushMessage({this.title, this.body, this.data = const {}});
+  const PushMessage({this.title, this.body, this.data = const {}, this.messageId, this.sentTime});
   final String? title;
   final String? body;
   final Map<String, dynamic> data;
+
+  /// Identifiant FCM du message : dédoublonnage quand le serveur n'a pas fourni d'identifiant d'évènement.
+  final String? messageId;
+
+  /// Heure d'envoi (serveur FCM) : heure affichée sur le ruban.
+  final DateTime? sentTime;
 }
 
 /// Passerelle vers Firebase : isolée pour être remplacée dans les tests (aucun Firebase réel requis).
@@ -63,6 +69,9 @@ abstract class PushGateway {
   /// Demande l'autorisation d'afficher des notifications (dialogue système sur Android 13+). Vrai si accordée.
   Future<bool> requestPermission();
 
+  /// Autorisation actuelle, SANS rien demander (elle a pu changer dans les réglages du téléphone).
+  Future<bool> permissionGranted();
+
   Future<String?> token();
   Future<void> deleteToken();
   Stream<String> get onTokenRefresh;
@@ -72,14 +81,21 @@ abstract class PushGateway {
 }
 
 /// Message de notification (titre dans `notification`) ou de DONNÉES (annonces avec image, Tratra Flash : titre dans `data`).
-PushMessage pushMessageFrom({String? title, String? body, required Map<String, dynamic> data}) => PushMessage(
+PushMessage pushMessageFrom({String? title, String? body, required Map<String, dynamic> data, String? messageId, DateTime? sentTime}) =>
+    PushMessage(
       title: title ?? data['title']?.toString(),
       body: body ?? data['body']?.toString(),
       data: data,
+      messageId: messageId,
+      sentTime: sentTime,
     );
 
-PushMessage _fromRemote(RemoteMessage m) =>
-    pushMessageFrom(title: m.notification?.title, body: m.notification?.body, data: Map<String, dynamic>.from(m.data));
+PushMessage _fromRemote(RemoteMessage m) => pushMessageFrom(
+    title: m.notification?.title, body: m.notification?.body, data: Map<String, dynamic>.from(m.data),
+    messageId: m.messageId, sentTime: m.sentTime);
+
+bool _granted(NotificationSettings s) =>
+    s.authorizationStatus == AuthorizationStatus.authorized || s.authorizationStatus == AuthorizationStatus.provisional;
 
 class FirebasePushGateway implements PushGateway {
   FirebaseMessaging get _fm => FirebaseMessaging.instance;
@@ -92,8 +108,9 @@ class FirebasePushGateway implements PushGateway {
         final options = firebaseOptionsFor(defaultTargetPlatform);
         await (options != null ? Firebase.initializeApp(options: options) : Firebase.initializeApp());
       }
-      // iOS : afficher aussi la notification quand l'application est ouverte (Android : bandeau dans l'application).
-      await _fm.setForegroundNotificationPresentationOptions(alert: true, badge: true, sound: true);
+      // Application ouverte : c'est le ruban de l'application qui s'affiche (Android et iOS) — jamais la bannière du système en
+      // plus. iOS garde le son et la pastille.
+      await _fm.setForegroundNotificationPresentationOptions(alert: false, badge: true, sound: true);
       return true;
     } catch (_) {
       return false; // pas de google-services.json / GoogleService-Info.plist dans ce build
@@ -101,10 +118,10 @@ class FirebasePushGateway implements PushGateway {
   }
 
   @override
-  Future<bool> requestPermission() async {
-    final s = await _fm.requestPermission();
-    return s.authorizationStatus == AuthorizationStatus.authorized || s.authorizationStatus == AuthorizationStatus.provisional;
-  }
+  Future<bool> requestPermission() async => _granted(await _fm.requestPermission());
+
+  @override
+  Future<bool> permissionGranted() async => _granted(await _fm.getNotificationSettings());
 
   @override
   Future<String?> token() async {
@@ -152,7 +169,7 @@ class PushService extends ChangeNotifier {
   PushStatus _status = PushStatus.idle;
   PushStatus get status => _status;
 
-  /// Message reçu application ouverte (bandeau in-app).
+  /// Message reçu application ouverte (ruban dans l'application).
   void Function(PushMessage message)? onForeground;
 
   /// Notification touchée (application en arrière-plan ou fermée).
@@ -160,6 +177,7 @@ class PushService extends ChangeNotifier {
 
   bool _started = false;
   bool _ready = false;
+  bool _rechecking = false;
   String? _userId;
   final List<StreamSubscription<dynamic>> _subs = [];
 
@@ -184,7 +202,7 @@ class PushService extends ChangeNotifier {
         return;
       }
       _subs
-        ..add(_gateway.onTokenRefresh.listen((t) => _register(t)))
+        ..add(_gateway.onTokenRefresh.listen(_onTokenRefresh))
         ..add(_gateway.onForegroundMessage.listen((m) => onForeground?.call(m)))
         ..add(_gateway.onOpenedFromBackground.listen((m) => onTap?.call(m)));
       final first = await _gateway.initialMessage(); // application lancée en touchant une notification
@@ -206,22 +224,49 @@ class PushService extends ChangeNotifier {
     if (_ready) await _registerCurrent();
   }
 
-  Future<void> _registerCurrent() async {
+  /// `ask: false` : l'autorisation est lue sans rouvrir le dialogue du système (nouvel essai, retour au premier plan).
+  Future<void> _registerCurrent({bool ask = true}) async {
     try {
-      final granted = await _gateway.requestPermission();
+      final granted = ask ? await _gateway.requestPermission() : await _gateway.permissionGranted();
       final token = await _gateway.token();
       if (token == null || token.isEmpty) {
         _set(PushStatus.error);
         return;
       }
-      final ok = await _register(token);
-      if (ok && !granted) _set(PushStatus.denied);
+      await _register(token, granted: granted);
     } catch (_) {
       _set(PushStatus.error);
     }
   }
 
-  Future<bool> _register(String token) async {
+  /// Jeton renouvelé par Firebase : rattaché au compte courant, sans faire passer pour « actives » des notifications refusées.
+  Future<void> _onTokenRefresh(String token) async {
+    var granted = true;
+    try {
+      granted = await _gateway.permissionGranted();
+    } catch (_) {}
+    await _register(token, granted: granted);
+  }
+
+  /// Retour au premier plan : l'autorisation a pu changer dans les réglages du téléphone, et un enregistrement resté en échec
+  /// (hors ligne au démarrage) est retenté — sans jamais rouvrir le dialogue d'autorisation.
+  Future<void> recheck() async {
+    if (!_ready || _userId == null || _rechecking) return;
+    _rechecking = true;
+    try {
+      if (_status == PushStatus.error) {
+        await _registerCurrent(ask: false);
+      } else if (_status == PushStatus.registered || _status == PushStatus.denied) {
+        _set(await _gateway.permissionGranted() ? PushStatus.registered : PushStatus.denied);
+      }
+    } catch (_) {
+      // lecture de l'autorisation impossible : le statut connu est conservé
+    } finally {
+      _rechecking = false;
+    }
+  }
+
+  Future<bool> _register(String token, {bool granted = true}) async {
     if (_userId == null) return false; // jeton renouvelé alors que personne n'est connecté : rien à rattacher
     try {
       // Jeton renouvelé : l'ancien est envoyé pour être retiré du compte (jamais de doublon d'appareil).
@@ -246,7 +291,7 @@ class PushService extends ChangeNotifier {
       final id = body is Map ? body['id'] : null;
       if (id != null) await _api.storage.write(key: deviceIdKey, value: '$id');
       await _api.storage.write(key: deviceTokenKey, value: token);
-      _set(PushStatus.registered);
+      _set(granted ? PushStatus.registered : PushStatus.denied);
       return true;
     } catch (_) {
       _set(PushStatus.error);

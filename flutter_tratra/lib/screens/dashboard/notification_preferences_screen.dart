@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/flash/flash_settings.dart';
+import 'package:flutter_tratra/notifications/push_denied_alert.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
 import 'package:flutter_tratra/screens/dashboard/notifications_screen.dart' show notificationIcon;
@@ -67,9 +68,9 @@ class _NotificationPreferencesScreenState extends State<NotificationPreferencesS
               if (pushStatus == PushStatus.denied)
                 const Padding(
                   padding: EdgeInsets.only(bottom: TtSpace.s3),
-                  child: TratraAlert(
-                    tone: TratraAlertTone.warning,
-                    message: 'Les notifications sont désactivées dans les réglages de votre téléphone : vous ne recevrez pas d’alerte même si elles sont activées ici.',
+                  child: PushDeniedAlert(
+                    message: 'Vous ne recevrez pas d’alerte, même si elles sont activées ici. Vos notifications restent '
+                        'disponibles dans l’application.',
                   ),
                 ),
               Text('Choisissez les alertes que vous souhaitez recevoir sur vos appareils. L’historique reste disponible dans l’application.',
