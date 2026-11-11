@@ -3,10 +3,14 @@
 // Parcours artisan d'un compte unique : devenir artisan (profil lié au compte courant), « Mes offres » (offres + accès aux missions),
 // nouvelle offre (métier → prestation du catalogue commun → description → tarif), profil pro. Publication, identité et blocages viennent
 // du serveur (handy/eligibility.py) : aucune règle ici.
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+
+import 'package:flutter_tratra/core/api_exception.dart';
 
 import 'package:flutter_tratra/core/base_api.dart';
 import 'package:flutter_tratra/core/constants.dart';
@@ -229,9 +233,21 @@ class _PublicationBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final e = eligibility;
-    if (e.authorized) {
+    if (e.authorized && (e.ordersAuthorized || !e.hasLevels)) {
       return const TratraAlert(key: ValueKey('hub-authorized'), tone: TratraAlertTone.success, title: 'Publication autorisée',
           message: 'Vos offres actives sont visibles des clients.');
+    }
+    if (e.authorized) {
+      // Publié sans commandes : visible avec la mention du niveau réel, jamais présenté comme vérifié ; l'action lève le premier blocage.
+      final first = e.ordersBlockers.firstOrNull;
+      final action = e.ordersBlockers.map((b) => b.action).whereType<DashActionRef>().firstOrNull;
+      return TratraAlert(
+        key: const ValueKey('hub-no-orders'),
+        tone: TratraAlertTone.info,
+        title: 'Offres visibles, commandes non activées',
+        message: 'Vos offres actives sont visibles avec la mention « ${e.verificationLabel} ». ${first?.hint ?? first?.label ?? e.ordersLabel}',
+        action: action == null ? null : TextButton(onPressed: () => runEligibilityAction(context, action, onChanged: onChanged), child: Text(action.label)),
+      );
     }
     final action = e.blockers.map((b) => b.action).whereType<DashActionRef>().firstOrNull;
     return TratraAlert(
@@ -455,11 +471,29 @@ class _NewServiceScreenState extends State<NewServiceScreen> {
       Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
+        // Refus du serveur sur un champ (prix, prestation déjà proposée, coordonnées dans l'annonce) : le message s'affiche sous
+        // le champ concerné, pas en « price : … » dans un bandeau.
+        final fields = _serverFieldErrors(e);
         setState(() {
-          _error = friendlyError(e, 'L’offre n’a pas pu être créée.');
+          _errors.addAll(fields);
+          _error = fields.isEmpty ? friendlyError(e, 'L’offre n’a pas pu être créée.') : null;
           _busy = false;
         });
       }
+    }
+  }
+
+  static Map<String, String> _serverFieldErrors(Object e) {
+    if (e is! ApiException) return const {};
+    try {
+      final data = json.decode(e.body);
+      if (data is! Map) return const {};
+      return {
+        for (final name in const ['title', 'description', 'price'])
+          if (data[name] is List && (data[name] as List).isNotEmpty) name: '${(data[name] as List).first}' else if (data[name] is String) name: '${data[name]}',
+      };
+    } catch (_) {
+      return const {};
     }
   }
 

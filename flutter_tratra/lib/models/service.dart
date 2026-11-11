@@ -62,8 +62,17 @@ class Service {
     this.discountedPrice,
     this.includedServices = const [],
     this.requiredTools = const [],
+    this.canOrder = true,
+    this.verificationLabel,
     required String category,
   });
+
+  /// Le professionnel peut recevoir une commande (identité vérifiée). `true` tant que le serveur ne dit rien (anciennes réponses) :
+  /// le serveur refuse de toute façon une réservation non autorisée.
+  final bool canOrder;
+
+  /// Niveau affiché du professionnel (« Non vérifié », « Identité vérifiée », « Vérifié »), fourni par le serveur.
+  final String? verificationLabel;
 
   // ----- Helpers d’affichage -----
 
@@ -201,6 +210,9 @@ class Service {
           .toList();
     }
 
+    final artisan = json['artisan'];
+    final verification = artisan is Map ? artisan['verification'] : null;
+
     return Service(
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? 'Service sans titre').toString(),
@@ -226,6 +238,8 @@ class Service {
       discountedPrice: discounted,
       includedServices: included,
       requiredTools: tools,
+      canOrder: artisan is Map && artisan.containsKey('can_order') ? artisan['can_order'] == true : true,
+      verificationLabel: verification is Map && '${verification['label'] ?? ''}'.trim().isNotEmpty ? '${verification['label']}'.trim() : null,
       category: '',
     );
   }

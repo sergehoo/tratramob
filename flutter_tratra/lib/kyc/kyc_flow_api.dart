@@ -80,6 +80,10 @@ class KycFlowState {
         faceSatisfied = _m(j['face'])['satisfied'] == true,
         faceHumanReview = _m(j['face'])['human_review_requested'] == true,
         faceNote = '${_m(j['face'])['note'] ?? ''}',
+        faceRequired = _m(j['face'])['required'] == true,
+        faceDone = _m(j['face'])['done'] == true,
+        faceStatus = '${_m(j['face'])['status'] ?? ''}',
+        faceBenefit = '${_m(j['face'])['benefit'] ?? ''}',
         reviewState = '${_m(j['review'])['state'] ?? 'none'}',
         reviewReason = _s(_m(j['review'])['reason']),
         previousReason = _s(_m(j['review'])['previous_reason']),
@@ -106,6 +110,14 @@ class KycFlowState {
   final bool faceSatisfied;
   final bool faceHumanReview;
   final String faceNote;
+
+  /// Exigée avant les commandes (métier sensible ou politique générale) ; sinon facultative : elle donne le badge « Vérifié ».
+  final bool faceRequired;
+
+  /// Plus rien à faire de son côté : validée, transmise pour revue, ou vérification par l'équipe demandée.
+  final bool faceDone;
+  final String faceStatus;
+  final String faceBenefit;
 
   /// none | pending | rejected | approved
   final String reviewState;

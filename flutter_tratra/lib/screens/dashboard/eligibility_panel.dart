@@ -1,7 +1,8 @@
 // lib/screens/dashboard/eligibility_panel.dart
 //
-// « Mon espace professionnel » : quatre notions DISTINCTES calculées par le serveur (handy/eligibility.py) — profil complet, identité,
-// autorisation de publication, offres — avec les blocages réels et l'action qui lève chacun. Aucune règle ici : l'application affiche.
+// « Mon espace professionnel » : les trois niveaux DISTINCTS calculés par le serveur (handy/eligibility.py) — publication (service
+// visible, « Non vérifié »), commandes (pièce d'identité vérifiée), badge « Vérifié » (vérification faciale) — puis le profil et les
+// offres, avec les blocages réels du niveau en cours et l'action qui lève chacun. Aucune règle ici : l'application affiche.
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -18,7 +19,9 @@ Future<void> runEligibilityAction(BuildContext context, DashActionRef action, {V
       if (onEditProfile != null) return onEditProfile();
       await openProProfile(context);
     case 'verify_identity':
-      await openKyc(context);
+      await openKyc(context, step: action.step);
+    case 'verify_phone':
+      await openVerifyPhone(context);
     case 'add_service':
       final added = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => const NewServiceScreen()));
       if (added == true) onChanged?.call();
@@ -54,45 +57,74 @@ class EligibilityPanel extends StatelessWidget {
     void act(DashActionRef a) => runEligibilityAction(context, a, onEditProfile: onEditProfile, onChanged: onChanged);
     final missing = [for (final i in e.profileItems) if (!i.done) i.label.toLowerCase()];
     final kyc = kycBadge(e.kycStatus, e.kycLabel);
+    final face = e.stage('face');
+    // Blocages du niveau EN COURS : la publication d'abord, puis les commandes.
+    final blockers = !e.authorized ? e.blockers : (e.ordersAuthorized ? const <DashBlocker>[] : e.ordersBlockers);
     return TratraCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(child: Text('Mon espace professionnel', style: TratraTheme.style(TtType.h3))),
-          TratraBadge(e.authorized ? 'Publié' : 'Non publié', tone: e.authorized ? TratraTone.success : TratraTone.gray, dot: true),
-        ]),
+        // Petit écran ou texte agrandi : la mention passe sous le titre au lieu de déborder.
+        SizedBox(
+          width: double.infinity,
+          child: Wrap(alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, spacing: TtSpace.s2, runSpacing: TtSpace.s1, children: [
+            Text('Mon espace professionnel', style: TratraTheme.style(TtType.h3)),
+            TratraBadge(e.verificationLabel,
+                key: const ValueKey('elig-level'),
+                tone: e.verified ? TratraTone.success : e.verificationLevel == 'IDENTITE_VERIFIEE' ? TratraTone.info : TratraTone.gray,
+                dot: true),
+          ]),
+        ),
         const SizedBox(height: TtSpace.s3),
         _Block(
-          key: const ValueKey('elig-profile'),
-          icon: Icons.person_outline_rounded,
-          title: 'Profil complet',
-          value: '${e.profileDone}/${e.profileTotal}',
-          ok: e.profileComplete,
-          detail: e.profileComplete ? 'Présentation, spécialités, expérience, zone et photo renseignées.' : 'À compléter : ${missing.join(', ')}.',
+          key: const ValueKey('elig-publication'),
+          icon: Icons.public_rounded,
+          title: 'Publication',
+          value: e.authorized ? 'Publié' : 'Non publié',
+          ok: e.authorized,
+          detail: e.authorized
+              ? (e.verified
+                  ? 'Vos services actifs sont visibles des clients, avec le badge « Vérifié ».'
+                  : 'Vos services actifs sont visibles des clients, avec la mention « ${e.verificationLabel} ».')
+              : e.blockers.isEmpty
+                  ? e.approvalLabel
+                  : '${e.blockers.length} point${e.blockers.length > 1 ? 's bloquent' : ' bloque'} la publication : voir ci-dessous.',
         ),
         _Block(
           key: const ValueKey('elig-kyc'),
           icon: Icons.verified_user_outlined,
-          title: 'Identité',
-          badge: TratraBadge(kyc.$1, tone: kyc.$2, dot: true),
-          ok: e.kycApproved,
-          detail: switch (e.kycStatus) {
-            'approved' => 'Pièce d’identité validée par l’équipe Tratra.',
-            'pending' => 'L’équipe Tratra examine votre pièce. Aucune action n’est nécessaire.',
-            'rejected' => e.kycReason ?? 'Une nouvelle pièce est demandée.',
-            _ => 'Faites vérifier votre pièce d’identité en quelques minutes.',
-          },
+          title: 'Commandes',
+          value: e.ordersAuthorized ? 'Activées' : 'Non activées',
+          badge: e.ordersAuthorized ? null : TratraBadge(kyc.$1, tone: kyc.$2, dot: true),
+          ok: e.ordersAuthorized,
+          detail: e.ordersAuthorized
+              ? 'Réservations, missions Tratra Flash et contrats sont ouverts.'
+              : switch (e.kycStatus) {
+                  'approved' => e.ordersBlockers.isNotEmpty ? e.ordersBlockers.first.label : e.ordersLabel,
+                  'pending' => 'L’équipe Tratra examine votre pièce d’identité. Aucune action n’est nécessaire.',
+                  'rejected' => e.kycReason ?? 'Une nouvelle pièce d’identité est demandée.',
+                  _ => 'Faites vérifier votre pièce d’identité pour recevoir des réservations et des missions.',
+                },
         ),
+        if (e.hasLevels)
+          _Block(
+            key: const ValueKey('elig-badge'),
+            icon: Icons.verified_outlined,
+            title: 'Badge « Vérifié »',
+            value: e.verified ? 'Attribué' : (face?.status ?? ''),
+            ok: e.verified,
+            detail: e.verified
+                ? 'Votre visage correspond à votre pièce d’identité : le badge est affiché sur votre profil et vos offres.'
+                : (face?.benefit.isNotEmpty ?? false)
+                    ? face!.benefit
+                    : 'Une vérification faciale confirme que la pièce d’identité est bien la vôtre.',
+          ),
         _Block(
-          key: const ValueKey('elig-publication'),
-          icon: Icons.public_rounded,
-          title: 'Autorisation de publication',
-          value: e.authorized ? 'Autorisée' : 'Non autorisée',
-          ok: e.authorized,
-          detail: e.authorized
-              ? 'Vos offres actives sont visibles des clients.'
-              : e.blockers.isEmpty
-                  ? e.approvalLabel
-                  : '${e.blockers.length} point${e.blockers.length > 1 ? 's bloquent' : ' bloque'} la publication : voir ci-dessous.',
+          key: const ValueKey('elig-profile'),
+          icon: Icons.person_outline_rounded,
+          title: 'Profil',
+          value: '${e.profileDone}/${e.profileTotal}',
+          ok: e.profileComplete,
+          detail: e.profileComplete ? 'Présentation, spécialités, expérience, zone et photo renseignées.' : 'À compléter : ${missing.join(', ')}.',
+          last: !showOffers,
         ),
         if (showOffers)
           _Block(
@@ -106,11 +138,11 @@ class EligibilityPanel extends StatelessWidget {
             onAction: act,
             last: true,
           ),
-        if (!e.authorized && e.blockers.isNotEmpty) ...[
+        if (blockers.isNotEmpty) ...[
           const SizedBox(height: TtSpace.s3),
-          Text('Ce qui bloque la publication', style: TratraTheme.style(TtType.title)),
+          Text(e.authorized ? 'Ce qui manque pour recevoir des commandes' : 'Ce qui bloque la publication', style: TratraTheme.style(TtType.title)),
           const SizedBox(height: TtSpace.s2),
-          for (final b in e.blockers)
+          for (final b in blockers)
             Padding(
               padding: const EdgeInsets.only(bottom: TtSpace.s2),
               child: Container(
@@ -167,7 +199,7 @@ class _Block extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Wrap(spacing: TtSpace.s2, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
               Text(title, style: TratraTheme.style(TtType.bodySm).copyWith(fontWeight: FontWeight.w600)),
-              if (value != null) Text(value!, style: TratraTheme.style(TtType.caption, color: ok ? TtColors.successInk : TtColors.inkSoft).copyWith(fontWeight: FontWeight.w700)),
+              if (value != null && value!.isNotEmpty) Text(value!, style: TratraTheme.style(TtType.caption, color: ok ? TtColors.successInk : TtColors.inkSoft).copyWith(fontWeight: FontWeight.w700)),
               if (badge != null) badge!,
             ]),
             const SizedBox(height: 2),

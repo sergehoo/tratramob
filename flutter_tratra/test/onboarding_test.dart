@@ -1,6 +1,7 @@
-// « Inscription accompagnée » : une question par écran, voix du téléphone, brouillon gardé sur le téléphone AVANT le compte (rien n'est
-// envoyé au serveur) puis synchronisé APRÈS, reprise au même écran, bascule vers le formulaire classique sans perte, annonce créée par le
-// serveur (apply), KYC simplifié prérempli par la lecture de la pièce, tableau de bord débutant (un seul « Continuer »), petits écrans.
+// « Inscription accompagnée » : le compte d'abord (identité saisie une seule fois), puis TROIS écrans — métier, zone, publication. Le service
+// est publié sans KYC avec la mention « Non vérifié » et aucune commande ; « Activer mes commandes » mène à la pièce d'identité. Voix du
+// téléphone, brouillon gardé sur le téléphone AVANT le compte (rien n'est envoyé au serveur) puis synchronisé APRÈS, reprise, bascule vers
+// le formulaire classique sans perte, questions et photo facultatives APRÈS la publication, tableau de bord débutant, petits écrans.
 import 'dart:convert';
 import 'dart:io';
 
@@ -100,24 +101,27 @@ final _config = {
 };
 
 const _journey = [
-  ('trade', 'Métier'),
-  ('zone', 'Zone'),
-  ('questions', 'Questions'),
   ('account', 'Compte'),
   ('phone', 'Téléphone'),
-  ('offer', 'Annonce'),
-  ('photo', 'Photo'),
+  ('trade', 'Métier'),
+  ('zone', 'Zone'),
+  ('offer', 'Publication'),
   ('identity', 'Identité'),
-  ('approval', 'Validation')
+  ('face', 'Visage'),
 ];
 
-/// Serveur simulé : mêmes routes et mêmes champs que handy/api/onboarding.py.
+/// Serveur simulé : mêmes routes, mêmes champs et même ordre de la prochaine action que handy/onboarding.py.
 class OnbServer {
   Map<String, dynamic> draft = {};
   bool applied = false;
   Map<String, String> states = {};
   Map<String, dynamic>? next;
-  bool published = false;
+
+  /// Imposé par un test ; sinon calculé comme le serveur : service créé, téléphone confirmé, expérience suffisante. Jamais de KYC.
+  bool? published;
+  bool phoneVerified = true;
+  bool ordersEnabled = false;
+  bool photoDone = false;
   final requests = <http.Request>[];
 
   /// Minimum d'expérience du métier (administration Django).
@@ -129,24 +133,49 @@ class OnbServer {
   int applyCount = 0;
   bool experienceOk = true;
 
+  bool get isPublished => published ?? (applied && phoneVerified && experienceOk);
+  bool get _zone => '${draft['commune'] ?? ''}'.isNotEmpty;
+
+  Map<String, dynamic> _nextAction() {
+    if (!phoneVerified) return {'code': 'verify_phone', 'label': 'Confirmer mon téléphone', 'step': 'phone'};
+    if (draft['trade'] == null) return {'code': 'resume', 'label': 'Choisir mon métier', 'step': 'trade'};
+    if (!_zone) return {'code': 'resume', 'label': 'Choisir ma zone', 'step': 'zone'};
+    if (!applied) return {'code': 'apply', 'label': 'Publier mon service', 'step': 'offer'};
+    if (!isPublished) return {'code': 'blocked', 'label': 'Nounou demande au moins 2 ans d’expérience pour publier', 'step': 'offer'};
+    if (!ordersEnabled) return {'code': 'verify_identity', 'label': 'Activer mes commandes', 'step': 'identity'};
+    return {'code': 'verify_identity', 'label': 'Obtenir le badge Vérifié', 'step': 'face'};
+  }
+
   Map<String, dynamic> state() {
+    final auto = {'account': true, 'phone': phoneVerified, 'trade': draft['trade'] != null, 'zone': _zone, 'offer': applied, 'identity': ordersEnabled};
     final steps = [
-      for (final (k, l) in _journey) {'key': k, 'label': l, 'state': states[k] ?? (k == 'offer' && applied ? 'done' : 'todo')}
+      for (final (k, l) in _journey) {'key': k, 'label': l, 'state': states[k] ?? (auto[k] == true ? 'done' : 'todo')}
     ];
+    final answers = (draft['answers'] as Map?) ?? const {};
     return {
       'path': 'guided',
       'trade': draft['trade'] == null ? null : {'id': draft['trade'], 'name': 'Nounou'},
       'prestations': draft['prestations'] ?? [],
       'commune': draft['commune'] ?? '',
       'quartier': draft['quartier'] ?? '',
-      'answers': draft['answers'] ?? {},
+      'answers': answers,
       'step': draft['step'] ?? '',
       'offer': draft['trade'] == null ? null : {'title': 'Nounou à Cocody', 'description': 'Je propose mes services de nounou.'},
+      'service_id': applied ? 77 : null,
       'steps': steps,
       'done': steps.where((s) => s['state'] == 'done').length,
       'total': steps.length,
-      'next_action': next ?? {'code': 'resume', 'label': 'Répondre aux questions', 'step': 'questions'},
-      'published': published,
+      'next_action': next ?? _nextAction(),
+      'published': isPublished,
+      'orders_enabled': ordersEnabled,
+      'verification': {
+        'level': ordersEnabled ? 'IDENTITE_VERIFIEE' : 'NON_VERIFIE',
+        'label': ordersEnabled ? 'Identité vérifiée' : 'Non vérifié',
+        'badge': false,
+      },
+      'blocked': applied && phoneVerified && !experienceOk ? {'code': 'experience_minimum', 'label': 'Expérience insuffisante pour publier', 'hint': ''} : null,
+      'publish': {'done': [for (final k in const ['trade', 'zone', 'offer']) if (auto[k] == true) k].length, 'total': 3},
+      'optional': {'questions': answers.length >= 2, 'photo': photoDone},
       'experience': {'ok': experienceOk, 'trade': 'Nounou', 'minimum': experienceOk ? 0 : 2, 'declared': experienceOk ? '' : 'Moins d’un an'},
     };
   }
@@ -175,7 +204,10 @@ class OnbServer {
       applied = true;
       return _json(state());
     }
-    if (p.endsWith('/handymen/5/')) return _json({'id': 5});
+    if (p.endsWith('/handymen/5/')) {
+      photoDone = true;
+      return _json({'id': 5});
+    }
     return _json({});
   });
 }
@@ -224,7 +256,14 @@ BaseApi _base(http.Client client) {
   return BaseApi(client: client);
 }
 
-Widget _host(BaseApi base, Session session, Widget child) => MultiProvider(
+/// Routes poussées par l'écran (retour à l'espace : `/`, que `home:` sert ici avec le même écran).
+class _Routes extends NavigatorObserver {
+  final pushed = <String?>[];
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => pushed.add(route.settings.name);
+}
+
+Widget _host(BaseApi base, Session session, Widget child, {NavigatorObserver? observer}) => MultiProvider(
       providers: [
         Provider<BaseApi>.value(value: base),
         Provider<DashboardApi>.value(value: DashboardApi(base)),
@@ -235,6 +274,7 @@ Widget _host(BaseApi base, Session session, Widget child) => MultiProvider(
         key: ObjectKey(child), // écran neuf = navigation neuve (application rouverte)
         theme: TratraTheme.light(),
         home: child,
+        navigatorObservers: [if (observer != null) observer],
         onGenerateRoute: (s) => MaterialPageRoute(builder: (_) => Scaffold(body: Text('route ${s.name}'))),
       ),
     );
@@ -270,26 +310,20 @@ bool _enabled(WidgetTester t) => t.widget<TratraButton>(find.byKey(const ValueKe
 
 Finder _input(String key) => find.descendant(of: find.byKey(ValueKey(key)), matching: find.byType(TextField));
 
-/// Métier → prestation → commune → quartier (passé) → expérience → jours : jusqu'à l'aperçu de l'annonce.
-Future<void> _answerAll(WidgetTester t) async {
-  await _continue(t); // intro → métier
+/// Les écrans de publication jusqu'au dernier : métier (et prestation, sur le même écran) → zone → « Votre service ».
+Future<void> _toConfirm(WidgetTester t) async {
   expect(_enabled(t), isFalse, reason: 'aucun métier choisi');
   await _tap(t, find.text('Nounou'));
-  await _continue(t);
-  expect(find.text('Que proposez-vous exactement ?'), findsOneWidget);
+  expect(find.text('Que proposez-vous exactement ?'), findsOneWidget, reason: 'les prestations sur le même écran que le métier');
   await _tap(t, find.byKey(const ValueKey('onb-prest-121')));
   await _continue(t);
+  expect(_enabled(t), isFalse, reason: 'aucune commune choisie');
   await _tap(t, find.byKey(const ValueKey('onb-commune-Cocody')));
-  await _continue(t);
-  await _tap(t, find.byKey(const ValueKey('onb-secondary'))); // quartier : « Passer »
-  expect(find.text('Depuis combien de temps faites-vous ce travail ?'), findsOneWidget);
-  await _tap(t, find.byKey(const ValueKey('onb-opt-experience-lt1')));
-  await _continue(t);
-  await _tap(t, find.byKey(const ValueKey('onb-opt-days-monday')));
-  await _tap(t, find.byKey(const ValueKey('onb-opt-days-saturday')));
   await _continue(t);
   expect(find.byKey(const ValueKey('onb-offer')), findsOneWidget);
 }
+
+Finder _within(String key, String text) => find.descendant(of: find.byKey(ValueKey(key)), matching: find.text(text));
 
 Future<Map<String, dynamic>?> _localDraft() async {
   final raw = (await SharedPreferences.getInstance()).getString('tratra.onboarding.draft.v1');
@@ -321,56 +355,77 @@ void main() {
   });
 
   group('parcours accompagné', () {
-    testWidgets('compte connecté : une question par écran, voix, aperçu, annonce créée par le serveur, photo, identité', (t) async {
+    testWidgets('compte connecté : trois écrans (métier, zone, publication), voix, service publié « Non vérifié » sans KYC, puis le facultatif', (t) async {
       _size(t);
       final server = OnbServer();
       final base = _base(server.client);
       final path = await t.runAsync(_photo);
-      await t.pumpWidget(_host(base, _Session(_awa), GuidedOnboardingScreen(photoPicker: () async => path)));
+      final routes = _Routes();
+      await t.pumpWidget(_host(base, _Session(_awa), GuidedOnboardingScreen(photoPicker: () async => path), observer: routes));
       await t.pumpAndSettle();
 
-      expect(find.text('Proposez vos services, pas à pas'), findsOneWidget);
-      expect(find.textContaining('Étape 1 sur'), findsOneWidget);
-      expect(_spoken.single, startsWith('Bienvenue !'), reason: 'la voix lit l’écran');
+      expect(find.text('Quel est votre métier ?'), findsOneWidget);
+      expect(find.text('Étape 1 sur 3 · Votre métier'), findsOneWidget);
+      expect(find.text('Comment vous appelez-vous ?'), findsNothing, reason: 'compte déjà connecté : identité jamais redemandée');
+      expect(_spoken.single, startsWith('Première étape sur trois'), reason: 'la voix lit l’écran');
       await _tap(t, find.byKey(const ValueKey('onb-replay')));
       expect(_spoken, hasLength(2), reason: '« Réécouter »');
 
-      await _answerAll(t);
+      await _toConfirm(t);
+      expect(find.text('Étape 3 sur 3 · Publication'), findsOneWidget);
       expect(find.text('Je propose mes services de nounou à Cocody.'), findsOneWidget);
-      expect(find.text('Disponible lundi et samedi.'), findsOneWidget);
-      expect(find.text('Expérience : moins d’un an.'), findsOneWidget, reason: 'déclaration exacte, jamais « 1 an »');
-      expect(_spoken.last, contains('Je propose mes services de nounou à Cocody.'), reason: 'la voix lit l’annonce');
+      expect(find.textContaining('avec la mention « Non vérifié »'), findsOneWidget, reason: 'annoncé avant de publier');
+      expect(find.textContaining('Aucune commande avant la vérification de votre pièce d’identité'), findsOneWidget);
+      expect(_spoken.last, contains('Je propose mes services de nounou à Cocody.'), reason: 'la voix lit le service');
       expect(server.applied, isFalse);
+      expect(_within('onb-continue', 'Publier mon service'), findsOneWidget);
 
-      await _continue(t); // « Mon annonce me convient »
-      expect(server.applied, isTrue, reason: 'profil et annonce créés par le serveur, sans IA');
+      await _continue(t); // « Publier mon service »
+      expect(server.applied, isTrue, reason: 'profil et service créés par le serveur, sans IA ni KYC');
       final body = jsonDecode(server.puts.last.body) as Map;
       expect(body['trade'], 12);
       expect(body['prestations'], [121]);
       expect(body['commune'], 'Cocody');
-      expect(body['answers'], {
+      expect(body.containsKey('password'), isFalse);
+      expect(find.text('Votre service est en ligne'), findsOneWidget);
+      expect(_within('onb-status', 'Non vérifié'), findsOneWidget, reason: 'jamais présenté comme vérifié');
+      expect(find.textContaining('Aucune commande pour l’instant'), findsOneWidget);
+      expect(_within('onb-continue', 'Activer mes commandes'), findsOneWidget);
+      for (final stage in ['offer', 'identity', 'face']) {
+        expect(find.byKey(ValueKey('onb-stage-$stage')), findsOneWidget, reason: 'étape $stage et son bénéfice');
+      }
+      expect(await t.runAsync(_localDraft), isNull, reason: 'le brouillon local est vidé une fois le service créé');
+
+      // Facultatif, après la publication : questions du métier puis photo — hors des trois écrans.
+      await _tap(t, find.byKey(const ValueKey('onb-more-questions')));
+      expect(find.text('Facultatif · Vos réponses (1/2)'), findsOneWidget);
+      expect(find.text('Depuis combien de temps faites-vous ce travail ?'), findsOneWidget);
+      await _tap(t, find.byKey(const ValueKey('onb-opt-experience-lt1')));
+      await _continue(t);
+      await _tap(t, find.byKey(const ValueKey('onb-opt-days-monday')));
+      await _tap(t, find.byKey(const ValueKey('onb-opt-days-saturday')));
+      await _continue(t);
+      expect(server.applyCount, 2, reason: 'les réponses complètent le service déjà publié');
+      expect(jsonDecode(server.puts.last.body)['answers'], {
         'experience': 'lt1',
         'days': ['monday', 'saturday']
       });
-      expect(body.containsKey('password'), isFalse);
       expect(find.text('Votre photo'), findsOneWidget);
-      expect(find.text('Comment vous appelez-vous ?'), findsNothing, reason: 'compte déjà connecté : pas de création de compte');
 
       await t.tap(find.byKey(const ValueKey('onb-continue'))); // « Prendre ma photo »
-      await _io(t, () => find.text('Vérifier votre identité').evaluate().isNotEmpty);
+      await _io(t, () => find.text('Votre service est en ligne').evaluate().isNotEmpty);
       final upload = server.requests.where((r) => r.url.path.endsWith('/handymen/5/'));
       expect(upload, hasLength(1));
       expect(upload.single.method, 'PATCH');
-      server.states = {'photo': 'done'};
+      expect(find.byKey(const ValueKey('onb-more-photo')), findsNothing);
+      expect(find.byKey(const ValueKey('onb-more-questions')), findsNothing);
 
-      await _tap(t, find.byKey(const ValueKey('onb-secondary'))); // identité : « Plus tard »
-      expect(find.text('Votre annonce est enregistrée'), findsOneWidget, reason: 'fin honnête : la pièce n’a pas été envoyée');
-      expect(find.textContaining('Il vous reste à faire vérifier votre pièce d’identité.'), findsOneWidget);
-      expect(await t.runAsync(_localDraft), isNull, reason: 'le brouillon local est vidé une fois l’annonce créée');
+      await _tap(t, find.byKey(const ValueKey('onb-secondary'))); // « Plus tard » : l'identité se fera depuis l'espace
+      expect(routes.pushed.last, '/', reason: 'retour à l’espace');
       await t.pump(const Duration(seconds: 1));
     });
 
-    testWidgets('sans compte : rien n’est envoyé avant la création du compte, brouillon gardé sur le téléphone et reprise au même écran', (t) async {
+    testWidgets('sans compte : le compte d’abord (identité saisie une seule fois), rien n’est envoyé avant sa création, reprise sans ressaisie', (t) async {
       _size(t);
       final server = OnbServer();
       final base = _base(server.client);
@@ -386,46 +441,34 @@ void main() {
           );
       await t.pumpWidget(_host(base, session, screen('a')));
       await t.pumpAndSettle();
-      await _continue(t);
-      await _tap(t, find.text('Nounou'));
-      await _continue(t);
-      await _tap(t, find.byKey(const ValueKey('onb-prest-121')));
-      await _continue(t);
-      await _tap(t, find.byKey(const ValueKey('onb-commune-Cocody')));
-      await _continue(t);
-      await _tap(t, find.byKey(const ValueKey('onb-secondary')));
-      await _tap(t, find.byKey(const ValueKey('onb-opt-experience-1_3')));
-      await t.pump(const Duration(seconds: 1));
-
-      expect(server.private, isEmpty, reason: 'seuls le catalogue et la configuration publique sont lus');
-      final local = await t.runAsync(_localDraft);
-      expect(local!['trade'], 12);
-      expect(local['commune'], 'Cocody');
-      expect(local['step'], 'q:experience');
-      expect(local['answers'], {'experience': '1_3'});
-
-      // L'application est fermée puis rouverte : même écran, même réponse.
-      await t.pumpWidget(_host(base, session, const SizedBox()));
-      await t.pumpWidget(_host(base, session, screen('b')));
-      await t.pumpAndSettle();
-      expect(find.text('Depuis combien de temps faites-vous ce travail ?'), findsOneWidget);
-      expect(_enabled(t), isTrue, reason: 'la réponse « 1 à 3 ans » est retrouvée');
-
-      // Retour arrière : l'écran précédent, puis on avance de nouveau.
-      await _tap(t, find.byTooltip('Retour'));
-      expect(find.text('Dans quel quartier ?'), findsOneWidget);
-      await _tap(t, find.byKey(const ValueKey('onb-secondary')));
-      await _continue(t);
-      await _tap(t, find.byKey(const ValueKey('onb-opt-days-monday')));
-      await _continue(t);
-      await _continue(t); // aperçu → compte
-
       expect(find.text('Comment vous appelez-vous ?'), findsOneWidget);
       expect(_enabled(t), isFalse);
       await t.enterText(_input('onb-first'), 'Awa');
       await t.enterText(_input('onb-last'), 'Koné');
       await t.pumpAndSettle();
       await _continue(t);
+      expect(find.text('Votre numéro de téléphone'), findsOneWidget);
+      await t.pump(const Duration(seconds: 1));
+
+      expect(server.private, isEmpty, reason: 'seul le catalogue public est lu');
+      final local = await t.runAsync(_localDraft);
+      expect((local!['first_name'], local['last_name'], local['step']), ('Awa', 'Koné', 'phone'));
+
+      // L'application est fermée puis rouverte : le prénom et le nom sont retrouvés, jamais ressaisis.
+      await t.pumpWidget(_host(base, session, const SizedBox()));
+      await t.pumpWidget(_host(base, session, screen('b')));
+      await t.pumpAndSettle();
+      expect(find.text('Comment vous appelez-vous ?'), findsOneWidget);
+      expect(t.widget<TextField>(_input('onb-first')).controller!.text, 'Awa');
+      expect(t.widget<TextField>(_input('onb-last')).controller!.text, 'Koné');
+      expect(_enabled(t), isTrue);
+      await _continue(t);
+
+      // Retour arrière : l'écran précédent, puis on avance de nouveau.
+      await _tap(t, find.byTooltip('Retour'));
+      expect(find.text('Comment vous appelez-vous ?'), findsOneWidget);
+      await _continue(t);
+
       final national = find.descendant(of: find.byType(TratraPhoneField), matching: find.byType(TextField));
       await t.enterText(national, '07 00');
       await _continue(t);
@@ -446,26 +489,31 @@ void main() {
 
       await _continue(t); // « Créer mon compte »
       expect(signups, ['Awa|Koné|+2250700000000']);
-      expect(server.puts, isNotEmpty, reason: 'le brouillon rejoint le compte dès sa création');
-      expect(jsonDecode(server.puts.first.body)['answers'], {
-        'experience': '1_3',
-        'days': ['monday']
-      });
+      expect(find.text('Quel est votre métier ?'), findsOneWidget, reason: 'compte créé : place aux trois écrans de publication');
+      expect(find.text('Étape 1 sur 3 · Votre métier'), findsOneWidget);
+
+      await _toConfirm(t);
+      await _continue(t); // « Publier mon service »
       expect(server.applied, isTrue);
-      expect(find.text('Votre photo'), findsOneWidget);
+      final body = jsonDecode(server.puts.last.body) as Map;
+      expect((body['trade'], '${body['prestations']}', body['commune']), (12, '[121]', 'Cocody'));
+      expect('${server.requests.map((r) => r.body).join()}', isNot(contains(secret)), reason: 'le mot de passe ne passe que par la création du compte');
+      expect(find.text('Votre service est en ligne'), findsOneWidget);
+      expect(find.text('Comment vous appelez-vous ?'), findsNothing);
       expect(await t.runAsync(_localDraft), isNull);
       await t.pump(const Duration(seconds: 1));
     });
 
-    testWidgets('code SMS : « Plus tard » crée quand même l’annonce ; numéro vérifié entre-temps → aucun nouveau code', (t) async {
+    testWidgets('code SMS : « Plus tard » laisse publier, le service reste « enregistré » jusqu’au numéro confirmé ; vérifié entre-temps → aucun nouveau code', (t) async {
       _size(t);
+      // Brouillon de l'ancien parcours (métier et commune choisis AVANT le compte) : rien n'est perdu ni redemandé.
       SharedPreferences.setMockInitialValues({
         'tratra.onboarding.draft.v1': jsonEncode({
           'trade': 12, 'trade_name': 'Nounou', 'prestations': [121], 'commune': 'Cocody', 'step': 'password',
           'answers': {'experience': 'lt1', 'days': ['monday']}, 'first_name': 'Awa', 'last_name': 'Koné',
         }),
       });
-      final server = OnbServer();
+      final server = OnbServer()..phoneVerified = false;
       final base = _base(server.client);
       final session = _Session();
       const unverified = User(id: '9', email: '', firstName: 'Awa', lastName: 'Koné', userType: 'client', isActive: true);
@@ -477,46 +525,59 @@ void main() {
             return true;
           })));
       await t.pumpAndSettle();
-      expect(find.text('Choisissez votre mot de passe'), findsOneWidget, reason: 'reprise à l’écran enregistré');
+      expect(find.text('Comment vous appelez-vous ?'), findsOneWidget, reason: 'sans compte : la reprise commence par le compte');
+      expect(t.widget<TextField>(_input('onb-first')).controller!.text, 'Awa', reason: 'prénom retrouvé');
+      await _continue(t);
+      await t.enterText(find.descendant(of: find.byType(TratraPhoneField), matching: find.byType(TextField)), '0700000000');
+      await t.pumpAndSettle();
+      await _continue(t);
       await t.enterText(_input('onb-password'), 'Essai2026x');
       await t.enterText(_input('onb-confirm'), 'Essai2026x');
       await t.pumpAndSettle();
       await _continue(t);
       expect(find.text('Confirmez votre numéro'), findsOneWidget);
+      expect(server.draft['trade'], 12, reason: 'le brouillon rejoint le compte dès sa création');
       expect(server.applied, isFalse);
-      await _tap(t, find.byKey(const ValueKey('onb-secondary')));             // « Plus tard »
-      expect(server.applied, isTrue, reason: 'l’annonce est créée ; le numéro sera confirmé depuis le tableau de bord');
-      expect(find.text('Votre photo'), findsOneWidget);
+
+      await _tap(t, find.byKey(const ValueKey('onb-secondary'))); // « Plus tard »
+      expect(find.byKey(const ValueKey('onb-trade-chosen')), findsOneWidget, reason: 'métier déjà choisi : jamais redemandé');
+      await _continue(t);
+      await _continue(t); // commune déjà choisie
+      expect(find.byKey(const ValueKey('onb-offer')), findsOneWidget);
+      await _continue(t); // « Publier mon service »
+      expect(server.applied, isTrue);
+      expect(find.text('Votre service est enregistré'), findsOneWidget, reason: 'pas « en ligne » : le numéro n’est pas confirmé');
+      expect(find.text('Confirmez votre numéro de téléphone pour le rendre visible des clients.'), findsOneWidget);
+      expect(_within('onb-status', 'Non publié'), findsOneWidget);
+      expect(_within('onb-continue', 'Confirmer mon téléphone'), findsOneWidget);
       await t.pump(const Duration(seconds: 1));
 
-      // Reprise sur l'écran du code alors que le numéro a été vérifié ailleurs : pas de nouveau code, on avance.
-      server
-        ..applied = false
-        ..draft = {...server.draft, 'step': 'verify'};
-      await session.setUser(unverified);
-      await t.pumpWidget(_host(base, session, const GuidedOnboardingScreen(key: ValueKey('again'))));
-      await t.pumpAndSettle();
-      expect(find.text('Confirmez votre numéro'), findsOneWidget);
+      // Le numéro a été vérifié ailleurs entre-temps : pas de nouveau code, le service passe en ligne.
+      server.phoneVerified = true;
       await session.setUser(const User(id: '9', email: '', firstName: 'Awa', lastName: 'Koné', userType: 'client', isActive: true, isVerified: true));
+      await t.pumpAndSettle();
       await _continue(t);
       expect(find.text('Vérifiez votre téléphone'), findsNothing);
-      expect(server.applied, isTrue);
-      expect(find.text('Votre photo'), findsOneWidget);
+      expect(find.text('Votre service est en ligne'), findsOneWidget);
+      expect(_within('onb-status', 'Non vérifié'), findsOneWidget);
+      expect(_within('onb-continue', 'Activer mes commandes'), findsOneWidget);
       await t.pump(const Duration(seconds: 1));
     });
 
-    testWidgets('« Passer au formulaire classique » garde les réponses (sans compte : inscription classique)', (t) async {
+    testWidgets('« Passer au formulaire classique » garde ce qui a été saisi (sans compte : inscription classique)', (t) async {
       _size(t);
       final server = OnbServer();
       final base = _base(server.client);
       await t.pumpWidget(_host(base, _Session(), const GuidedOnboardingScreen()));
       await t.pumpAndSettle();
-      await _continue(t);
-      await _tap(t, find.text('Ménage'));
+      await t.enterText(_input('onb-first'), 'Awa');
+      await t.enterText(_input('onb-last'), 'Koné');
+      await t.pumpAndSettle();
       await _tap(t, find.byTooltip('Plus d’options'));
       await _tap(t, find.text('Passer au formulaire classique'));
       expect(find.text('route /register'), findsOneWidget);
-      expect((await t.runAsync(_localDraft))!['trade'], 13);
+      final local = await t.runAsync(_localDraft);
+      expect((local!['first_name'], local['last_name']), ('Awa', 'Koné'));
       expect(server.private, isEmpty);
     });
 
@@ -527,9 +588,10 @@ void main() {
       await t.pumpAndSettle();
       expect(_spoken, hasLength(1));
       await _tap(t, find.byKey(const ValueKey('onb-voice-toggle')));
-      await _continue(t);
-      expect(find.text('Quel est votre métier ?'), findsOneWidget);
-      expect(_spoken, hasLength(1));
+      await _tap(t, find.text('Nounou'));
+      expect(find.text('Que proposez-vous exactement ?'), findsOneWidget);
+      expect(_spoken, hasLength(1), reason: 'le métier choisi n’est plus lu');
+      await t.pump(const Duration(seconds: 1));
       expect((await t.runAsync(SharedPreferences.getInstance))!.getBool('tratra.voice.autoplay'), isFalse);
     });
 
@@ -543,8 +605,10 @@ void main() {
       await t.pumpWidget(_host(base, _Session(_awa), GuidedOnboardingScreen(voice: VoiceGuide())));
       await t.pumpAndSettle();
       expect(find.byKey(const ValueKey('onb-replay')), findsNothing);
-      await _continue(t);
       expect(find.text('Quel est votre métier ?'), findsOneWidget);
+      await _tap(t, find.text('Nounou'));
+      expect(find.text('Que proposez-vous exactement ?'), findsOneWidget);
+      await t.pump(const Duration(seconds: 1));
     });
   });
 
@@ -616,29 +680,19 @@ void main() {
       expect(find.textContaining('(Nounou)'), findsOneWidget);
     });
 
-    testWidgets('tableau de bord : progression, prochaine action et UN bouton « Continuer » ; caché si rien commencé ou publié', (t) async {
+    testWidgets('tableau de bord : publication en cours « x/3 », prochaine action et UN bouton « Continuer » ; caché si rien commencé ou publié', (t) async {
       _size(t);
-      final server = OnbServer()
-        ..draft = {'trade': 12, 'step': 'identity'}
-        ..applied = true
-        ..states = {'trade': 'done', 'zone': 'done', 'questions': 'done', 'account': 'done', 'phone': 'done', 'photo': 'done'}
-        ..next = {'code': 'verify_identity', 'label': 'Vérifier mon identité', 'step': 'identity'};
+      final server = OnbServer()..draft = {'trade': 12, 'commune': 'Cocody', 'step': 'zone'};
       final base = _base(server.client);
       await t.pumpWidget(_host(base, _Session(_awa), const Scaffold(body: BeginnerProgressCard())));
       await t.pumpAndSettle();
-      expect(find.text('Mon inscription professionnelle'), findsOneWidget);
-      expect(find.text('7/9'), findsOneWidget);
-      expect(find.text('Prochaine étape : Vérifier mon identité'), findsOneWidget);
+      expect(find.text('Publier mon premier service'), findsOneWidget);
+      expect(find.text('2/3'), findsOneWidget, reason: 'seuls les trois écrans de publication comptent, jamais le KYC');
+      expect(find.text('Prochaine étape : Publier mon service'), findsOneWidget);
       expect(find.byType(TratraButton), findsOneWidget);
       expect(find.text('Continuer'), findsOneWidget);
 
-      server.next = {'code': 'wait', 'label': 'Nous vérifions votre dossier', 'step': 'identity'};
-      await t.pumpWidget(_host(base, _Session(_awa), const Scaffold(body: BeginnerProgressCard(key: ValueKey('wait')))));
-      await t.pumpAndSettle();
-      expect(find.text('Voir mon dossier'), findsOneWidget);
-      expect(find.textContaining('vérifie votre dossier'), findsOneWidget);
-
-      server.published = true;
+      server.applied = true; // service publié sans KYC : la carte débutant s'efface, l'accueil propose « Activer mes commandes »
       await t.pumpWidget(_host(base, _Session(_awa), const Scaffold(body: BeginnerProgressCard(key: ValueKey('pub')))));
       await t.pumpAndSettle();
       expect(find.byKey(const ValueKey('beginner-card')), findsNothing);
@@ -682,7 +736,8 @@ void main() {
       expect(find.text('Continuer mon inscription'), findsNothing, reason: 'pas même le métier choisi par l’autre personne');
       await t.pumpWidget(_host(base, _Session(older), const GuidedOnboardingScreen()));
       await t.pumpAndSettle();
-      expect(find.text('Proposez vos services, pas à pas'), findsOneWidget);
+      expect(find.text('Quel est votre métier ?'), findsOneWidget);
+      expect(find.byKey(const ValueKey('onb-trade-chosen')), findsNothing, reason: 'pas même le métier choisi par l’autre personne');
       expect(server.puts, isEmpty);
       await t.pump(const Duration(seconds: 1));
     });
@@ -699,7 +754,8 @@ void main() {
       expect(find.byKey(const ValueKey('beginner-card')), findsNothing);
       await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen()));
       await t.pumpAndSettle();
-      expect(find.text('Proposez vos services, pas à pas'), findsOneWidget, reason: 'nouveau départ, sans les réponses de l’autre compte');
+      expect(find.text('Quel est votre métier ?'), findsOneWidget);
+      expect(find.byKey(const ValueKey('onb-trade-chosen')), findsNothing, reason: 'nouveau départ, sans les réponses de l’autre compte');
       expect(server.puts, isEmpty);
     });
   });
@@ -753,17 +809,24 @@ void main() {
         final base = _base(OnbServer().client);
         await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen()));
         await t.pumpAndSettle();
-        await _continue(t); // grille des métiers
-        await _tap(t, find.text('Nounou'));
-        await _continue(t);
-        await _continue(t); // prestations (non choisies : bouton inactif)
+        expect(t.takeException(), isNull); // grille des métiers
+        await _tap(t, find.text('Nounou')); // métier choisi + prestations, même écran
         expect(t.takeException(), isNull);
+        await _tap(t, find.byKey(const ValueKey('onb-prest-121')));
+        await _continue(t); // zone
+        await _tap(t, find.byKey(const ValueKey('onb-commune-Cocody')));
+        expect(t.takeException(), isNull);
+        await _continue(t); // « Votre service »
+        expect(find.byKey(const ValueKey('onb-offer')), findsOneWidget);
+        expect(t.takeException(), isNull);
+        await _continue(t); // publié : statut, étapes et bénéfices, facultatif
+        expect(find.byKey(const ValueKey('onb-stages')), findsOneWidget);
+        expect(t.takeException(), isNull);
+        await t.pump(const Duration(seconds: 1));
         await t.pumpWidget(_host(base, _Session(_awa), const OnboardingChoiceScreen()));
         await t.pumpAndSettle();
         expect(t.takeException(), isNull);
-        final started = OnbServer()
-          ..draft = {'trade': 12, 'step': 'identity'}
-          ..next = {'code': 'verify_identity', 'label': 'Vérifier mon identité', 'step': 'identity'};
+        final started = OnbServer()..draft = {'trade': 12, 'step': 'zone'};
         await t.pumpWidget(_host(_base(started.client), _Session(_awa), const Scaffold(body: SingleChildScrollView(child: BeginnerProgressCard()))));
         await t.pumpAndSettle();
         expect(find.byKey(const ValueKey('beginner-card')), findsOneWidget);
@@ -779,71 +842,66 @@ void main() {
       'trade': 12, 'prestations': [121], 'commune': 'Cocody', 'answers': {'experience': '1_3', 'days': ['monday']}, 'step': 'preview',
     };
 
-    test('mêmes 9 étapes et même table écran → étape que le site (frontend/src/lib/onboarding.ts) et Django', () {
-      expect([for (final j in kJourney) j.$1], ['trade', 'zone', 'questions', 'account', 'phone', 'offer', 'photo', 'identity', 'approval']);
-      const table = {
-        'intro': 'trade', 'trade': 'trade', 'prestations': 'trade', 'commune': 'zone', 'quartier': 'zone', 'q:experience': 'questions',
-        'preview': 'questions', 'names': 'account', 'phone': 'account', 'password': 'account', 'verify': 'phone', 'photo': 'photo',
-        'identity': 'identity', 'done': 'approval',
-      };
+    test('mêmes trois écrans de publication et même table écran → étape que le site (frontend/src/lib/onboarding.ts) et Django (PUBLISH_STEPS)', () {
+      expect([for (final j in kJourney) j.$1], ['trade', 'zone', 'offer']);
+      const table = {'service': 'trade', 'zone': 'zone', 'confirm': 'offer'};
       table.forEach((screen, step) => expect(journeyOf(screen), step, reason: screen));
+      for (final screen in ['names', 'phone', 'password', 'verify', 'published', 'photo', 'q:experience']) {
+        expect(journeyOf(screen), isNull, reason: '$screen : hors des trois écrans de publication');
+      }
     });
 
-    testWidgets('progression affichée : « Étape x sur 9 » et l’avancement des questions', (t) async {
+    testWidgets('progression affichée : « Étape x sur 3 », jamais plus de trois écrans avant la publication ; le facultatif hors décompte', (t) async {
       _size(t);
       final base = _base(OnbServer().client);
       await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen()));
       await t.pumpAndSettle();
-      expect(find.text('Étape 1 sur 9 · Votre métier'), findsOneWidget);
-      await _continue(t);
+      expect(find.text('Étape 1 sur 3 · Votre métier'), findsOneWidget);
       await _tap(t, find.text('Nounou'));
-      await _continue(t);
       await _tap(t, find.byKey(const ValueKey('onb-prest-121')));
+      expect(find.text('Étape 1 sur 3 · Votre métier'), findsOneWidget, reason: 'les prestations ne comptent pas pour un écran de plus');
       await _continue(t);
-      expect(find.text('Étape 2 sur 9 · Votre quartier'), findsOneWidget);
+      expect(find.text('Étape 2 sur 3 · Votre zone'), findsOneWidget);
       await _tap(t, find.byKey(const ValueKey('onb-commune-Cocody')));
       await _continue(t);
-      await _tap(t, find.byKey(const ValueKey('onb-secondary')));
-      expect(find.text('Étape 3 sur 9 · Vos réponses (1/2)'), findsOneWidget);
+      expect(find.text('Étape 3 sur 3 · Publication'), findsOneWidget);
+      await _continue(t);
+      expect(find.text('Votre service est en ligne'), findsOneWidget);
+      expect(find.textContaining('Étape'), findsNothing);
+      await _tap(t, find.byKey(const ValueKey('onb-more-questions')));
+      expect(find.text('Facultatif · Vos réponses (1/2)'), findsOneWidget);
       await t.pump(const Duration(seconds: 1));
     });
 
-    testWidgets('expérience : minimum du métier annoncé AVANT de répondre, réponse gardée telle quelle', (t) async {
+    testWidgets('expérience : minimum du métier demandé AVANT de publier, réponse gardée telle quelle, service enregistré mais non publié', (t) async {
       _size(t);
       final server = OnbServer()..minExperience = 2;
       final base = _base(server.client);
       await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen()));
       await t.pumpAndSettle();
-      await _continue(t);
-      await _tap(t, find.text('Nounou'));
-      await _continue(t);
-      await _tap(t, find.byKey(const ValueKey('onb-prest-121')));
-      await _continue(t);
-      await _tap(t, find.byKey(const ValueKey('onb-commune-Cocody')));
-      await _continue(t);
-      await _tap(t, find.byKey(const ValueKey('onb-secondary')));
+      await _toConfirm(t);
+      expect(find.text('Depuis combien de temps faites-vous ce travail ?'), findsOneWidget, reason: 'seule question posée avant la publication');
       expect(find.textContaining('Tratra demande au moins 2 ans d’expérience pour publier'), findsOneWidget);
+      expect(_enabled(t), isFalse, reason: 'métier à minimum : la déclaration est obligatoire');
       await _tap(t, find.byKey(const ValueKey('onb-opt-experience-lt1')));
-      await _continue(t);
-      await _tap(t, find.byKey(const ValueKey('onb-opt-days-monday')));
-      await _continue(t);
-      expect(find.textContaining('Avec « Moins d’un an », votre annonce ne pourra pas être publiée'), findsOneWidget);
-      expect(find.text('Expérience : moins d’un an.'), findsOneWidget);
+      expect(find.textContaining('Avec « Moins d’un an », votre service sera enregistré mais pas publié'), findsOneWidget);
+      expect(find.text('Expérience : moins d’un an.'), findsOneWidget, reason: 'déclaration exacte, jamais « 1 an »');
+      server.experienceOk = false;
       await _continue(t);
       expect(jsonDecode(server.puts.last.body)['answers']['experience'], 'lt1', reason: 'jamais modifiée pour passer le seuil');
+      expect(find.text('Votre service n’est pas encore publié'), findsOneWidget);
+      expect(_within('onb-status', 'Non publié'), findsOneWidget);
+      expect(_within('onb-continue', 'Activer mes commandes'), findsNothing, reason: 'pas d’identité à faire vérifier pour un service non publié');
       await t.pump(const Duration(seconds: 1));
 
-      server.minExperience = 0;
+      // Métier sans minimum : aucune question avant la publication ; posée ensuite, en facultatif, sans bloquer.
       await t.pumpWidget(_host(_base(OnbServer().client), _Session(_awa), const GuidedOnboardingScreen(key: ValueKey('debutant'))));
       await t.pumpAndSettle();
+      await _toConfirm(t);
+      expect(find.byKey(const ValueKey('onb-experience-note')), findsNothing);
+      expect(_enabled(t), isTrue);
       await _continue(t);
-      await _tap(t, find.text('Nounou'));
-      await _continue(t);
-      await _tap(t, find.byKey(const ValueKey('onb-prest-121')));
-      await _continue(t);
-      await _tap(t, find.byKey(const ValueKey('onb-commune-Cocody')));
-      await _continue(t);
-      await _tap(t, find.byKey(const ValueKey('onb-secondary')));
+      await _tap(t, find.byKey(const ValueKey('onb-more-questions')));
       expect(find.textContaining('Vous débutez ? C’est accepté pour ce métier.'), findsOneWidget);
       await t.pump(const Duration(seconds: 1));
     });
@@ -878,7 +936,7 @@ void main() {
       expect(bodies, ['q:experience', 'preview']);
     });
 
-    testWidgets('réseau lent : deux appuis sur « Mon annonce me convient » = une seule annonce', (t) async {
+    testWidgets('réseau lent : deux appuis sur « Publier mon service » = un seul service', (t) async {
       _size(t);
       final server = OnbServer()
         ..draft = Map<String, dynamic>.from(fullDraft)
@@ -886,14 +944,14 @@ void main() {
       final base = _base(server.client);
       await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen()));
       await t.pumpAndSettle();
-      expect(find.byKey(const ValueKey('onb-offer')), findsOneWidget, reason: 'reprise à l’aperçu enregistré');
+      expect(find.byKey(const ValueKey('onb-offer')), findsOneWidget, reason: 'reprise au dernier écran (brouillon de l’ancien parcours compris)');
       await t.tap(find.byKey(const ValueKey('onb-continue')));
       await t.pump(const Duration(milliseconds: 100));
       await t.tap(find.byKey(const ValueKey('onb-continue')), warnIfMissed: false);
       await t.pump(const Duration(seconds: 10));
       await t.pumpAndSettle();
       expect(server.applyCount, 1);
-      expect(find.text('Votre photo'), findsOneWidget);
+      expect(find.text('Votre service est en ligne'), findsOneWidget);
       await t.pump(const Duration(seconds: 5));
     });
 
@@ -905,13 +963,13 @@ void main() {
       final base = _base(server.client);
       await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen()));
       await t.pumpAndSettle();
-      await _continue(t);                                                    // métier → prestations
+      expect(find.byKey(const ValueKey('onb-trade-chosen')), findsOneWidget, reason: 'métier déjà choisi : reprise sur ses prestations');
       await _tap(t, find.byKey(const ValueKey('onb-prest-121')));
       await t.pump(const Duration(seconds: 1));
       await t.pumpAndSettle();
       expect(find.textContaining('Pas de connexion pour l’instant : vos réponses sont gardées sur ce téléphone'), findsOneWidget);
       final local = await t.runAsync(_localDraft);
-      expect((local!['owner'], '${local['prestations']}', local['step']), ('9', '[121]', 'prestations'));
+      expect((local!['owner'], '${local['prestations']}', local['step']), ('9', '[121]', 'service'));
 
       server.putFailure = null;                                              // le réseau revient ; l'application est rouverte
       await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen(key: ValueKey('retour'))));
@@ -930,7 +988,6 @@ void main() {
       final base = _base(server.client);
       await t.pumpWidget(_host(base, _Session(_awa), const GuidedOnboardingScreen()));
       await t.pumpAndSettle();
-      await _continue(t);
       await _tap(t, find.byKey(const ValueKey('onb-prest-122')));
       await t.pump(const Duration(seconds: 1));
       await t.pumpAndSettle();
@@ -945,7 +1002,6 @@ void main() {
       final session = _Session(_awa);
       await t.pumpWidget(_host(base, session, const GuidedOnboardingScreen()));
       await t.pumpAndSettle();
-      await _continue(t);
       await _tap(t, find.byKey(const ValueKey('onb-prest-121')));
       final sent = server.puts.length;                                       // réponse pas encore partie (enregistrement différé)
       await session.setUser(bob);
@@ -966,21 +1022,22 @@ void main() {
     testWidgets('tableau de bord : expérience sous le minimum = publication bloquée, dit clairement (pas « en attente »)', (t) async {
       _size(t);
       final server = OnbServer()
-        ..draft = {'trade': 12, 'step': 'done'}
-        ..experienceOk = false
-        ..next = {'code': 'blocked', 'label': 'Nounou demande au moins 2 ans d’expérience pour publier', 'step': 'approval'};
+        ..draft = {'trade': 12, 'commune': 'Cocody', 'step': 'published'}
+        ..applied = true
+        ..experienceOk = false;
       await t.pumpWidget(_host(_base(server.client), _Session(_awa), const Scaffold(body: BeginnerProgressCard())));
       await t.pumpAndSettle();
       expect(find.textContaining('Nounou demande au moins 2 ans d’expérience pour publier. Votre déclaration (« Moins d’un an ») est gardée telle quelle.'),
           findsOneWidget);
+      expect(find.text('3/3'), findsOneWidget);
       expect(find.text('Voir mon dossier'), findsOneWidget);
-      expect(find.textContaining('vérifie votre dossier'), findsNothing);
+      expect(find.textContaining('Vous serez prévenu(e)'), findsNothing, reason: 'un blocage expliqué, pas une attente fictive');
 
-      server.next = {'code': 'photo', 'label': 'Ajouter ma photo', 'step': 'photo'};   // une autre étape reste à faire : averti quand même
-      await t.pumpWidget(_host(_base(server.client), _Session(_awa), const Scaffold(body: BeginnerProgressCard(key: ValueKey('photo')))));
+      server.phoneVerified = false; // une autre étape reste à faire : averti quand même
+      await t.pumpWidget(_host(_base(server.client), _Session(_awa), const Scaffold(body: BeginnerProgressCard(key: ValueKey('phone')))));
       await t.pumpAndSettle();
       expect(find.byKey(const ValueKey('beginner-blocked')), findsOneWidget);
-      expect(find.text('Prochaine étape : Ajouter ma photo'), findsOneWidget);
+      expect(find.text('Prochaine étape : Confirmer mon téléphone'), findsOneWidget);
     });
   });
 }

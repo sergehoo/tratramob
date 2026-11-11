@@ -81,6 +81,13 @@ class _TratraInputState extends State<TratraInput> {
   late bool _hidden = widget.obscureText;
 
   @override
+  void didUpdateWidget(covariant TratraInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Un champ qui devient (ou cesse d'être) un mot de passe reprend l'état masqué attendu, au lieu de garder l'ancien.
+    if (oldWidget.obscureText != widget.obscureText) _hidden = widget.obscureText;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final multiline = widget.maxLines != 1;
     final suffix = widget.obscureText

@@ -185,24 +185,31 @@ class DashChecklistItem {
       : key = _s(j['key']) ?? '',
         label = _s(j['label']) ?? '',
         hint = _s(j['hint']),
-        done = _b(j['done']);
+        done = _b(j['done']),
+        required = j['required'] is bool ? j['required'] as bool : true;
   final String key;
   final String label;
   final String? hint;
   final bool done;
+
+  /// Exigé pour PUBLIER (un serveur plus ancien ne le précise pas : tout est alors exigé).
+  final bool required;
 }
 
-/// Action corrective proposée par le serveur (`edit_profile`, `verify_identity`, `add_service`, `manage_services`, `contact_support`).
+/// Action corrective proposée par le serveur (`edit_profile`, `verify_identity`, `verify_phone`, `add_service`, `manage_services`,
+/// `contact_support`). `step` précise l'étape visée (`face` : vérification faciale).
 class DashActionRef {
   DashActionRef(Map<String, dynamic> j)
       : code = _s(j['code']) ?? '',
-        label = _s(j['label']) ?? '';
+        label = _s(j['label']) ?? '',
+        step = _s(j['step']);
   final String code;
   final String label;
+  final String? step;
   static DashActionRef? maybe(dynamic v) => v is Map ? DashActionRef(_m(v)) : null;
 }
 
-/// Blocage réel de la publication, avec son explication et, s'il y en a une, l'action pour le lever.
+/// Blocage réel (publication ou commandes), avec son explication et, s'il y en a une, l'action pour le lever.
 class DashBlocker {
   DashBlocker(Map<String, dynamic> j)
       : code = _s(j['code']) ?? '',
@@ -215,10 +222,43 @@ class DashBlocker {
   final DashActionRef? action;
 }
 
-/// Synthèse d'éligibilité calculée par le serveur (`handy/eligibility.py`, `eligibility_summary`) : quatre notions DISTINCTES.
+/// Étape du parcours progressif (`publication`, `identity`, `face`) : où elle en est et ce qu'elle apporte.
+class DashStage {
+  DashStage(Map<String, dynamic> j)
+      : key = _s(j['key']) ?? '',
+        label = _s(j['label']) ?? '',
+        state = _s(j['state']) ?? 'todo',
+        status = _s(j['status']) ?? '',
+        benefit = _s(j['benefit']) ?? '',
+        required = _b(j['required']);
+  final String key;
+  final String label;
+
+  /// todo | pending | done | retry | locked | unavailable.
+  final String state;
+  final String status;
+  final String benefit;
+  final bool required;
+  bool get done => state == 'done';
+}
+
+/// Synthèse d'éligibilité calculée par le serveur (`handy/eligibility.py`, `eligibility_summary`). Trois niveaux DISTINCTS :
+/// publication (service visible), commandes (pièce d'identité vérifiée), badge « Vérifié » (vérification faciale).
+/// Un serveur plus ancien ne connaît qu'un niveau : publication autorisée = commandes activées, jamais « Vérifié ».
 class DashEligibility {
   DashEligibility(Map<String, dynamic> j)
-      : profileComplete = _b(_m(j['profile'])['complete']),
+      : hasLevels = j['verification'] is Map,
+        ordersAuthorized = j['orders'] is Map ? _b(_m(j['orders'])['authorized']) : _b(_m(j['publication'])['authorized']),
+        ordersLabel = _s(_m(j['orders'])['label']) ?? _s(_m(j['approval'])['label']) ?? '',
+        ordersBlockers = _l(_m(j['orders'])['blockers']).map(DashBlocker.new).toList(),
+        faceRequired = _b(_m(j['orders'])['face_required']),
+        verificationLevel = _s(_m(j['verification'])['level']) ?? (_b(_m(j['publication'])['authorized']) ? 'IDENTITE_VERIFIEE' : 'NON_VERIFIE'),
+        verificationLabel = _s(_m(j['verification'])['label']) ?? (_b(_m(j['publication'])['authorized']) ? 'Identité vérifiée' : 'Non vérifié'),
+        faceEnabled = _b(_m(_m(j['verification'])['face'])['enabled']),
+        faceSatisfied = _b(_m(_m(j['verification'])['face'])['satisfied']),
+        faceState = _s(_m(_m(j['verification'])['face'])['state']) ?? 'unavailable',
+        stages = _l(j['stages']).map(DashStage.new).toList(),
+        profileComplete = _b(_m(j['profile'])['complete']),
         profileDone = _i(_m(j['profile'])['done']),
         profileTotal = _i(_m(j['profile'])['total']),
         profileItems = _l(_m(j['profile'])['items']).map(DashChecklistItem.new).toList(),
@@ -256,7 +296,35 @@ class DashEligibility {
   final String offersLabel;
   final DashActionRef? offersAction;
   final DashActionRef? nextAction;
+
+  /// Le serveur distingue les trois niveaux (sinon : repli décrit plus haut).
+  final bool hasLevels;
+
+  /// Réservations, missions et Tratra Flash autorisés.
+  final bool ordersAuthorized;
+  final String ordersLabel;
+  final List<DashBlocker> ordersBlockers;
+
+  /// Le métier exercé impose la vérification faciale avant toute commande.
+  final bool faceRequired;
+
+  /// NON_VERIFIE | IDENTITE_VERIFIEE | VERIFIE — seule la dernière valeur donne le badge « Vérifié ».
+  final String verificationLevel;
+  final String verificationLabel;
+  final bool faceEnabled;
+  final bool faceSatisfied;
+
+  /// done | pending | retry | todo | unavailable.
+  final String faceState;
+  final List<DashStage> stages;
   bool get kycApproved => kycStatus == 'approved';
+  bool get verified => verificationLevel == 'VERIFIE';
+  DashStage? stage(String key) {
+    for (final s in stages) {
+      if (s.key == key) return s;
+    }
+    return null;
+  }
 }
 
 class DashProvider {

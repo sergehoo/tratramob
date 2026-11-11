@@ -1,8 +1,9 @@
 // lib/onboarding/onboarding_api.dart
 //
 // Inscription accompagnée : configuration publique du métier (questions, prestations, communes), brouillon et progression.
-// AVANT la création du compte, les réponses sont gardées sur le téléphone (aucune donnée envoyée à un serveur sans compte) ; APRÈS, elles
-// sont synchronisées avec Django (/me/onboarding/) pour reprendre sur n'importe quel appareil. Jamais de mot de passe dans le brouillon.
+// Le compte est créé en premier ; les réponses sont ensuite synchronisées avec Django (/me/onboarding/) pour reprendre sur n'importe quel
+// appareil. Hors ligne, elles restent sur le téléphone, rattachées au compte. Jamais de mot de passe dans le brouillon.
+// L'état renvoyé par le serveur sépare trois niveaux : service publié, commandes activées, badge « Vérifié ».
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -97,33 +98,21 @@ class OnbConfig {
   return null;
 }
 
-/// Les 9 étapes communes à l'application, au site et à Django (handy/onboarding.py JOURNEY) : même progression partout.
+/// Les 3 écrans de publication du premier service, après la création du compte (handy/onboarding.py PUBLISH_STEPS) : mêmes étapes
+/// dans l'application, sur le site et dans Django.
 const kJourney = [
   ('trade', 'Votre métier'),
-  ('zone', 'Votre quartier'),
-  ('questions', 'Vos réponses'),
-  ('account', 'Votre compte'),
-  ('phone', 'Votre téléphone'),
-  ('offer', 'Votre annonce'),
-  ('photo', 'Votre photo'),
-  ('identity', 'Votre identité'),
-  ('approval', 'Validation par l’équipe Tratra'),
+  ('zone', 'Votre zone'),
+  ('offer', 'Publication'),
 ];
 
-/// Étape commune d'un écran du parcours (le site utilise la même table : frontend/src/lib/onboarding.ts).
-String journeyOf(String screen) {
-  if (screen.startsWith('q:')) return 'questions';
-  return switch (screen) {
-    'intro' || 'trade' || 'prestations' => 'trade',
-    'commune' || 'quartier' => 'zone',
-    'preview' => 'questions',
-    'names' || 'phone' || 'password' => 'account',
-    'verify' => 'phone',
-    'photo' => 'photo',
-    'identity' => 'identity',
-    _ => 'approval',
-  };
-}
+/// Étape de publication d'un écran du parcours, ou null hors des trois écrans (compte, suite facultative, état du service).
+String? journeyOf(String screen) => switch (screen) {
+      'service' => 'trade',
+      'zone' => 'zone',
+      'confirm' => 'offer',
+      _ => null,
+    };
 
 /// Brouillon du parcours (téléphone puis serveur) : métier, prestations, quartier, réponses, écran atteint, identité saisie.
 class OnbDraft {
@@ -294,12 +283,18 @@ class OnbStep {
   OnbStep(Map<String, dynamic> j)
       : key = '${j['key']}',
         label = '${j['label']}',
-        state = '${j['state']}';
+        state = '${j['state']}',
+        status = '${j['status'] ?? ''}',
+        benefit = '${j['benefit'] ?? ''}';
   final String key;
   final String label;
 
   /// done | waiting | todo
   final String state;
+
+  /// État réel dit par le serveur (« Publié », « En cours de revue »…) et ce que l'étape apporte (publication, commandes, badge).
+  final String status;
+  final String benefit;
 }
 
 class OnbState {
@@ -314,6 +309,17 @@ class OnbState {
         nextLabel = '${(j['next_action'] as Map?)?['label'] ?? 'Continuer'}',
         nextStep = (j['next_action'] as Map?)?['step']?.toString(),
         published = j['published'] == true,
+        applied = j['service_id'] != null,
+        ordersEnabled = j['orders_enabled'] == true,
+        verificationLevel = '${(j['verification'] as Map?)?['level'] ?? 'NON_VERIFIE'}',
+        verificationLabel = '${(j['verification'] as Map?)?['label'] ?? 'Non vérifié'}',
+        blocked = j['blocked'] is Map
+            ? (code: '${(j['blocked'] as Map)['code'] ?? ''}', label: '${(j['blocked'] as Map)['label'] ?? ''}', hint: '${(j['blocked'] as Map)['hint'] ?? ''}')
+            : null,
+        publishDone = ((j['publish'] as Map?)?['done'] as num?)?.toInt() ?? 0,
+        publishTotal = ((j['publish'] as Map?)?['total'] as num?)?.toInt() ?? kJourney.length,
+        questionsDone = (j['optional'] as Map?)?['questions'] == true,
+        photoDone = (j['optional'] as Map?)?['photo'] == true,
         offerTitle = (j['offer'] as Map?)?['title']?.toString(),
         offerDescription = (j['offer'] as Map?)?['description']?.toString(),
         experienceOk = (j['experience'] as Map?)?['ok'] != false,
@@ -327,7 +333,30 @@ class OnbState {
   final String nextCode;
   final String nextLabel;
   final String? nextStep;
+  /// Service visible des clients. Publié ne veut dire ni « commandes activées » ni « Vérifié » : trois niveaux distincts.
   final bool published;
+
+  /// Le premier service a été créé à partir des réponses (publié ou non).
+  final bool applied;
+
+  /// Le professionnel peut recevoir des commandes (pièce d'identité approuvée, selon la politique du métier).
+  final bool ordersEnabled;
+
+  /// NON_VERIFIE | IDENTITE_VERIFIEE | VERIFIE — « Vérifié » uniquement après la vérification faciale.
+  final String verificationLevel;
+  final String verificationLabel;
+  bool get verified => verificationLevel == 'VERIFIE';
+
+  /// Motif réel d'une publication refusée (expérience minimale, suspension…), sinon null.
+  final ({String code, String label, String hint})? blocked;
+
+  /// Avancement des trois écrans de publication.
+  final int publishDone;
+  final int publishTotal;
+
+  /// Compléments facultatifs : questions de détail répondues, photo de profil ajoutée.
+  final bool questionsDone;
+  final bool photoDone;
   final String? offerTitle;
   final String? offerDescription;
 

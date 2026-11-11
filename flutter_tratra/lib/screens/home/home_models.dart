@@ -42,6 +42,7 @@ class HomeArtisanBrief {
     this.commune,
     this.rating,
     this.verified = false,
+    this.verificationLabel,
     this.online = false,
     this.photoUrl,
     this.distanceKm,
@@ -55,6 +56,9 @@ class HomeArtisanBrief {
   /// Note moyenne réelle (> 0 uniquement, sinon `null`).
   final double? rating;
   final bool verified;
+
+  /// Niveau affiché (« Non vérifié », « Identité vérifiée », « Vérifié ») ; null avec un serveur plus ancien.
+  final String? verificationLabel;
   final bool online;
   final String? photoUrl;
   final double? distanceKm;
@@ -87,6 +91,9 @@ class HomeArtisanBrief {
       commune: text(a['commune']),
       rating: (rating != null && rating > 0) ? rating : null,
       verified: a['is_verified'] == true,
+      verificationLabel: a['verification'] is Map && '${(a['verification'] as Map)['label'] ?? ''}'.trim().isNotEmpty
+          ? '${(a['verification'] as Map)['label']}'.trim()
+          : null,
       online: a['online'] == true,
       photoUrl: photo.isEmpty ? null : photo,
       distanceKm: distance,

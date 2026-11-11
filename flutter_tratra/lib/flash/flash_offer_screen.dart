@@ -223,8 +223,11 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> with WidgetsBinding
     final reason = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
+      // Liste de motifs plus haute qu'un demi-écran sur les petits téléphones : la feuille s'agrandit et défile au lieu de déborder.
+      isScrollControlled: true,
       builder: (ctx) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(TtSpace.s4, 0, TtSpace.s4, TtSpace.s2),
             child: Text('Refuser cette mission ?', style: TratraTheme.style(TtType.h3)),
@@ -238,7 +241,7 @@ class _FlashOfferScreenState extends State<FlashOfferScreen> with WidgetsBinding
           for (final r in offer.declineReasons)
             ListTile(key: ValueKey('decline-${r['code']}'), title: Text(r['label']!), onTap: () => Navigator.pop(ctx, r['code'])),
           ListTile(key: const ValueKey('decline-none'), title: const Text('Refuser sans motif'), onTap: () => Navigator.pop(ctx, '')),
-        ]),
+        ])),
       ),
     );
     if (reason == null) return;

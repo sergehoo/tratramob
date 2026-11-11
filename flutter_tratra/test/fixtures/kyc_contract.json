@@ -36,7 +36,7 @@
    },
    {
     "key": "activation",
-    "label": "Activation du profil professionnel",
+    "label": "Activation des commandes",
     "state": "todo"
    }
   ],
@@ -71,7 +71,8 @@
    "choice": "",
    "human_review_requested": false,
    "done": true,
-   "note": "Non requise : l’équipe Tratra vérifie votre pièce elle-même."
+   "note": "Pas demandée pour le moment : l’équipe Tratra vérifie votre pièce elle-même.",
+   "benefit": "Attribue le badge « Vérifié », affiché sur votre profil et vos offres."
   },
   "review": {
    "state": "none",
@@ -83,38 +84,44 @@
   "activation": {
    "profile": {
     "complete": false,
+    "ready": false,
     "done": 0,
     "total": 5,
     "items": [
      {
-      "key": "bio",
-      "label": "Présentation",
-      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
-      "done": false
-     },
-     {
       "key": "skills",
-      "label": "Spécialités",
+      "label": "Métier",
       "hint": "Choisissez au moins un métier que vous exercez.",
-      "done": false
-     },
-     {
-      "key": "experience",
-      "label": "Expérience",
-      "hint": "Indiquez vos années d’expérience.",
-      "done": false
+      "done": false,
+      "required": true
      },
      {
       "key": "zone",
       "label": "Zone d’intervention",
       "hint": "Renseignez votre commune.",
-      "done": false
+      "done": false,
+      "required": true
+     },
+     {
+      "key": "experience",
+      "label": "Expérience",
+      "hint": "Indiquez votre expérience (débutant accepté).",
+      "done": false,
+      "required": false
+     },
+     {
+      "key": "bio",
+      "label": "Présentation",
+      "hint": "Décrivez votre activité en quelques lignes : les clients comparent les profils.",
+      "done": false,
+      "required": false
      },
      {
       "key": "photo",
       "label": "Photo de profil",
       "hint": "Ajoutez une photo : les clients choisissent des visages.",
-      "done": false
+      "done": false,
+      "required": false
      }
     ]
    },
@@ -127,32 +134,94 @@
    },
    "approval": {
     "approved": false,
-    "label": "Validation de l’équipe en attente"
+    "label": "Commandes non activées"
    },
+   "suspended": false,
    "publication": {
     "authorized": false,
-    "label": "Publication non autorisée",
+    "label": "Profil non publié",
     "blockers": [
      {
+      "code": "phone_unverified",
+      "label": "Numéro de téléphone non confirmé",
+      "hint": "Confirmez votre numéro avec le code reçu par SMS pour publier votre service.",
+      "action": {
+       "code": "verify_phone",
+       "label": "Confirmer mon téléphone"
+      }
+     },
+     {
       "code": "profile_incomplete",
-      "label": "Profil incomplet : présentation, spécialités, expérience, zone d’intervention, photo de profil",
-      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "label": "À renseigner pour publier : métier, zone d’intervention",
+      "hint": "Choisissez au moins un métier que vous exercez.",
       "action": {
        "code": "edit_profile",
        "label": "Compléter mon profil"
+      }
+     }
+    ]
+   },
+   "orders": {
+    "authorized": false,
+    "label": "Commandes non activées",
+    "blockers": [
+     {
+      "code": "not_published",
+      "label": "Service non publié",
+      "hint": "Publiez d’abord votre service.",
+      "action": {
+       "code": "verify_phone",
+       "label": "Confirmer mon téléphone"
       }
      },
      {
       "code": "kyc_draft",
       "label": "Identité non vérifiée",
-      "hint": "Faites vérifier votre pièce d’identité : quelques minutes suffisent.",
+      "hint": "Faites vérifier votre pièce d’identité pour recevoir des commandes : quelques minutes suffisent.",
       "action": {
        "code": "verify_identity",
-       "label": "Vérifier mon identité"
+       "label": "Activer mes commandes"
       }
      }
-    ]
+    ],
+    "face_required": false
    },
+   "verification": {
+    "level": "NON_VERIFIE",
+    "label": "Non vérifié",
+    "badge": false,
+    "face": {
+     "enabled": false,
+     "required": false,
+     "satisfied": false,
+     "status": "not_started",
+     "state": "unavailable"
+    }
+   },
+   "stages": [
+    {
+     "key": "publication",
+     "label": "Service publié",
+     "state": "todo",
+     "status": "Non publié",
+     "benefit": "Votre service est visible par les clients, avec la mention « Non vérifié ». Aucune commande tant que votre identité n’est pas vérifiée."
+    },
+    {
+     "key": "identity",
+     "label": "Pièce d’identité",
+     "state": "todo",
+     "status": "À faire",
+     "benefit": "Active vos commandes : réservations, missions Tratra Flash et contrats."
+    },
+    {
+     "key": "face",
+     "label": "Vérification faciale",
+     "state": "unavailable",
+     "status": "Pas encore proposée",
+     "benefit": "Attribue le badge « Vérifié », affiché sur votre profil et vos offres.",
+     "required": false
+    }
+   ],
    "offers": {
     "total": 0,
     "active": 0,
@@ -161,16 +230,17 @@
     "label": "Aucune offre créée",
     "action": {
      "code": "add_service",
-     "label": "Ajouter une offre"
-    }
+     "label": "Publier un service"
+    },
+    "accepting_orders": false
    },
    "next_action": {
-    "code": "edit_profile",
-    "label": "Compléter mon profil"
+    "code": "verify_phone",
+    "label": "Confirmer mon téléphone"
    }
   },
   "editable": true,
-  "updated_at": "2026-10-20T19:09:40.955114+00:00"
+  "updated_at": "2026-11-11T17:44:04.426810+00:00"
  },
  "ready": {
   "status": "draft",
@@ -209,7 +279,7 @@
    },
    {
     "key": "activation",
-    "label": "Activation du profil professionnel",
+    "label": "Activation des commandes",
     "state": "todo"
    }
   ],
@@ -267,7 +337,8 @@
    "choice": "",
    "human_review_requested": false,
    "done": true,
-   "note": "Non requise : l’équipe Tratra vérifie votre pièce elle-même."
+   "note": "Pas demandée pour le moment : l’équipe Tratra vérifie votre pièce elle-même.",
+   "benefit": "Attribue le badge « Vérifié », affiché sur votre profil et vos offres."
   },
   "review": {
    "state": "none",
@@ -279,38 +350,44 @@
   "activation": {
    "profile": {
     "complete": false,
+    "ready": false,
     "done": 0,
     "total": 5,
     "items": [
      {
-      "key": "bio",
-      "label": "Présentation",
-      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
-      "done": false
-     },
-     {
       "key": "skills",
-      "label": "Spécialités",
+      "label": "Métier",
       "hint": "Choisissez au moins un métier que vous exercez.",
-      "done": false
-     },
-     {
-      "key": "experience",
-      "label": "Expérience",
-      "hint": "Indiquez vos années d’expérience.",
-      "done": false
+      "done": false,
+      "required": true
      },
      {
       "key": "zone",
       "label": "Zone d’intervention",
       "hint": "Renseignez votre commune.",
-      "done": false
+      "done": false,
+      "required": true
+     },
+     {
+      "key": "experience",
+      "label": "Expérience",
+      "hint": "Indiquez votre expérience (débutant accepté).",
+      "done": false,
+      "required": false
+     },
+     {
+      "key": "bio",
+      "label": "Présentation",
+      "hint": "Décrivez votre activité en quelques lignes : les clients comparent les profils.",
+      "done": false,
+      "required": false
      },
      {
       "key": "photo",
       "label": "Photo de profil",
       "hint": "Ajoutez une photo : les clients choisissent des visages.",
-      "done": false
+      "done": false,
+      "required": false
      }
     ]
    },
@@ -323,32 +400,94 @@
    },
    "approval": {
     "approved": false,
-    "label": "Validation de l’équipe en attente"
+    "label": "Commandes non activées"
    },
+   "suspended": false,
    "publication": {
     "authorized": false,
-    "label": "Publication non autorisée",
+    "label": "Profil non publié",
     "blockers": [
      {
+      "code": "phone_unverified",
+      "label": "Numéro de téléphone non confirmé",
+      "hint": "Confirmez votre numéro avec le code reçu par SMS pour publier votre service.",
+      "action": {
+       "code": "verify_phone",
+       "label": "Confirmer mon téléphone"
+      }
+     },
+     {
       "code": "profile_incomplete",
-      "label": "Profil incomplet : présentation, spécialités, expérience, zone d’intervention, photo de profil",
-      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "label": "À renseigner pour publier : métier, zone d’intervention",
+      "hint": "Choisissez au moins un métier que vous exercez.",
       "action": {
        "code": "edit_profile",
        "label": "Compléter mon profil"
+      }
+     }
+    ]
+   },
+   "orders": {
+    "authorized": false,
+    "label": "Commandes non activées",
+    "blockers": [
+     {
+      "code": "not_published",
+      "label": "Service non publié",
+      "hint": "Publiez d’abord votre service.",
+      "action": {
+       "code": "verify_phone",
+       "label": "Confirmer mon téléphone"
       }
      },
      {
       "code": "kyc_draft",
       "label": "Identité non vérifiée",
-      "hint": "Faites vérifier votre pièce d’identité : quelques minutes suffisent.",
+      "hint": "Faites vérifier votre pièce d’identité pour recevoir des commandes : quelques minutes suffisent.",
       "action": {
        "code": "verify_identity",
-       "label": "Vérifier mon identité"
+       "label": "Activer mes commandes"
       }
      }
-    ]
+    ],
+    "face_required": false
    },
+   "verification": {
+    "level": "NON_VERIFIE",
+    "label": "Non vérifié",
+    "badge": false,
+    "face": {
+     "enabled": false,
+     "required": false,
+     "satisfied": false,
+     "status": "not_started",
+     "state": "unavailable"
+    }
+   },
+   "stages": [
+    {
+     "key": "publication",
+     "label": "Service publié",
+     "state": "todo",
+     "status": "Non publié",
+     "benefit": "Votre service est visible par les clients, avec la mention « Non vérifié ». Aucune commande tant que votre identité n’est pas vérifiée."
+    },
+    {
+     "key": "identity",
+     "label": "Pièce d’identité",
+     "state": "todo",
+     "status": "À faire",
+     "benefit": "Active vos commandes : réservations, missions Tratra Flash et contrats."
+    },
+    {
+     "key": "face",
+     "label": "Vérification faciale",
+     "state": "unavailable",
+     "status": "Pas encore proposée",
+     "benefit": "Attribue le badge « Vérifié », affiché sur votre profil et vos offres.",
+     "required": false
+    }
+   ],
    "offers": {
     "total": 0,
     "active": 0,
@@ -357,16 +496,17 @@
     "label": "Aucune offre créée",
     "action": {
      "code": "add_service",
-     "label": "Ajouter une offre"
-    }
+     "label": "Publier un service"
+    },
+    "accepting_orders": false
    },
    "next_action": {
-    "code": "edit_profile",
-    "label": "Compléter mon profil"
+    "code": "verify_phone",
+    "label": "Confirmer mon téléphone"
    }
   },
   "editable": true,
-  "updated_at": "2026-10-20T19:09:41.086876+00:00"
+  "updated_at": "2026-11-11T17:44:04.608235+00:00"
  },
  "in_review": {
   "status": "in_review",
@@ -405,7 +545,7 @@
    },
    {
     "key": "activation",
-    "label": "Activation du profil professionnel",
+    "label": "Activation des commandes",
     "state": "todo"
    }
   ],
@@ -463,50 +603,57 @@
    "choice": "",
    "human_review_requested": false,
    "done": true,
-   "note": "Non requise : l’équipe Tratra vérifie votre pièce elle-même."
+   "note": "Pas demandée pour le moment : l’équipe Tratra vérifie votre pièce elle-même.",
+   "benefit": "Attribue le badge « Vérifié », affiché sur votre profil et vos offres."
   },
   "review": {
    "state": "pending",
    "reason": "",
-   "sent_at": "2026-10-20T19:09:41.160930+00:00",
+   "sent_at": "2026-11-11T17:44:04.824061+00:00",
    "attempts": 1,
    "previous_reason": null
   },
   "activation": {
    "profile": {
     "complete": false,
+    "ready": false,
     "done": 0,
     "total": 5,
     "items": [
      {
-      "key": "bio",
-      "label": "Présentation",
-      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
-      "done": false
-     },
-     {
       "key": "skills",
-      "label": "Spécialités",
+      "label": "Métier",
       "hint": "Choisissez au moins un métier que vous exercez.",
-      "done": false
-     },
-     {
-      "key": "experience",
-      "label": "Expérience",
-      "hint": "Indiquez vos années d’expérience.",
-      "done": false
+      "done": false,
+      "required": true
      },
      {
       "key": "zone",
       "label": "Zone d’intervention",
       "hint": "Renseignez votre commune.",
-      "done": false
+      "done": false,
+      "required": true
+     },
+     {
+      "key": "experience",
+      "label": "Expérience",
+      "hint": "Indiquez votre expérience (débutant accepté).",
+      "done": false,
+      "required": false
+     },
+     {
+      "key": "bio",
+      "label": "Présentation",
+      "hint": "Décrivez votre activité en quelques lignes : les clients comparent les profils.",
+      "done": false,
+      "required": false
      },
      {
       "key": "photo",
       "label": "Photo de profil",
       "hint": "Ajoutez une photo : les clients choisissent des visages.",
-      "done": false
+      "done": false,
+      "required": false
      }
     ]
    },
@@ -519,29 +666,91 @@
    },
    "approval": {
     "approved": false,
-    "label": "Validation de l’équipe en attente"
+    "label": "Commandes non activées"
    },
+   "suspended": false,
    "publication": {
     "authorized": false,
-    "label": "Publication non autorisée",
+    "label": "Profil non publié",
     "blockers": [
      {
+      "code": "phone_unverified",
+      "label": "Numéro de téléphone non confirmé",
+      "hint": "Confirmez votre numéro avec le code reçu par SMS pour publier votre service.",
+      "action": {
+       "code": "verify_phone",
+       "label": "Confirmer mon téléphone"
+      }
+     },
+     {
       "code": "profile_incomplete",
-      "label": "Profil incomplet : présentation, spécialités, expérience, zone d’intervention, photo de profil",
-      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "label": "À renseigner pour publier : métier, zone d’intervention",
+      "hint": "Choisissez au moins un métier que vous exercez.",
       "action": {
        "code": "edit_profile",
        "label": "Compléter mon profil"
+      }
+     }
+    ]
+   },
+   "orders": {
+    "authorized": false,
+    "label": "Commandes non activées",
+    "blockers": [
+     {
+      "code": "not_published",
+      "label": "Service non publié",
+      "hint": "Publiez d’abord votre service.",
+      "action": {
+       "code": "verify_phone",
+       "label": "Confirmer mon téléphone"
       }
      },
      {
       "code": "kyc_pending",
       "label": "Pièce d’identité en cours de revue",
-      "hint": "L’équipe Tratra examine votre pièce : aucune action n’est nécessaire.",
+      "hint": "L’équipe Tratra examine votre pièce : aucune action n’est nécessaire. Vos commandes seront activées dès son approbation.",
       "action": null
      }
-    ]
+    ],
+    "face_required": false
    },
+   "verification": {
+    "level": "NON_VERIFIE",
+    "label": "Non vérifié",
+    "badge": false,
+    "face": {
+     "enabled": false,
+     "required": false,
+     "satisfied": false,
+     "status": "not_started",
+     "state": "unavailable"
+    }
+   },
+   "stages": [
+    {
+     "key": "publication",
+     "label": "Service publié",
+     "state": "todo",
+     "status": "Non publié",
+     "benefit": "Votre service est visible par les clients, avec la mention « Non vérifié ». Aucune commande tant que votre identité n’est pas vérifiée."
+    },
+    {
+     "key": "identity",
+     "label": "Pièce d’identité",
+     "state": "pending",
+     "status": "En cours de revue",
+     "benefit": "Active vos commandes : réservations, missions Tratra Flash et contrats."
+    },
+    {
+     "key": "face",
+     "label": "Vérification faciale",
+     "state": "unavailable",
+     "status": "Pas encore proposée",
+     "benefit": "Attribue le badge « Vérifié », affiché sur votre profil et vos offres.",
+     "required": false
+    }
+   ],
    "offers": {
     "total": 0,
     "active": 0,
@@ -550,16 +759,17 @@
     "label": "Aucune offre créée",
     "action": {
      "code": "add_service",
-     "label": "Ajouter une offre"
-    }
+     "label": "Publier un service"
+    },
+    "accepting_orders": false
    },
    "next_action": {
-    "code": "edit_profile",
-    "label": "Compléter mon profil"
+    "code": "verify_phone",
+    "label": "Confirmer mon téléphone"
    }
   },
   "editable": false,
-  "updated_at": "2026-10-20T19:09:41.160987+00:00"
+  "updated_at": "2026-11-11T17:44:04.824157+00:00"
  },
  "rejected": {
   "status": "changes_requested",
@@ -598,7 +808,7 @@
    },
    {
     "key": "activation",
-    "label": "Activation du profil professionnel",
+    "label": "Activation des commandes",
     "state": "todo"
    }
   ],
@@ -650,50 +860,57 @@
    "choice": "",
    "human_review_requested": false,
    "done": true,
-   "note": "Non requise : l’équipe Tratra vérifie votre pièce elle-même."
+   "note": "Pas demandée pour le moment : l’équipe Tratra vérifie votre pièce elle-même.",
+   "benefit": "Attribue le badge « Vérifié », affiché sur votre profil et vos offres."
   },
   "review": {
    "state": "rejected",
    "reason": "Verso illisible.",
-   "sent_at": "2026-10-20T19:09:41.160930+00:00",
+   "sent_at": "2026-11-11T17:44:04.824061+00:00",
    "attempts": 1,
    "previous_reason": null
   },
   "activation": {
    "profile": {
     "complete": false,
+    "ready": false,
     "done": 0,
     "total": 5,
     "items": [
      {
-      "key": "bio",
-      "label": "Présentation",
-      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
-      "done": false
-     },
-     {
       "key": "skills",
-      "label": "Spécialités",
+      "label": "Métier",
       "hint": "Choisissez au moins un métier que vous exercez.",
-      "done": false
-     },
-     {
-      "key": "experience",
-      "label": "Expérience",
-      "hint": "Indiquez vos années d’expérience.",
-      "done": false
+      "done": false,
+      "required": true
      },
      {
       "key": "zone",
       "label": "Zone d’intervention",
       "hint": "Renseignez votre commune.",
-      "done": false
+      "done": false,
+      "required": true
+     },
+     {
+      "key": "experience",
+      "label": "Expérience",
+      "hint": "Indiquez votre expérience (débutant accepté).",
+      "done": false,
+      "required": false
+     },
+     {
+      "key": "bio",
+      "label": "Présentation",
+      "hint": "Décrivez votre activité en quelques lignes : les clients comparent les profils.",
+      "done": false,
+      "required": false
      },
      {
       "key": "photo",
       "label": "Photo de profil",
       "hint": "Ajoutez une photo : les clients choisissent des visages.",
-      "done": false
+      "done": false,
+      "required": false
      }
     ]
    },
@@ -706,19 +923,44 @@
    },
    "approval": {
     "approved": false,
-    "label": "Validation de l’équipe en attente"
+    "label": "Commandes non activées"
    },
+   "suspended": false,
    "publication": {
     "authorized": false,
-    "label": "Publication non autorisée",
+    "label": "Profil non publié",
     "blockers": [
      {
+      "code": "phone_unverified",
+      "label": "Numéro de téléphone non confirmé",
+      "hint": "Confirmez votre numéro avec le code reçu par SMS pour publier votre service.",
+      "action": {
+       "code": "verify_phone",
+       "label": "Confirmer mon téléphone"
+      }
+     },
+     {
       "code": "profile_incomplete",
-      "label": "Profil incomplet : présentation, spécialités, expérience, zone d’intervention, photo de profil",
-      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "label": "À renseigner pour publier : métier, zone d’intervention",
+      "hint": "Choisissez au moins un métier que vous exercez.",
       "action": {
        "code": "edit_profile",
        "label": "Compléter mon profil"
+      }
+     }
+    ]
+   },
+   "orders": {
+    "authorized": false,
+    "label": "Commandes non activées",
+    "blockers": [
+     {
+      "code": "not_published",
+      "label": "Service non publié",
+      "hint": "Publiez d’abord votre service.",
+      "action": {
+       "code": "verify_phone",
+       "label": "Confirmer mon téléphone"
       }
      },
      {
@@ -727,11 +969,48 @@
       "hint": "Verso illisible.",
       "action": {
        "code": "verify_identity",
-       "label": "Vérifier mon identité"
+       "label": "Reprendre ma vérification"
       }
      }
-    ]
+    ],
+    "face_required": false
    },
+   "verification": {
+    "level": "NON_VERIFIE",
+    "label": "Non vérifié",
+    "badge": false,
+    "face": {
+     "enabled": false,
+     "required": false,
+     "satisfied": false,
+     "status": "not_started",
+     "state": "unavailable"
+    }
+   },
+   "stages": [
+    {
+     "key": "publication",
+     "label": "Service publié",
+     "state": "todo",
+     "status": "Non publié",
+     "benefit": "Votre service est visible par les clients, avec la mention « Non vérifié ». Aucune commande tant que votre identité n’est pas vérifiée."
+    },
+    {
+     "key": "identity",
+     "label": "Pièce d’identité",
+     "state": "retry",
+     "status": "Nouvelle pièce demandée",
+     "benefit": "Active vos commandes : réservations, missions Tratra Flash et contrats."
+    },
+    {
+     "key": "face",
+     "label": "Vérification faciale",
+     "state": "unavailable",
+     "status": "Pas encore proposée",
+     "benefit": "Attribue le badge « Vérifié », affiché sur votre profil et vos offres.",
+     "required": false
+    }
+   ],
    "offers": {
     "total": 0,
     "active": 0,
@@ -740,54 +1019,62 @@
     "label": "Aucune offre créée",
     "action": {
      "code": "add_service",
-     "label": "Ajouter une offre"
-    }
+     "label": "Publier un service"
+    },
+    "accepting_orders": false
    },
    "next_action": {
-    "code": "edit_profile",
-    "label": "Compléter mon profil"
+    "code": "verify_phone",
+    "label": "Confirmer mon téléphone"
    }
   },
   "editable": true,
-  "updated_at": "2026-10-20T19:09:41.160987+00:00"
+  "updated_at": "2026-11-11T17:44:04.824157+00:00"
  },
  "services": {
   "publishable": false,
+  "orders_enabled": false,
   "eligibility": {
    "profile": {
     "complete": false,
+    "ready": false,
     "done": 0,
     "total": 5,
     "items": [
      {
-      "key": "bio",
-      "label": "Présentation",
-      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
-      "done": false
-     },
-     {
       "key": "skills",
-      "label": "Spécialités",
+      "label": "Métier",
       "hint": "Choisissez au moins un métier que vous exercez.",
-      "done": false
-     },
-     {
-      "key": "experience",
-      "label": "Expérience",
-      "hint": "Indiquez vos années d’expérience.",
-      "done": false
+      "done": false,
+      "required": true
      },
      {
       "key": "zone",
       "label": "Zone d’intervention",
       "hint": "Renseignez votre commune.",
-      "done": false
+      "done": false,
+      "required": true
+     },
+     {
+      "key": "experience",
+      "label": "Expérience",
+      "hint": "Indiquez votre expérience (débutant accepté).",
+      "done": false,
+      "required": false
+     },
+     {
+      "key": "bio",
+      "label": "Présentation",
+      "hint": "Décrivez votre activité en quelques lignes : les clients comparent les profils.",
+      "done": false,
+      "required": false
      },
      {
       "key": "photo",
       "label": "Photo de profil",
       "hint": "Ajoutez une photo : les clients choisissent des visages.",
-      "done": false
+      "done": false,
+      "required": false
      }
     ]
    },
@@ -800,19 +1087,44 @@
    },
    "approval": {
     "approved": false,
-    "label": "Validation de l’équipe en attente"
+    "label": "Commandes non activées"
    },
+   "suspended": false,
    "publication": {
     "authorized": false,
-    "label": "Publication non autorisée",
+    "label": "Profil non publié",
     "blockers": [
      {
+      "code": "phone_unverified",
+      "label": "Numéro de téléphone non confirmé",
+      "hint": "Confirmez votre numéro avec le code reçu par SMS pour publier votre service.",
+      "action": {
+       "code": "verify_phone",
+       "label": "Confirmer mon téléphone"
+      }
+     },
+     {
       "code": "profile_incomplete",
-      "label": "Profil incomplet : présentation, spécialités, expérience, zone d’intervention, photo de profil",
-      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "label": "À renseigner pour publier : métier, zone d’intervention",
+      "hint": "Choisissez au moins un métier que vous exercez.",
       "action": {
        "code": "edit_profile",
        "label": "Compléter mon profil"
+      }
+     }
+    ]
+   },
+   "orders": {
+    "authorized": false,
+    "label": "Commandes non activées",
+    "blockers": [
+     {
+      "code": "not_published",
+      "label": "Service non publié",
+      "hint": "Publiez d’abord votre service.",
+      "action": {
+       "code": "verify_phone",
+       "label": "Confirmer mon téléphone"
       }
      },
      {
@@ -821,11 +1133,48 @@
       "hint": "Verso illisible.",
       "action": {
        "code": "verify_identity",
-       "label": "Vérifier mon identité"
+       "label": "Reprendre ma vérification"
       }
      }
-    ]
+    ],
+    "face_required": false
    },
+   "verification": {
+    "level": "NON_VERIFIE",
+    "label": "Non vérifié",
+    "badge": false,
+    "face": {
+     "enabled": false,
+     "required": false,
+     "satisfied": false,
+     "status": "not_started",
+     "state": "unavailable"
+    }
+   },
+   "stages": [
+    {
+     "key": "publication",
+     "label": "Service publié",
+     "state": "todo",
+     "status": "Non publié",
+     "benefit": "Votre service est visible par les clients, avec la mention « Non vérifié ». Aucune commande tant que votre identité n’est pas vérifiée."
+    },
+    {
+     "key": "identity",
+     "label": "Pièce d’identité",
+     "state": "retry",
+     "status": "Nouvelle pièce demandée",
+     "benefit": "Active vos commandes : réservations, missions Tratra Flash et contrats."
+    },
+    {
+     "key": "face",
+     "label": "Vérification faciale",
+     "state": "unavailable",
+     "status": "Pas encore proposée",
+     "benefit": "Attribue le badge « Vérifié », affiché sur votre profil et vos offres.",
+     "required": false
+    }
+   ],
    "offers": {
     "total": 0,
     "active": 0,
@@ -834,12 +1183,13 @@
     "label": "Aucune offre créée",
     "action": {
      "code": "add_service",
-     "label": "Ajouter une offre"
-    }
+     "label": "Publier un service"
+    },
+    "accepting_orders": false
    },
    "next_action": {
-    "code": "edit_profile",
-    "label": "Compléter mon profil"
+    "code": "verify_phone",
+    "label": "Confirmer mon téléphone"
    }
   },
   "results": []
@@ -856,54 +1206,60 @@
   "online": false,
   "is_approved": false,
   "publishable": false,
+  "orders_enabled": false,
+  "verification": {
+   "level": "NON_VERIFIE",
+   "label": "Non vérifié",
+   "badge": false
+  },
   "rating": null,
   "completed_jobs": 0,
   "completion": {
    "percent": 0,
    "done": 0,
-   "total": 7,
+   "total": 6,
    "items": [
     {
-     "key": "bio",
-     "label": "Présentation",
-     "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
-     "done": false
-    },
-    {
      "key": "skills",
-     "label": "Spécialités",
+     "label": "Métier",
      "hint": "Choisissez au moins un métier que vous exercez.",
-     "done": false
-    },
-    {
-     "key": "experience",
-     "label": "Expérience",
-     "hint": "Indiquez vos années d’expérience.",
-     "done": false
+     "done": false,
+     "required": true
     },
     {
      "key": "zone",
      "label": "Zone d’intervention",
      "hint": "Renseignez votre commune.",
-     "done": false
+     "done": false,
+     "required": true
+    },
+    {
+     "key": "experience",
+     "label": "Expérience",
+     "hint": "Indiquez votre expérience (débutant accepté).",
+     "done": false,
+     "required": false
+    },
+    {
+     "key": "bio",
+     "label": "Présentation",
+     "hint": "Décrivez votre activité en quelques lignes : les clients comparent les profils.",
+     "done": false,
+     "required": false
     },
     {
      "key": "photo",
      "label": "Photo de profil",
      "hint": "Ajoutez une photo : les clients choisissent des visages.",
-     "done": false
+     "done": false,
+     "required": false
     },
     {
      "key": "kyc",
      "label": "Pièce d’identité vérifiée",
-     "hint": "Déposez votre pièce d’identité ; l’équipe Tratra la vérifie.",
-     "done": false
-    },
-    {
-     "key": "approval",
-     "label": "Validation par l’équipe Tratra",
-     "hint": "Dernière étape, après vérification de votre dossier.",
-     "done": false
+     "hint": "Déposez votre pièce d’identité ; l’équipe Tratra la vérifie. Elle active vos commandes.",
+     "done": false,
+     "required": false
     }
    ]
   },
@@ -923,38 +1279,44 @@
   "eligibility": {
    "profile": {
     "complete": false,
+    "ready": false,
     "done": 0,
     "total": 5,
     "items": [
      {
-      "key": "bio",
-      "label": "Présentation",
-      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
-      "done": false
-     },
-     {
       "key": "skills",
-      "label": "Spécialités",
+      "label": "Métier",
       "hint": "Choisissez au moins un métier que vous exercez.",
-      "done": false
-     },
-     {
-      "key": "experience",
-      "label": "Expérience",
-      "hint": "Indiquez vos années d’expérience.",
-      "done": false
+      "done": false,
+      "required": true
      },
      {
       "key": "zone",
       "label": "Zone d’intervention",
       "hint": "Renseignez votre commune.",
-      "done": false
+      "done": false,
+      "required": true
+     },
+     {
+      "key": "experience",
+      "label": "Expérience",
+      "hint": "Indiquez votre expérience (débutant accepté).",
+      "done": false,
+      "required": false
+     },
+     {
+      "key": "bio",
+      "label": "Présentation",
+      "hint": "Décrivez votre activité en quelques lignes : les clients comparent les profils.",
+      "done": false,
+      "required": false
      },
      {
       "key": "photo",
       "label": "Photo de profil",
       "hint": "Ajoutez une photo : les clients choisissent des visages.",
-      "done": false
+      "done": false,
+      "required": false
      }
     ]
    },
@@ -967,19 +1329,44 @@
    },
    "approval": {
     "approved": false,
-    "label": "Validation de l’équipe en attente"
+    "label": "Commandes non activées"
    },
+   "suspended": false,
    "publication": {
     "authorized": false,
-    "label": "Publication non autorisée",
+    "label": "Profil non publié",
     "blockers": [
      {
+      "code": "phone_unverified",
+      "label": "Numéro de téléphone non confirmé",
+      "hint": "Confirmez votre numéro avec le code reçu par SMS pour publier votre service.",
+      "action": {
+       "code": "verify_phone",
+       "label": "Confirmer mon téléphone"
+      }
+     },
+     {
       "code": "profile_incomplete",
-      "label": "Profil incomplet : présentation, spécialités, expérience, zone d’intervention, photo de profil",
-      "hint": "Décrivez votre activité et votre expérience en quelques lignes.",
+      "label": "À renseigner pour publier : métier, zone d’intervention",
+      "hint": "Choisissez au moins un métier que vous exercez.",
       "action": {
        "code": "edit_profile",
        "label": "Compléter mon profil"
+      }
+     }
+    ]
+   },
+   "orders": {
+    "authorized": false,
+    "label": "Commandes non activées",
+    "blockers": [
+     {
+      "code": "not_published",
+      "label": "Service non publié",
+      "hint": "Publiez d’abord votre service.",
+      "action": {
+       "code": "verify_phone",
+       "label": "Confirmer mon téléphone"
       }
      },
      {
@@ -988,11 +1375,48 @@
       "hint": "Verso illisible.",
       "action": {
        "code": "verify_identity",
-       "label": "Vérifier mon identité"
+       "label": "Reprendre ma vérification"
       }
      }
-    ]
+    ],
+    "face_required": false
    },
+   "verification": {
+    "level": "NON_VERIFIE",
+    "label": "Non vérifié",
+    "badge": false,
+    "face": {
+     "enabled": false,
+     "required": false,
+     "satisfied": false,
+     "status": "not_started",
+     "state": "unavailable"
+    }
+   },
+   "stages": [
+    {
+     "key": "publication",
+     "label": "Service publié",
+     "state": "todo",
+     "status": "Non publié",
+     "benefit": "Votre service est visible par les clients, avec la mention « Non vérifié ». Aucune commande tant que votre identité n’est pas vérifiée."
+    },
+    {
+     "key": "identity",
+     "label": "Pièce d’identité",
+     "state": "retry",
+     "status": "Nouvelle pièce demandée",
+     "benefit": "Active vos commandes : réservations, missions Tratra Flash et contrats."
+    },
+    {
+     "key": "face",
+     "label": "Vérification faciale",
+     "state": "unavailable",
+     "status": "Pas encore proposée",
+     "benefit": "Attribue le badge « Vérifié », affiché sur votre profil et vos offres.",
+     "required": false
+    }
+   ],
    "offers": {
     "total": 0,
     "active": 0,
@@ -1001,12 +1425,13 @@
     "label": "Aucune offre créée",
     "action": {
      "code": "add_service",
-     "label": "Ajouter une offre"
-    }
+     "label": "Publier un service"
+    },
+    "accepting_orders": false
    },
    "next_action": {
-    "code": "edit_profile",
-    "label": "Compléter mon profil"
+    "code": "verify_phone",
+    "label": "Confirmer mon téléphone"
    }
   },
   "services": {

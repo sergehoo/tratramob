@@ -1,4 +1,4 @@
-// « Vérifier mon identité » (parcours guidé, progression serveur), espace professionnel (éligibilité en quatre notions, offres et leur état
+// « Vérifier mon identité » (parcours guidé, progression serveur), espace professionnel (éligibilité en trois niveaux, offres et leur état
 // de publication, création métier → prestation → description → tarif) et menu Profil regroupé. Inclut des rendus sur petit écran avec
 // texte agrandi : aucun débordement (« BOTTOM OVERFLOWED ») n'est toléré.
 import 'dart:convert';
@@ -32,34 +32,106 @@ const _keys = ['personal', 'document', 'capture', 'quality', 'face', 'review', '
 const _labels = ['Informations personnelles', 'Choix de la pièce', 'Photo de la pièce', 'Contrôle qualité et lecture', 'Vérification faciale',
   'Revue par l’équipe Tratra', 'Activation du profil professionnel'];
 
-Map<String, dynamic> eligibility({bool authorized = false, String kyc = 'draft', int done = 3, int offers = 0, int active = 0}) => {
-      'profile': {
-        'complete': done == 5,
-        'done': done,
-        'total': 5,
-        'items': [
-          for (final (i, k) in ['bio', 'skills', 'experience', 'zone', 'photo'].indexed)
-            {'key': k, 'label': ['Présentation', 'Spécialités', 'Expérience', 'Zone d’intervention', 'Photo de profil'][i], 'hint': 'Aide', 'done': i < done},
-        ],
-      },
-      'kyc': {'status': kyc, 'label': {'draft': 'Identité non vérifiée', 'pending': 'Vérification en cours', 'approved': 'Identité vérifiée', 'rejected': 'Nouvelle pièce demandée'}[kyc], 'reason': null, 'approved': kyc == 'approved'},
-      'approval': {'approved': authorized, 'label': authorized ? 'Validé par l’équipe Tratra' : 'Validation de l’équipe en attente'},
-      'publication': {
-        'authorized': authorized,
-        'label': authorized ? 'Publication autorisée' : 'Publication non autorisée',
-        'blockers': authorized
-            ? []
-            : [
-                if (done < 5) {'code': 'profile_incomplete', 'label': 'Profil incomplet : expérience, zone d’intervention', 'hint': 'Indiquez vos années d’expérience.', 'action': {'code': 'edit_profile', 'label': 'Compléter mon profil'}},
-                if (kyc != 'approved') {'code': 'kyc_$kyc', 'label': 'Identité non vérifiée', 'hint': 'Faites vérifier votre pièce.', 'action': {'code': 'verify_identity', 'label': 'Vérifier mon identité'}},
-                if (kyc == 'approved') {'code': 'approval_pending', 'label': 'Validation finale de l’équipe Tratra en attente', 'hint': 'Aucune action n’est nécessaire.', 'action': null},
-              ],
-      },
-      'offers': {'total': offers, 'active': active, 'published': authorized ? active : 0, 'inactive': offers - active,
-        'label': offers == 0 ? 'Aucune offre créée' : '$active offre en attente de l’autorisation de publication',
-        'action': offers == 0 ? {'code': 'add_service', 'label': 'Ajouter une offre'} : null},
-      'next_action': {'code': 'edit_profile', 'label': 'Compléter mon profil'},
-    };
+/// Même forme que `eligibility_summary` (handy/eligibility.py) : trois niveaux distincts — publication (sans vérification d'identité),
+/// commandes (pièce approuvée), badge « Vérifié » (vérification faciale validée). `face` : done | pending | retry | todo | unavailable.
+Map<String, dynamic> eligibility({
+  bool published = false,
+  bool orders = false,
+  String kyc = 'draft',
+  int done = 3,
+  int offers = 0,
+  int active = 0,
+  String face = 'unavailable',
+  bool faceRequired = false,
+}) {
+  const keys = ['skills', 'zone', 'experience', 'bio', 'photo'];
+  const labels = ['Métier', 'Zone d’intervention', 'Expérience', 'Présentation', 'Photo de profil'];
+  Map<String, dynamic> action(String code, String label, [String? step]) => {'code': code, 'label': label, if (step != null) 'step': step};
+  final missing = [for (var i = done; i < 2; i++) labels[i].toLowerCase()];
+  final level = orders && face == 'done' ? 'VERIFIE' : kyc == 'approved' ? 'IDENTITE_VERIFIEE' : 'NON_VERIFIE';
+  final levelLabel = {'VERIFIE': 'Vérifié', 'IDENTITE_VERIFIEE': 'Identité vérifiée', 'NON_VERIFIE': 'Non vérifié'}[level];
+  final publicationBlockers = <Map<String, dynamic>>[
+    if (!published && missing.isNotEmpty)
+      {'code': 'profile_incomplete', 'label': 'À renseigner pour publier : ${missing.join(', ')}', 'hint': 'Aide', 'action': action('edit_profile', 'Compléter mon profil')},
+    if (!published && missing.isEmpty)
+      {'code': 'phone_unverified', 'label': 'Numéro de téléphone non confirmé', 'hint': 'Confirmez votre numéro avec le code reçu par SMS pour publier votre service.',
+        'action': action('verify_phone', 'Confirmer mon téléphone')},
+  ];
+  final faceMissing = faceRequired && face != 'done';
+  final ordersBlockers = <Map<String, dynamic>>[
+    if (!orders && !published) {'code': 'not_published', 'label': 'Service non publié', 'hint': 'Publiez d’abord votre service.', 'action': publicationBlockers.first['action']},
+    if (!orders && kyc == 'draft')
+      {'code': 'kyc_draft', 'label': 'Identité non vérifiée', 'hint': 'Faites vérifier votre pièce d’identité pour recevoir des commandes : quelques minutes suffisent.',
+        'action': action('verify_identity', 'Activer mes commandes')},
+    if (!orders && kyc == 'pending')
+      {'code': 'kyc_pending', 'label': 'Pièce d’identité en cours de revue', 'hint': 'L’équipe Tratra examine votre pièce : aucune action n’est nécessaire.', 'action': null},
+    if (!orders && kyc == 'rejected')
+      {'code': 'kyc_rejected', 'label': 'Nouvelle pièce d’identité demandée', 'hint': 'Verso illisible.', 'action': action('verify_identity', 'Reprendre ma vérification')},
+    if (!orders && kyc == 'approved' && !faceMissing)
+      {'code': 'approval_pending', 'label': 'Activation des commandes par l’équipe Tratra en attente',
+        'hint': 'Votre pièce est approuvée ; l’équipe termine un contrôle avant d’activer vos commandes. Aucune action n’est nécessaire.', 'action': null},
+    if (!orders && faceMissing)
+      {'code': 'face_required', 'label': face == 'pending' ? 'Vérification faciale en cours de revue' : 'Vérification faciale demandée', 'hint': 'Votre métier la demande avant toute commande.',
+        'action': face == 'pending' ? null : action('verify_identity', 'Faire la vérification faciale', 'face')},
+  ];
+  final badge = action('verify_identity', 'Obtenir le badge Vérifié', 'face');
+  return {
+    'profile': {
+      'complete': done == 5,
+      'ready': missing.isEmpty,
+      'done': done,
+      'total': 5,
+      'items': [for (final (i, k) in keys.indexed) {'key': k, 'label': labels[i], 'hint': 'Aide', 'done': i < done, 'required': i < 2}],
+    },
+    'kyc': {'status': kyc, 'label': {'draft': 'Identité non vérifiée', 'pending': 'Vérification en cours', 'approved': 'Identité vérifiée', 'rejected': 'Nouvelle pièce demandée'}[kyc],
+      'reason': kyc == 'rejected' ? 'Verso illisible.' : null, 'started': kyc != 'draft', 'approved': kyc == 'approved'},
+    'approval': {'approved': orders, 'label': orders ? 'Commandes activées' : 'Commandes non activées'},
+    'suspended': false,
+    'publication': {'authorized': published, 'label': published ? 'Profil publié' : 'Profil non publié', 'blockers': publicationBlockers},
+    'orders': {'authorized': orders, 'label': orders ? 'Commandes activées' : 'Commandes non activées', 'blockers': ordersBlockers, 'face_required': faceRequired},
+    'verification': {'level': level, 'label': levelLabel, 'badge': level == 'VERIFIE',
+      'face': {'enabled': face != 'unavailable', 'required': faceRequired, 'satisfied': face == 'done', 'status': face == 'done' ? 'approved' : 'not_started', 'state': face}},
+    'stages': [
+      {'key': 'publication', 'label': 'Service publié', 'state': published && active > 0 ? 'done' : 'todo',
+        'status': published ? (active > 0 ? 'Publié' : 'Profil visible, aucun service actif') : 'Non publié',
+        'benefit': 'Votre service est visible par les clients, avec la mention « Non vérifié ». Aucune commande tant que votre identité n’est pas vérifiée.'},
+      {'key': 'identity', 'label': 'Pièce d’identité',
+        'state': {'draft': 'todo', 'pending': 'pending', 'rejected': 'retry', 'approved': orders ? 'done' : 'pending'}[kyc],
+        'status': {'draft': 'À faire', 'pending': 'En cours de revue', 'rejected': 'Nouvelle pièce demandée', 'approved': orders ? 'Identité vérifiée' : 'Activation par l’équipe en attente'}[kyc],
+        'benefit': 'Active vos commandes : réservations, missions Tratra Flash et contrats.'},
+      {'key': 'face', 'label': 'Vérification faciale', 'required': faceRequired,
+        'state': kyc == 'draft' && (face == 'todo' || face == 'retry') ? 'locked' : face,
+        'status': kyc == 'draft' && (face == 'todo' || face == 'retry')
+            ? 'Après la pièce d’identité'
+            : {'done': 'Validée', 'pending': 'En cours de revue', 'retry': 'À reprendre', 'todo': 'À faire', 'unavailable': 'Pas encore proposée'}[face],
+        'benefit': 'Attribue le badge « Vérifié », affiché sur votre profil et vos offres.'},
+    ],
+    'offers': {
+      'total': offers,
+      'active': active,
+      'published': published ? active : 0,
+      'inactive': offers - active,
+      'accepting_orders': orders,
+      'label': offers == 0
+          ? 'Aucune offre créée'
+          : active == 0
+              ? 'Aucune offre active'
+              : !published
+                  ? '$active offre en attente de publication'
+                  : '$active offre publiée${orders ? '' : ' — commandes non activées'}',
+      'action': offers == 0 ? action('add_service', 'Publier un service') : active == 0 ? action('manage_services', 'Gérer mes offres') : null,
+    },
+    'next_action': !published
+        ? publicationBlockers.first['action']
+        : offers == 0
+            ? action('add_service', 'Publier un service')
+            : !orders
+                ? ordersBlockers.map((b) => b['action']).firstWhere((a) => a != null, orElse: () => null)
+                : (face == 'todo' || face == 'retry')
+                    ? badge
+                    : null,
+  };
+}
 
 Map<String, dynamic> kycState({
   String status = 'draft',
@@ -72,6 +144,9 @@ Map<String, dynamic> kycState({
   List<Map<String, dynamic>> captures = const [],
   bool ready = false,
   bool face = false,
+  bool faceRequired = false,
+  bool? faceDone,
+  bool faceSatisfied = false,
   String review = 'none',
   String? reason,
   String? previous,
@@ -85,7 +160,7 @@ Map<String, dynamic> kycState({
       'current_step': current,
       'steps': [
         for (final (i, k) in _keys.indexed)
-          {'key': k, 'label': _labels[i], 'state': states[k] ?? (k == 'face' && !face ? 'skipped' : k == current ? 'current' : _keys.indexOf(k) < _keys.indexOf(current) ? 'done' : 'todo')},
+          {'key': k, 'label': _labels[i], 'state': states[k] ?? (k == 'face' && !face ? 'skipped' : k == 'face' && !faceRequired && !(faceDone ?? false) ? 'optional' : k == current ? 'current' : _keys.indexOf(k) < _keys.indexOf(current) ? 'done' : 'todo')},
       ],
       'personal': {'first_name': first, 'last_name': last, 'birth_date': birth, 'complete': birth != null},
       'document': {
@@ -94,8 +169,10 @@ Map<String, dynamic> kycState({
         'captures': captures,
         'ready_to_send': ready,
       },
-      'face': {'enabled': face, 'required': false, 'status': 'not_started', 'satisfied': false, 'choice': '', 'human_review_requested': false, 'done': !face,
-        'note': face ? 'Comparez votre visage à votre pièce, après votre consentement explicite.' : 'Non requise : l’équipe Tratra vérifie votre pièce elle-même.'},
+      'face': {'enabled': face, 'required': faceRequired, 'status': faceSatisfied ? 'approved' : 'not_started', 'satisfied': faceSatisfied, 'choice': '',
+        'human_review_requested': false, 'done': faceDone ?? !face,
+        'note': face ? 'Comparez votre visage à votre pièce, après votre consentement explicite.' : 'Pas demandée pour le moment : l’équipe Tratra vérifie votre pièce elle-même.',
+        'benefit': 'Attribue le badge « Vérifié », affiché sur votre profil et vos offres.'},
       'review': {'state': review, 'reason': reason ?? '', 'sent_at': sentAt, 'attempts': sentAt == null ? 0 : 1, 'previous_reason': previous},
       'activation': activation ?? eligibility(),
       'editable': editable,
@@ -213,6 +290,8 @@ void _size(WidgetTester t, {Size size = const Size(900, 2400), double text = 1.0
   addTearDown(t.platformDispatcher.clearTextScaleFactorTestValue);
 }
 
+Finder _within(String key, String text) => find.descendant(of: find.byKey(ValueKey(key)), matching: find.text(text));
+
 Map<String, dynamic> _dashPayload({Map<String, dynamic>? elig}) => {
       'user': {'id': 9, 'first_name': 'Awa', 'display_name': 'Awa K.', 'is_verified': true},
       'capabilities': {'client': true, 'provider': true, 'publishable': false},
@@ -240,7 +319,7 @@ void main() {
       final path = await t.runAsync(_photo);
       await t.pumpWidget(_host(base, IdentityFlowScreen(api: KycFlowApi(base), picker: (_) async => path)));
       await t.pumpAndSettle();
-      expect(find.text('Étape 1 sur 7'), findsOneWidget);
+      expect(find.text('Étape 1 sur 6'), findsOneWidget);
       expect(find.text('Informations personnelles'), findsWidgets);
       // validation locale : date de naissance obligatoire
       await t.tap(find.byKey(const ValueKey('kyc-personal-save')));
@@ -255,13 +334,13 @@ void main() {
       await t.pumpAndSettle();
       await t.tap(find.byKey(const ValueKey('kyc-personal-save')));
       await t.pumpAndSettle();
-      expect(find.text('Étape 2 sur 7'), findsOneWidget);
+      expect(find.text('Étape 2 sur 6'), findsOneWidget);
       // choix de la pièce
       await t.tap(find.byKey(const ValueKey('kyc-kind-cni')));
       await t.pump();
       await t.tap(find.byKey(const ValueKey('kyc-kind-save')));
       await t.pumpAndSettle();
-      expect(find.text('Étape 3 sur 7'), findsOneWidget);
+      expect(find.text('Étape 3 sur 6'), findsOneWidget);
       expect(find.byKey(const ValueKey('kyc-side-front')), findsOneWidget);
       expect(find.byKey(const ValueKey('kyc-side-back')), findsOneWidget);
       // recto : photo floue → conseil explicite, possibilité de reprendre
@@ -276,7 +355,7 @@ void main() {
       await t.tap(find.byKey(const ValueKey('kyc-take-back')));
       await _io(t);
       // étape 4 : vérification avant envoi
-      expect(find.text('Étape 4 sur 7'), findsOneWidget);
+      expect(find.text('Étape 4 sur 6'), findsOneWidget);
       await t.ensureVisible(find.byKey(const ValueKey('kyc-send')));
       await t.tap(find.byKey(const ValueKey('kyc-send')));
       await t.pumpAndSettle();
@@ -299,7 +378,7 @@ void main() {
       await t.tap(find.byKey(const ValueKey('kyc-personal-save')));
       await t.pumpAndSettle();
       expect(find.text('Vous devez avoir au moins 18 ans pour proposer vos services.'), findsOneWidget);
-      expect(find.text('Étape 1 sur 7'), findsOneWidget);
+      expect(find.text('Étape 1 sur 6'), findsOneWidget);
     });
 
     testWidgets('reprise après fermeture : l’écran rouvre à l’étape enregistrée par le serveur', (t) async {
@@ -308,7 +387,7 @@ void main() {
       final base = _base(server.client);
       await t.pumpWidget(_host(base, IdentityFlowScreen(api: KycFlowApi(base))));
       await t.pumpAndSettle();
-      expect(find.text('Étape 3 sur 7'), findsOneWidget);
+      expect(find.text('Étape 3 sur 6'), findsOneWidget);
       expect(find.descendant(of: find.byKey(const ValueKey('kyc-take-front')), matching: find.text('Reprendre')), findsOneWidget);
       expect(find.descendant(of: find.byKey(const ValueKey('kyc-take-back')), matching: find.text('Prendre la photo')), findsOneWidget);
       expect(find.text('Photo nette et lisible'), findsOneWidget);
@@ -339,37 +418,108 @@ void main() {
       expect(find.text('2 sur 6 terminées'), findsOneWidget);        // la vérification faciale « non requise » n'est pas comptée
     });
 
-    testWidgets('vérification faciale : absente si désactivée (« Non requise »), proposée avec alternative humaine si activée', (t) async {
+    testWidgets('vérification faciale : absente si désactivée, facultative une fois la pièce envoyée (jamais imposée), exigée pour un métier sensible', (t) async {
       _size(t);
-      var server = KycServer(kycState(status: 'in_review', current: 'review', birth: '1990-04-12', kind: 'cni', review: 'pending', sentAt: '2026-10-20T10:00:00Z', states: {'review': 'waiting'}));
-      var base = _base(server.client);
-      await t.pumpWidget(_host(base, IdentityFlowScreen(api: KycFlowApi(base))));
-      await t.pumpAndSettle();
+      Future<KycServer> open(String key, Map<String, dynamic> state, {String? initialStep}) async {
+        final server = KycServer(state);
+        final base = _base(server.client);
+        await t.pumpWidget(_host(base, IdentityFlowScreen(key: ValueKey(key), api: KycFlowApi(base), initialStep: initialStep)));
+        await t.pumpAndSettle();
+        return server;
+      }
+
+      // Désactivée : ni étape, ni proposition.
+      await open('face-off', kycState(status: 'in_review', current: 'review', birth: '1990-04-12', kind: 'cni', review: 'pending', sentAt: '2026-10-20T10:00:00Z', states: {'review': 'waiting'}));
+      expect(find.byKey(const ValueKey('kyc-face-offer')), findsNothing);
       await t.tap(find.byKey(const ValueKey('kyc-steps')));
       await t.pumpAndSettle();
-      expect(find.text('Non requise'), findsOneWidget);
+      expect(find.text('Les 6 étapes'), findsOneWidget);
+      expect(find.text('Vérification faciale'), findsNothing);
       expect(find.byKey(const ValueKey('kyc-face')), findsNothing);
 
-      server = KycServer(kycState(face: true, current: 'face', birth: '1990-04-12', kind: 'cni', review: 'pending', sentAt: '2026-10-20T10:00:00Z'));
-      base = _base(server.client);
-      await t.pumpWidget(_host(base, IdentityFlowScreen(key: const ValueKey('face-on'), api: KycFlowApi(base))));
+      // Facultative : la pièce est envoyée, l'écran reste sur la revue ; le badge est PROPOSÉ, « Plus tard » n'envoie rien.
+      var server = await open('face-optional', kycState(face: true, status: 'in_review', current: 'review', birth: '1990-04-12', kind: 'cni', review: 'pending',
+          sentAt: '2026-10-20T10:00:00Z', states: {'review': 'waiting'}, activation: eligibility(published: true, kyc: 'pending', offers: 1, active: 1, face: 'todo')));
+      expect(find.byKey(const ValueKey('kyc-review')), findsOneWidget);
+      expect(find.byKey(const ValueKey('kyc-face')), findsNothing);
+      expect(find.text('Étape 5 sur 6'), findsOneWidget);                // l'étape facultative n'allonge pas le parcours annoncé
+      expect(find.textContaining('mention « Non vérifié »'), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('kyc-face-open')));
       await t.pumpAndSettle();
       expect(find.byKey(const ValueKey('kyc-face')), findsOneWidget);
+      expect(_within('kyc-face', 'Facultatif'), findsOneWidget);
       expect(find.textContaining('consentement explicite'), findsWidgets);
       expect(find.byKey(const ValueKey('kyc-face-human')), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('kyc-face-later')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('kyc-review')), findsOneWidget);
+      expect(find.byKey(const ValueKey('kyc-face')), findsNothing);
+      expect(server.requests.where((r) => r.method != 'GET'), isEmpty);
+
+      // « Obtenir le badge Vérifié » depuis l'accueil : l'étape s'ouvre d'emblée ; la refuser laisse les commandes activées, sans badge.
+      await open('face-direct', kycState(face: true, status: 'verified', current: 'activation', birth: '1990-04-12', kind: 'cni', review: 'approved',
+          activation: eligibility(published: true, orders: true, kyc: 'approved', done: 5, offers: 1, active: 1, face: 'todo')), initialStep: 'face');
+      expect(find.byKey(const ValueKey('kyc-face')), findsOneWidget);
+      await t.tap(find.byKey(const ValueKey('kyc-face-later')));
+      await t.pumpAndSettle();
+      expect(find.byKey(const ValueKey('kyc-active')), findsOneWidget);
+      expect(find.byKey(const ValueKey('kyc-badge')), findsNothing);
+      expect(find.byKey(const ValueKey('kyc-face-offer')), findsOneWidget);
+
+      // Métier sensible : exigée avant les commandes — ni « Facultatif », ni « Plus tard » ; la revue humaine reste proposée.
+      await open('face-required', kycState(face: true, faceRequired: true, status: 'in_review', current: 'face', birth: '1990-04-12', kind: 'cni', review: 'pending',
+          sentAt: '2026-10-20T10:00:00Z', activation: eligibility(published: true, kyc: 'pending', offers: 1, active: 1, face: 'todo', faceRequired: true)));
+      expect(find.byKey(const ValueKey('kyc-face')), findsOneWidget);
+      expect(find.byKey(const ValueKey('kyc-face-human')), findsOneWidget);
+      expect(_within('kyc-face', 'Facultatif'), findsNothing);
+      expect(find.byKey(const ValueKey('kyc-face-later')), findsNothing);
+      expect(find.byKey(const ValueKey('kyc-face-offer')), findsNothing);
     });
 
-    testWidgets('activation : blocages réels et actions correctives, jamais un faux « activé »', (t) async {
+    testWidgets('activation : pièce approuvée ≠ commandes activées ≠ badge « Vérifié » — jamais un faux « activé » ni un faux badge', (t) async {
       _size(t);
-      final server = KycServer(kycState(status: 'verified', current: 'activation', birth: '1990-04-12', kind: 'cni', review: 'approved',
-          activation: eligibility(kyc: 'approved', done: 5)));
-      final base = _base(server.client);
-      await t.pumpWidget(_host(base, IdentityFlowScreen(api: KycFlowApi(base))));
-      await t.pumpAndSettle();
+      Future<void> open(String key, Map<String, dynamic> activation, {bool face = false, bool? faceDone, bool faceSatisfied = false}) async {
+        final base = _base(KycServer(kycState(status: 'verified', current: 'activation', birth: '1990-04-12', kind: 'cni', review: 'approved',
+            face: face, faceDone: faceDone, faceSatisfied: faceSatisfied, activation: activation)).client);
+        await t.pumpWidget(_host(base, IdentityFlowScreen(key: ValueKey(key), api: KycFlowApi(base))));
+        await t.pumpAndSettle();
+      }
+
+      // Pièce approuvée, activation retenue par l'équipe : ni « Commandes activées », ni badge.
+      await open('held', eligibility(published: true, kyc: 'approved', done: 5, offers: 1, active: 1));
       expect(find.byKey(const ValueKey('kyc-verified')), findsOneWidget);
       expect(find.byKey(const ValueKey('kyc-active')), findsNothing);
+      expect(find.byKey(const ValueKey('kyc-badge')), findsNothing);
       expect(find.byKey(const ValueKey('blocker-approval_pending')), findsOneWidget);
-      expect(find.text('Validation finale de l’équipe Tratra en attente'), findsOneWidget);
+      expect(find.text('Activation des commandes par l’équipe Tratra en attente'), findsWidgets);
+      expect(_within('elig-level', 'Identité vérifiée'), findsOneWidget);
+      expect(_within('elig-kyc', 'Non activées'), findsOneWidget);
+
+      // Commandes activées, vérification faciale possible : le badge est proposé, pas attribué.
+      await open('active', eligibility(published: true, orders: true, kyc: 'approved', done: 5, offers: 1, active: 1, face: 'todo'), face: true);
+      expect(find.byKey(const ValueKey('kyc-active')), findsOneWidget);
+      expect(find.byKey(const ValueKey('kyc-badge')), findsNothing);
+      expect(_within('elig-kyc', 'Activées'), findsOneWidget);
+      expect(_within('elig-level', 'Identité vérifiée'), findsOneWidget);
+      expect(_within('elig-badge', 'À faire'), findsOneWidget);
+      expect(find.byKey(const ValueKey('kyc-face-offer')), findsOneWidget);
+
+      // Vérification faciale transmise, en revue : toujours pas de badge.
+      await open('face-review', eligibility(published: true, orders: true, kyc: 'approved', done: 5, offers: 1, active: 1, face: 'pending'), face: true, faceDone: true);
+      expect(find.byKey(const ValueKey('kyc-active')), findsOneWidget);
+      expect(find.byKey(const ValueKey('kyc-badge')), findsNothing);
+      expect(find.byKey(const ValueKey('kyc-face-pending')), findsOneWidget);
+      expect(find.byKey(const ValueKey('kyc-face-offer')), findsNothing);
+      expect(_within('elig-badge', 'En cours de revue'), findsOneWidget);
+
+      // Vérification faciale validée : badge « Vérifié ».
+      await open('badge', eligibility(published: true, orders: true, kyc: 'approved', done: 5, offers: 1, active: 1, face: 'done'), face: true, faceDone: true, faceSatisfied: true);
+      expect(find.byKey(const ValueKey('kyc-badge')), findsOneWidget);
+      expect(find.byKey(const ValueKey('kyc-active')), findsNothing);
+      expect(find.byKey(const ValueKey('kyc-face-offer')), findsNothing);
+      expect(find.byKey(const ValueKey('kyc-face-pending')), findsNothing);
+      expect(_within('elig-level', 'Vérifié'), findsOneWidget);
+      expect(_within('elig-badge', 'Attribué'), findsOneWidget);
     });
   });
 
@@ -380,7 +530,7 @@ void main() {
       ('photos', kycState(birth: '1990-04-12', kind: 'cni', current: 'capture', captures: [side('front', present: true, quality: 'warn', problems: [{'code': 'blurry', 'label': 'Photo floue : tenez le téléphone immobile et attendez la mise au point.', 'blocking': false}]), side('back')])),
       ('contrôle', kycState(birth: '1990-04-12', kind: 'cni', current: 'quality', ready: true, captures: [side('front', present: true, quality: 'ok'), side('back', present: true, quality: 'ok')])),
       ('revue', kycState(status: 'in_review', current: 'review', birth: '1990-04-12', kind: 'cni', review: 'pending', sentAt: '2026-10-20T10:00:00Z')),
-      ('activation', kycState(status: 'verified', current: 'activation', review: 'approved', activation: eligibility(kyc: 'approved', done: 3))),
+      ('activation', kycState(status: 'verified', current: 'activation', review: 'approved', activation: eligibility(published: true, kyc: 'approved', done: 3))),
     ]) {
       testWidgets('parcours, étape $name (320×568, texte ×1,3)', (t) async {
         _size(t, size: const Size(320, 568), text: 1.3);
@@ -424,17 +574,58 @@ void main() {
   });
 
   group('espace professionnel', () {
-    testWidgets('quatre notions distinctes : profil x/5, identité, autorisation de publication, offres — plus de « 7/7 » ambigu', (t) async {
+    testWidgets('trois niveaux distincts : publication, commandes, badge « Vérifié » — puis profil x/5 et offres, plus de « 7/7 » ambigu', (t) async {
       _size(t);
-      await t.pumpWidget(MaterialApp(theme: TratraTheme.light(), home: Scaffold(body: SingleChildScrollView(
-          child: EligibilityPanel(eligibility: DashEligibility(eligibility(kyc: 'pending', done: 3, offers: 1, active: 1)))))));
-      expect(find.text('3/5'), findsOneWidget);
+      Future<void> show(Map<String, dynamic> e) => t.pumpWidget(MaterialApp(theme: TratraTheme.light(), home: Scaffold(body: SingleChildScrollView(
+          child: EligibilityPanel(key: UniqueKey(), eligibility: DashEligibility(e))))));
+
+      // Non publié : seuls les blocages de la publication sont listés (la pièce en revue n'en fait pas partie).
+      await show(eligibility(kyc: 'pending', done: 1, offers: 1, active: 1));
+      expect(find.text('1/5'), findsOneWidget);
       expect(find.text('7/7'), findsNothing);
+      expect(_within('elig-level', 'Non vérifié'), findsOneWidget);
+      expect(_within('elig-publication', 'Non publié'), findsOneWidget);
+      expect(_within('elig-kyc', 'Non activées'), findsOneWidget);
       expect(find.text('Vérification en cours'), findsOneWidget);
-      expect(find.text('Non autorisée'), findsOneWidget);
       expect(find.text('0 publiée / 1'), findsOneWidget);
-      expect(find.text('Compléter mon profil'), findsOneWidget);
+      expect(find.text('Ce qui bloque la publication'), findsOneWidget);
       expect(find.byKey(const ValueKey('blocker-profile_incomplete')), findsOneWidget);
+      expect(find.text('Compléter mon profil'), findsOneWidget);
+      expect(find.byKey(const ValueKey('blocker-kyc_pending')), findsNothing);
+
+      // Publié sans vérification d'identité : visible « Non vérifié », commandes fermées, une action : « Activer mes commandes ».
+      await show(eligibility(published: true, offers: 1, active: 1));
+      expect(_within('elig-publication', 'Publié'), findsOneWidget);
+      expect(find.textContaining('avec la mention « Non vérifié »'), findsOneWidget);
+      expect(_within('elig-level', 'Non vérifié'), findsOneWidget);
+      expect(_within('elig-kyc', 'Non activées'), findsOneWidget);
+      expect(find.text('1 publiée / 1'), findsOneWidget);
+      expect(find.text('Ce qui manque pour recevoir des commandes'), findsOneWidget);
+      expect(find.byKey(const ValueKey('blocker-kyc_draft')), findsOneWidget);
+      expect(find.text('Activer mes commandes'), findsOneWidget);
+      expect(find.text('Vérifié'), findsNothing);
+
+      // Commandes activées (pièce approuvée) : « Identité vérifiée », badge encore à obtenir.
+      await show(eligibility(published: true, orders: true, kyc: 'approved', done: 5, offers: 1, active: 1, face: 'todo'));
+      expect(_within('elig-level', 'Identité vérifiée'), findsOneWidget);
+      expect(_within('elig-kyc', 'Activées'), findsOneWidget);
+      expect(_within('elig-badge', 'À faire'), findsOneWidget);
+      expect(find.text('Ce qui manque pour recevoir des commandes'), findsNothing);
+      expect(find.text('Vérifié'), findsNothing);
+
+      // Vérification faciale validée : seul cet état affiche « Vérifié ».
+      await show(eligibility(published: true, orders: true, kyc: 'approved', done: 5, offers: 1, active: 1, face: 'done'));
+      expect(_within('elig-level', 'Vérifié'), findsOneWidget);
+      expect(_within('elig-badge', 'Attribué'), findsOneWidget);
+
+      // Serveur plus ancien (sans les niveaux) : pas de ligne « Badge », jamais « Vérifié ».
+      await show(eligibility(published: true, orders: true, kyc: 'approved', done: 5, offers: 1, active: 1, face: 'done')
+        ..remove('verification')
+        ..remove('orders')
+        ..remove('stages'));
+      expect(find.byKey(const ValueKey('elig-badge')), findsNothing);
+      expect(_within('elig-level', 'Identité vérifiée'), findsOneWidget);
+      expect(find.text('Vérifié'), findsNothing);
     });
 
     testWidgets('« Mes offres » : modes affichés et modifiables dans les limites du métier', (t) async {
@@ -442,9 +633,9 @@ void main() {
       Map<String, dynamic>? patched;
       final base = _base(MockClient((r) async {
         if (r.url.path.endsWith('/me/services/')) {
-          return _json({'publishable': true, 'eligibility': eligibility(offers: 1, active: 1), 'results': [
+          return _json({'publishable': true, 'eligibility': eligibility(published: true, offers: 1, active: 1), 'results': [
             {'id': 4, 'title': 'Nounou à domicile', 'category': 'Nounou', 'category_id': 9, 'trade': null, 'price': '120000', 'price_type': 'fixed', 'is_active': true,
-              'bookings_count': 0, 'modes': ['one_off'], 'publication': {'state': 'published', 'label': 'Publiée'}},
+              'bookings_count': 0, 'modes': ['one_off'], 'publication': {'state': 'published', 'label': 'Publiée · Non vérifié', 'orders': false}},
           ]});
         }
         if (r.url.path.endsWith('/engagements/rules/')) {
@@ -471,27 +662,46 @@ void main() {
       expect(find.text('Modes enregistrés.'), findsOneWidget);
     });
 
-    testWidgets('« Mes offres » : état de publication par offre et blocages réels', (t) async {
+    testWidgets('« Mes offres » : état de publication par offre, blocages réels, « publié » distinct de « commandes activées »', (t) async {
       _size(t);
-      final base = _base(MockClient((r) async => r.url.path.endsWith('/me/services/')
-          ? _json({
-              'publishable': false,
-              'eligibility': eligibility(offers: 2, active: 1),
-              'results': [
-                {'id': 1, 'title': 'Fuite d’eau', 'category': 'Réparation de fuite', 'trade': 'Plomberie', 'price': '5000', 'price_type': 'fixed', 'is_active': true, 'bookings_count': 0,
-                  'publication': {'state': 'waiting', 'label': 'En attente d’autorisation', 'hint': 'Elle sera publiée automatiquement dès que votre publication sera autorisée.'}},
-                {'id': 2, 'title': 'Ancienne offre', 'category': 'Plomberie', 'trade': null, 'price': null, 'price_type': 'quote', 'is_active': false, 'bookings_count': 3,
-                  'publication': {'state': 'inactive', 'label': 'Désactivée', 'hint': 'Invisible des clients.'}},
-              ],
-            })
-          : _json({})));
-      await t.pumpWidget(_host(base, const ProviderHubScreen(), dash: DashData(_dashPayload())));
-      await t.pumpAndSettle();
+      Map<String, dynamic> offer(Map<String, dynamic> publication) => {'id': 1, 'title': 'Fuite d’eau', 'category': 'Réparation de fuite', 'trade': 'Plomberie', 'price': '5000',
+        'price_type': 'fixed', 'is_active': true, 'bookings_count': 0, 'publication': publication};
+      const old = {'id': 2, 'title': 'Ancienne offre', 'category': 'Plomberie', 'trade': null, 'price': null, 'price_type': 'quote', 'is_active': false, 'bookings_count': 3,
+        'publication': {'state': 'inactive', 'label': 'Désactivée', 'orders': false, 'hint': 'Invisible des clients.'}};
+      Future<void> open(String key, Map<String, dynamic> elig, Map<String, dynamic> publication) async {
+        final base = _base(MockClient((r) async => r.url.path.endsWith('/me/services/')
+            ? _json({'publishable': elig['publication']['authorized'], 'eligibility': elig, 'results': [offer(publication), old]})
+            : _json({})));
+        await t.pumpWidget(_host(base, ProviderHubScreen(key: ValueKey(key)), dash: DashData(_dashPayload())));
+        await t.pumpAndSettle();
+      }
+
+      // Profil non publiable : l'offre active n'est pas visible, le blocage réel est nommé.
+      await open('blocked', eligibility(done: 1, offers: 2, active: 1),
+          {'state': 'waiting', 'label': 'Non publiée', 'orders': false, 'hint': 'À renseigner pour publier : zone d’intervention'});
       expect(find.byKey(const ValueKey('hub-blocked')), findsOneWidget);
-      expect(find.textContaining('Profil incomplet'), findsWidgets);
-      expect(find.text('En attente d’autorisation'), findsOneWidget);
+      expect(find.byKey(const ValueKey('hub-no-orders')), findsNothing);
+      expect(find.textContaining('À renseigner pour publier'), findsWidgets);
+      expect(find.text('Non publiée'), findsOneWidget);
       expect(find.text('Désactivée'), findsOneWidget);
       expect(find.textContaining('Plomberie › Réparation de fuite'), findsOneWidget);
+
+      // Publié sans vérification d'identité : visible « Non vérifié », jamais présenté comme autorisé à recevoir des commandes.
+      await open('no-orders', eligibility(published: true, offers: 2, active: 1),
+          {'state': 'published', 'label': 'Publiée · Non vérifié', 'orders': false, 'hint': 'Visible des clients avec la mention « Non vérifié ».'});
+      expect(find.byKey(const ValueKey('hub-no-orders')), findsOneWidget);
+      expect(find.byKey(const ValueKey('hub-authorized')), findsNothing);
+      expect(find.byKey(const ValueKey('hub-blocked')), findsNothing);
+      expect(find.textContaining('mention « Non vérifié »'), findsWidgets);
+      expect(find.text('Activer mes commandes'), findsOneWidget);
+      expect(find.text('Publiée · Non vérifié'), findsOneWidget);
+
+      // Commandes activées.
+      await open('orders', eligibility(published: true, orders: true, kyc: 'approved', done: 5, offers: 2, active: 1),
+          {'state': 'published', 'label': 'Publiée', 'orders': true, 'hint': 'Visible des clients. Vous pouvez recevoir des commandes.'});
+      expect(find.byKey(const ValueKey('hub-authorized')), findsOneWidget);
+      expect(find.byKey(const ValueKey('hub-no-orders')), findsNothing);
+      expect(find.text('Publiée'), findsOneWidget);
     });
 
     BaseApi offerApi(void Function(Map<String, dynamic>) onPost) => _base(MockClient((r) async {
@@ -721,6 +931,10 @@ void main() {
       expect(e.authorized, isFalse);
       expect(e.blockers, isNotEmpty);
       expect(e.blockers.every((b) => b.label.isNotEmpty), isTrue);
+      expect(e.hasLevels, isTrue);                                        // trois niveaux distincts fournis par le serveur
+      expect((e.ordersAuthorized, e.verificationLevel, e.verificationLabel, e.verified), (false, 'NON_VERIFIE', 'Non vérifié', false));
+      expect(e.ordersBlockers.map((b) => b.code), containsAll(['not_published', 'kyc_rejected']));
+      expect(e.stages.map((s) => s.key), ['publication', 'identity', 'face']);
       final provider = DashProvider(m('dashboard_provider'));
       expect(provider.eligibility, isNotNull);
       expect(provider.eligibility!.profileTotal, 5);
@@ -734,7 +948,7 @@ void main() {
       await t.pumpWidget(_host(base, IdentityFlowScreen(api: KycFlowApi(base))));
       await t.pumpAndSettle();
       expect(find.text('Verso illisible.'), findsOneWidget);
-      expect(find.text('Étape 3 sur 7'), findsOneWidget);
+      expect(find.text('Étape 3 sur 6'), findsOneWidget);
     });
   });
 

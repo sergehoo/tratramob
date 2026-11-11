@@ -99,7 +99,7 @@ class _ReputationScreenState extends State<ReputationScreen> {
                         tone: TratraAlertTone.warning,
                         title: 'Votre identité n’est pas encore vérifiée',
                         message:
-                            'Les badges Vérifié, Expert et Sûr — et la publication de votre fiche — dépendent exclusivement de la vérification d’identité (KYC) par l’équipe Tratra.',
+                            'Votre service peut être publié avec la mention « Non vérifié ». Les commandes et les badges Vérifié, Expert et Sûr dépendent de la vérification de votre identité par l’équipe Tratra.',
                       ),
                       const SizedBox(height: TtSpace.s2),
                       TratraButton(label: 'Vérifier mon identité', variant: TratraButtonVariant.outline, block: true, onPressed: () => openKyc(context)),

@@ -101,24 +101,57 @@ Widget _host(DashData d, Widget child, {_FakeController? controller}) => MultiPr
       child: MaterialApp(theme: TratraTheme.light(), navigatorObservers: [appRouteObserver], home: child),
     );
 
-/// Synthèse d'éligibilité du serveur (handy/eligibility.py) pour un compte artisan.
+/// Synthèse d'éligibilité du serveur (handy/eligibility.py) pour un compte artisan — trois niveaux distincts : publication (sans
+/// vérification d'identité), commandes (pièce approuvée), badge « Vérifié » (vérification faciale validée).
+/// `face` : done | pending | retry | todo | unavailable.
 Map<String, dynamic> _elig({
-  bool authorized = false,
+  bool published = true,
+  bool orders = false,
   bool complete = true,
-  String kyc = 'approved',
-  bool approved = false,
+  String kyc = 'draft',
+  String face = 'unavailable',
   int offers = 1,
   String? reason,
   List<Map<String, dynamic>> blockers = const [],
-}) =>
-    {
-      'profile': {'complete': complete, 'done': complete ? 5 : 3, 'total': 5, 'items': []},
-      'kyc': {'status': kyc, 'label': kyc, 'reason': reason, 'approved': kyc == 'approved'},
-      'approval': {'approved': approved, 'label': ''},
-      'publication': {'authorized': authorized, 'label': '', 'blockers': blockers},
-      'offers': {'total': offers, 'active': offers, 'published': authorized ? offers : 0, 'inactive': 0, 'label': ''},
-      'next_action': null,
-    };
+  List<Map<String, dynamic>>? ordersBlockers,
+}) {
+  final level = orders && face == 'done' ? 'VERIFIE' : kyc == 'approved' ? 'IDENTITE_VERIFIEE' : 'NON_VERIFIE';
+  return {
+    'profile': {'complete': complete, 'done': complete ? 5 : 3, 'total': 5, 'items': []},
+    'kyc': {'status': kyc, 'label': kyc, 'reason': reason, 'approved': kyc == 'approved'},
+    'approval': {'approved': orders, 'label': ''},
+    'publication': {'authorized': published, 'label': '', 'blockers': blockers},
+    'orders': {
+      'authorized': orders,
+      'label': '',
+      'face_required': false,
+      'blockers': ordersBlockers ??
+          [
+            if (!orders && kyc == 'approved')
+              {'code': 'approval_pending', 'label': 'Activation des commandes par l’équipe Tratra en attente', 'hint': 'Aucune action n’est nécessaire.', 'action': null}
+            else if (!orders)
+              {'code': 'kyc_$kyc', 'label': 'Identité non vérifiée', 'hint': '', 'action': kyc == 'pending' ? null : {'code': 'verify_identity', 'label': 'Activer mes commandes'}},
+          ],
+    },
+    'verification': {
+      'level': level,
+      'label': {'VERIFIE': 'Vérifié', 'IDENTITE_VERIFIEE': 'Identité vérifiée', 'NON_VERIFIE': 'Non vérifié'}[level],
+      'badge': level == 'VERIFIE',
+      'face': {'enabled': face != 'unavailable', 'required': false, 'satisfied': face == 'done', 'state': face},
+    },
+    'stages': [
+      {'key': 'face', 'label': 'Vérification faciale', 'state': face, 'status': '', 'benefit': 'Attribue le badge « Vérifié », affiché sur votre profil et vos offres.'},
+    ],
+    'offers': {'total': offers, 'active': offers, 'published': published ? offers : 0, 'inactive': 0, 'label': ''},
+    'next_action': null,
+  };
+}
+
+/// La même synthèse telle qu'un serveur plus ancien la renvoie (sans les trois niveaux).
+Map<String, dynamic> _oldServer(Map<String, dynamic> e) => e
+  ..remove('orders')
+  ..remove('verification')
+  ..remove('stages');
 
 /// Compte artisan dont la liste de contrôle est à 7/7 (ou non), avec la synthèse d'éligibilité donnée.
 DashData _pro(Map<String, dynamic> eligibility, {bool sevenOfSeven = true}) {
@@ -224,8 +257,8 @@ void main() {
   });
 
   group('Accueil : carte du profil professionnel (statuts réels du serveur)', () {
-    testWidgets('vérifié (publication autorisée) : plus de carte 7/7, badge « Vérifié » près du nom', (t) async {
-      await _home(t, _pro(_elig(authorized: true, approved: true)));
+    testWidgets('vérifié (pièce et visage validés) : plus de carte, badge « Vérifié » près du nom', (t) async {
+      await _home(t, _pro(_elig(orders: true, kyc: 'approved', face: 'done')));
       expect(find.byKey(const ValueKey('pro-card-hidden')), findsOneWidget);
       expect(find.text('7/7'), findsNothing);
       expect(find.text('Profil professionnel'), findsNothing);
@@ -233,67 +266,134 @@ void main() {
       expect(find.text('Vérifié'), findsOneWidget);
     });
 
-    testWidgets('vérifié sans prestation : « Créer ma première prestation », sans la carte 7/7', (t) async {
-      await _home(t, _pro(_elig(authorized: true, approved: true, offers: 0)));
-      expect(find.text('Créer ma première prestation'), findsOneWidget);
+    testWidgets('publié sans vérification d’identité : mention « Non vérifié », une action « Activer mes commandes » — jamais « Vérifié »', (t) async {
+      await _home(t, _pro(_elig()));
+      expect(find.byKey(const ValueKey('pro-activate')), findsOneWidget);
+      expect(find.text('Activez vos commandes'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('pro-cta')), matching: find.text('Activer mes commandes')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('hero-level')), matching: find.text('Non vérifié')), findsOneWidget);
+      expect(find.byKey(const ValueKey('hero-verified')), findsNothing);
+      expect(find.text('Vérifié'), findsNothing);
       expect(find.text('7/7'), findsNothing);
-      expect(find.byKey(const ValueKey('hero-verified')), findsOneWidget);
     });
 
-    testWidgets('7/7 sans autorisation de publication : jamais « Vérifié » (la validation n’est pas déduite du 7/7)', (t) async {
-      await _home(t, _pro(_elig(approved: true, blockers: [
+    testWidgets('publié sans service : « Publier un service », sans la carte 7/7 ni badge', (t) async {
+      await _home(t, _pro(_elig(offers: 0)));
+      expect(find.byKey(const ValueKey('pro-first-offer')), findsOneWidget);
+      expect(find.text('Publiez votre premier service'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('pro-cta')), matching: find.text('Publier un service')), findsOneWidget);
+      expect(find.text('7/7'), findsNothing);
+      expect(find.byKey(const ValueKey('hero-verified')), findsNothing);
+    });
+
+    testWidgets('commandes activées, visage non vérifié : « Identité vérifiée », le badge est proposé — pas attribué', (t) async {
+      await _home(t, _pro(_elig(orders: true, kyc: 'approved', face: 'todo')));
+      expect(find.byKey(const ValueKey('pro-badge')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('pro-cta')), matching: find.text('Obtenir le badge Vérifié')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('hero-level')), matching: find.text('Identité vérifiée')), findsOneWidget);
+      expect(find.byKey(const ValueKey('hero-verified')), findsNothing);
+      expect(find.text('Vérifié'), findsNothing);
+    });
+
+    testWidgets('visage en cours de revue : statut compact sans bouton, toujours pas de badge', (t) async {
+      await _home(t, _pro(_elig(orders: true, kyc: 'approved', face: 'pending')));
+      final card = find.byKey(const ValueKey('pro-status-facePending'));
+      expect(card, findsOneWidget);
+      expect(find.descendant(of: card, matching: find.byType(TratraButton)), findsNothing);
+      expect(find.byKey(const ValueKey('hero-verified')), findsNothing);
+    });
+
+    testWidgets('7/7 sans publication : ni mention ni « Vérifié » (rien n’est déduit du 7/7), le blocage réel et son action', (t) async {
+      await _home(t, _pro(_elig(published: false, kyc: 'approved', blockers: [
         {'code': 'experience_minimum', 'label': 'Expérience minimale non atteinte : Nounou demande 2 ans', 'hint': 'Votre déclaration est conservée.',
           'action': {'code': 'edit_profile', 'label': 'Compléter mon profil'}},
       ])));
       expect(find.byKey(const ValueKey('hero-verified')), findsNothing);
+      expect(find.byKey(const ValueKey('hero-level')), findsNothing);
       expect(find.text('7/7'), findsNothing);
       expect(find.text('Expérience minimale non atteinte : Nounou demande 2 ans'), findsOneWidget);
       expect(find.text('Compléter mon profil'), findsOneWidget);
     });
 
-    testWidgets('pièce en revue : statut compact, aucun bouton d’action inutile', (t) async {
+    testWidgets('pièce en revue : statut compact, aucun bouton d’action inutile, service toujours « Non vérifié »', (t) async {
       await _home(t, _pro(_elig(kyc: 'pending'), sevenOfSeven: false));
       final card = find.byKey(const ValueKey('pro-status-kycPending'));
       expect(card, findsOneWidget);
       expect(find.text('Identité en cours de vérification'), findsOneWidget);
       expect(find.descendant(of: card, matching: find.byType(TratraButton)), findsNothing);
       expect(find.byKey(const ValueKey('pro-progress')), findsNothing);
+      expect(find.descendant(of: find.byKey(const ValueKey('hero-level')), matching: find.text('Non vérifié')), findsOneWidget);
     });
 
-    testWidgets('validation finale de l’équipe en attente : statut compact, sans bouton', (t) async {
-      await _home(t, _pro(_elig(blockers: [{'code': 'approval_pending', 'label': 'Validation finale', 'hint': '', 'action': null}])));
+    testWidgets('pièce approuvée, activation retenue par l’équipe : statut compact, sans bouton, sans badge', (t) async {
+      await _home(t, _pro(_elig(kyc: 'approved')));
       final card = find.byKey(const ValueKey('pro-status-approvalPending'));
       expect(card, findsOneWidget);
+      expect(find.text('Activation des commandes en attente'), findsOneWidget);
       expect(find.descendant(of: card, matching: find.byType(TratraButton)), findsNothing);
       expect(find.byKey(const ValueKey('hero-verified')), findsNothing);
     });
 
-    testWidgets('pièce refusée : la correction demandée et « Reprendre ma pièce »', (t) async {
+    testWidgets('pièce refusée, service déjà public : la correction demandée, « Reprendre ma pièce », le service reste « Non vérifié »', (t) async {
       await _home(t, _pro(_elig(kyc: 'rejected', reason: 'Photo floue : reprenez le recto sans reflet.'), sevenOfSeven: false));
       expect(find.byKey(const ValueKey('pro-kyc-rejected')), findsOneWidget);
       expect(find.text('Photo floue : reprenez le recto sans reflet.'), findsOneWidget);
       expect(find.text('Reprendre ma pièce'), findsOneWidget);
+      expect(find.textContaining('reste visible avec la mention « Non vérifié »'), findsOneWidget);
+      expect(find.text('5/7'), findsNothing);                             // plus de barre de progression une fois publié
     });
 
     testWidgets('profil incomplet : carte avec progression et « Continuer »', (t) async {
-      await _home(t, _pro(_elig(complete: false, kyc: 'draft', blockers: [
-        {'code': 'profile_incomplete', 'label': 'Profil incomplet : photo de profil', 'hint': '', 'action': {'code': 'edit_profile', 'label': 'Compléter mon profil'}},
+      await _home(t, _pro(_elig(published: false, complete: false, blockers: [
+        {'code': 'profile_incomplete', 'label': 'À renseigner pour publier : zone d’intervention', 'hint': '', 'action': {'code': 'edit_profile', 'label': 'Compléter mon profil'}},
       ]), sevenOfSeven: false));
       expect(find.byKey(const ValueKey('pro-progress')), findsOneWidget);
       expect(find.text('5/7'), findsOneWidget);
       expect(find.text('Continuer'), findsOneWidget);
       expect(find.byKey(const ValueKey('hero-verified')), findsNothing);
+      expect(find.byKey(const ValueKey('hero-level')), findsNothing);
     });
 
-    test('même logique que le site : priorités des statuts', () {
-      ProHomeKind kind(Map<String, dynamic> e) => proHomeState(_pro(e).provider!).kind;
-      expect(kind(_elig(authorized: true, approved: true)), ProHomeKind.verified);
-      expect(kind(_elig(authorized: true, approved: true, offers: 0)), ProHomeKind.firstOffer);
-      expect(kind(_elig(kyc: 'rejected', complete: false)), ProHomeKind.kycRejected);
-      expect(kind(_elig(complete: false, kyc: 'pending')), ProHomeKind.progress, reason: 'profil incomplet : il y a quelque chose à faire');
-      expect(kind(_elig(kyc: 'draft')), ProHomeKind.progress);
+    test('même logique que le site : priorités des statuts, « Vérifié » réservé à la vérification faciale validée', () {
+      ProHomeState state(Map<String, dynamic> e) => proHomeState(_pro(e).provider!);
+      ProHomeKind kind(Map<String, dynamic> e) => state(e).kind;
+      // 1. Publication d'abord.
+      expect(kind(_elig(published: false, complete: false, kyc: 'pending')), ProHomeKind.progress, reason: 'profil incomplet : il y a quelque chose à faire');
+      expect(kind(_elig(published: false, complete: false, kyc: 'rejected')), ProHomeKind.progress, reason: 'la publication ne dépend plus de la pièce');
+      expect(kind(_elig(published: false)), ProHomeKind.approvalPending);
+      // 2. Un service à montrer.
+      expect(kind(_elig(offers: 0)), ProHomeKind.firstOffer);
+      // 3. Commandes.
+      expect(kind(_elig()), ProHomeKind.activate);
       expect(kind(_elig(kyc: 'pending')), ProHomeKind.kycPending);
-      expect(kind(_elig()), ProHomeKind.approvalPending);
+      expect(kind(_elig(kyc: 'rejected')), ProHomeKind.kycRejected);
+      expect(kind(_elig(kyc: 'approved')), ProHomeKind.approvalPending);
+      // Métier sensible : la vérification faciale conditionne les commandes.
+      Map<String, dynamic> sensitive(String face) => _elig(kyc: 'approved', face: face, ordersBlockers: [
+            {'code': 'face_required', 'label': 'Vérification faciale demandée', 'hint': 'Votre métier la demande avant toute commande.',
+              'action': face == 'pending' ? null : {'code': 'verify_identity', 'label': 'Faire la vérification faciale', 'step': 'face'}},
+          ]);
+      expect((state(sensitive('todo')).kind, state(sensitive('todo')).actionStep), (ProHomeKind.activate, 'face'));
+      expect(kind(sensitive('pending')), ProHomeKind.facePending);
+      // 4. Badge.
+      expect(kind(_elig(orders: true, kyc: 'approved', face: 'todo')), ProHomeKind.badge);
+      expect(kind(_elig(orders: true, kyc: 'approved', face: 'retry')), ProHomeKind.badge);
+      expect(kind(_elig(orders: true, kyc: 'approved', face: 'pending')), ProHomeKind.facePending);
+      expect(kind(_elig(orders: true, kyc: 'approved')), ProHomeKind.none, reason: 'vérification faciale non proposée : rien à faire');
+      expect(kind(_elig(orders: true, kyc: 'approved', face: 'done')), ProHomeKind.none);
+      // « Vérifié » : uniquement commandes activées ET visage validé.
+      expect(state(_elig(orders: true, kyc: 'approved', face: 'done')).verified, isTrue);
+      for (final e in [_elig(), _elig(kyc: 'pending'), _elig(kyc: 'approved'), _elig(orders: true, kyc: 'approved'), _elig(orders: true, kyc: 'approved', face: 'pending'),
+        sensitive('todo'), _oldServer(_elig(orders: true, kyc: 'approved', face: 'done'))]) {
+        expect(state(e).verified, isFalse);
+      }
+      expect(state(_elig()).mention, 'Non vérifié');
+      expect(state(_elig(published: false)).mention, isNull);
+      // Serveur plus ancien (sans les niveaux) : la publication attendait la pièce ; jamais de badge.
+      expect(kind(_oldServer(_elig(published: false, kyc: 'rejected'))), ProHomeKind.kycRejected);
+      expect(kind(_oldServer(_elig(published: false, kyc: 'draft'))), ProHomeKind.progress);
+      expect(kind(_oldServer(_elig(published: false, kyc: 'pending'))), ProHomeKind.kycPending);
+      expect((state(_oldServer(_elig(kyc: 'approved'))).kind, state(_oldServer(_elig(kyc: 'approved'))).mention), (ProHomeKind.none, 'Identité vérifiée'));
     });
 
     testWidgets('retour sur l’accueil (identité, publication, profil) : statuts relus auprès du serveur', (t) async {

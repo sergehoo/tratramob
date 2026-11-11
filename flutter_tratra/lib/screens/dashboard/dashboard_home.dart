@@ -154,6 +154,7 @@ class _DashboardHomeState extends State<DashboardHome> {
           _Hero(
             greeting: data.greeting,
             verified: provider != null && proHomeState(provider).verified,
+            mention: provider == null ? null : proHomeState(provider).mention,
             summary: summary,
             isProvider: provider != null,
             onExplore: widget.onExplore,
@@ -231,11 +232,14 @@ class _DashboardHomeState extends State<DashboardHome> {
 
 class _Hero extends StatelessWidget {
   const _Hero(
-      {required this.greeting, required this.summary, required this.isProvider, required this.onExplore, required this.onSearch, required this.onProvide, this.verified = false});
+      {required this.greeting, required this.summary, required this.isProvider, required this.onExplore, required this.onSearch, required this.onProvide, this.verified = false, this.mention});
   final String greeting;
 
-  /// Publication autorisée par le serveur : badge discret « ✓ Vérifié » près du nom.
+  /// Badge « ✓ Vérifié » : uniquement après la vérification faciale validée par l'équipe.
   final bool verified;
+
+  /// Mention du niveau réel dès que le service est public (« Non vérifié », « Identité vérifiée ») ; null : rien à afficher.
+  final String? mention;
   final String summary;
   final bool isProvider;
   final VoidCallback onExplore;
@@ -261,19 +265,22 @@ class _Hero extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TratraTheme.style(TtType.h1, color: Colors.white),
           ),
-          if (verified) ...[
+          if (verified || mention != null) ...[
             const SizedBox(height: TtSpace.s2),
             Semantics(
-              label: 'Profil professionnel vérifié par Tratra',
+              label: verified ? 'Profil professionnel vérifié par Tratra' : 'Profil professionnel : ${mention!}',
               excludeSemantics: true,
               child: Container(
-                key: const ValueKey('hero-verified'),
+                key: ValueKey(verified ? 'hero-verified' : 'hero-level'),
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: TtColors.success.withValues(alpha: 0.22), borderRadius: BorderRadius.circular(TtRadius.pill)),
+                decoration: BoxDecoration(
+                    color: verified ? TtColors.success.withValues(alpha: 0.22) : Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(TtRadius.pill)),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.verified_rounded, size: 16, color: TtColors.successSoft),
+                  Icon(verified ? Icons.verified_rounded : Icons.shield_outlined, size: 16, color: verified ? TtColors.successSoft : Colors.white70),
                   const SizedBox(width: 4),
-                  Text('Vérifié', style: TratraTheme.style(TtType.caption, color: Colors.white).copyWith(fontWeight: FontWeight.w700)),
+                  Text(verified ? 'Vérifié' : mention!,
+                      style: TratraTheme.style(TtType.caption, color: Colors.white).copyWith(fontWeight: FontWeight.w700)),
                 ]),
               ),
             ),
@@ -367,7 +374,7 @@ class _ProfileCard extends StatelessWidget {
           Text('Proposez vos services', style: TratraTheme.style(TtType.h3)),
           const SizedBox(height: TtSpace.s2),
           Text(
-            'Créez votre profil professionnel avec ce même compte, faites vérifier votre identité puis publiez vos prestations.',
+            'Avec ce même compte, publiez votre service en trois écrans. Vous ferez vérifier votre identité ensuite, pour recevoir des commandes.',
             style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft),
           ),
           const SizedBox(height: TtSpace.s4),
@@ -378,29 +385,44 @@ class _ProfileCard extends StatelessWidget {
     final st = proHomeState(p);
     void act() {
       if (st.actionCode == null) return;
-      runEligibilityAction(context, DashActionRef({'code': st.actionCode, 'label': st.actionLabel ?? ''}),
+      runEligibilityAction(context, DashActionRef({'code': st.actionCode, 'label': st.actionLabel ?? '', 'step': st.actionStep}),
           onChanged: () => context.read<DashboardController>().load());
     }
 
     switch (st.kind) {
-      // Vérifié : plus de carte de progression (badge « ✓ Vérifié » près du nom ; le détail reste dans Profil → Mon profil
+      // Rien à faire ni à attendre : plus de carte (le niveau réel est près du nom ; le détail reste dans Profil → Mon profil
       // professionnel → Vérification et réputation).
-      case ProHomeKind.verified:
+      case ProHomeKind.none:
         return const SizedBox.shrink(key: ValueKey('pro-card-hidden'));
-      case ProHomeKind.firstOffer:
+      // Une action utile, annoncée avec ce qu'elle apporte : premier service, « Activer mes commandes », « Obtenir le badge Vérifié ».
+      case ProHomeKind.firstOffer || ProHomeKind.activate || ProHomeKind.badge:
+        final icon = switch (st.kind) {
+          ProHomeKind.firstOffer => Icons.add_rounded,
+          ProHomeKind.activate => Icons.verified_user_outlined,
+          _ => Icons.verified_outlined,
+        };
         return TratraCard(
-          key: const ValueKey('pro-first-offer'),
+          key: ValueKey(switch (st.kind) { ProHomeKind.firstOffer => 'pro-first-offer', ProHomeKind.activate => 'pro-activate', _ => 'pro-badge' }),
           variant: TratraCardVariant.soft,
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(st.title, style: TratraTheme.style(TtType.h3)),
             const SizedBox(height: TtSpace.s2),
             Text(st.message, style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft)),
-            const SizedBox(height: TtSpace.s4),
-            TratraButton(label: st.actionLabel!, block: true, leading: const Icon(Icons.add_rounded, size: 18), onPressed: act),
+            if (st.actionCode != null) ...[
+              const SizedBox(height: TtSpace.s4),
+              TratraButton(
+                  key: const ValueKey('pro-cta'),
+                  label: st.actionLabel ?? 'Continuer',
+                  block: true,
+                  variant: st.kind == ProHomeKind.badge ? TratraButtonVariant.outline : TratraButtonVariant.primary,
+                  leading: Icon(icon, size: 18),
+                  onPressed: act),
+            ],
           ]),
         );
-      // Pièce en revue, validation finale, autre blocage : un statut compact ; un bouton seulement s'il y a vraiment quelque chose à faire.
-      case ProHomeKind.kycPending || ProHomeKind.approvalPending || ProHomeKind.blocked:
+      // Pièce ou visage en revue, activation par l'équipe, autre blocage : un statut compact ; un bouton seulement s'il y a
+      // vraiment quelque chose à faire.
+      case ProHomeKind.kycPending || ProHomeKind.facePending || ProHomeKind.approvalPending || ProHomeKind.blocked:
         return TratraCard(
           key: ValueKey('pro-status-${st.kind.name}'),
           variant: TratraCardVariant.flat,
@@ -426,8 +448,22 @@ class _ProfileCard extends StatelessWidget {
       case ProHomeKind.kycRejected || ProHomeKind.progress:
         break;
     }
+    // Pièce refusée alors que le service est déjà public : la correction demandée, sans barre de progression.
+    if (st.kind == ProHomeKind.kycRejected && st.published) {
+      return TratraCard(
+        key: const ValueKey('pro-progress'),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          TratraAlert(key: const ValueKey('pro-kyc-rejected'), tone: TratraAlertTone.danger, title: st.title, message: st.message),
+          const SizedBox(height: TtSpace.s2),
+          Text('Votre service reste visible avec la mention « ${st.levelLabel} ». Les commandes seront activées après la vérification de votre pièce.',
+              style: TratraTheme.style(TtType.caption, color: TtColors.ash)),
+          const SizedBox(height: TtSpace.s4),
+          TratraButton(key: const ValueKey('pro-continue'), label: st.actionLabel ?? 'Continuer', block: true, onPressed: act),
+        ]),
+      );
+    }
     // Il reste quelque chose à faire soi-même : progression et « Continuer » (ou la correction demandée si la pièce a été refusée).
-    final missing = p.checklist.where((i) => !i.done).toList();
+    final missing = p.checklist.where((i) => !i.done && i.required).toList();
     return TratraCard(
       key: const ValueKey('pro-progress'),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

@@ -3,8 +3,9 @@
 // Entrées de l'inscription professionnelle :
 //  • OnboardingChoiceScreen — « Proposer mes services » : Inscription ACCOMPAGNÉE (nouvelle) ou CLASSIQUE (inchangée), et
 //    « Continuer mon inscription » quand un brouillon existe ;
-//  • BeginnerProgressCard — tableau de bord débutant : étapes faites/restantes et UN seul bouton « Continuer » vers la prochaine action
-//    calculée par le serveur (handy/onboarding.py).
+//  • BeginnerProgressCard — tableau de bord débutant, TANT QUE le premier service n'est pas publié : progression de la publication
+//    (métier, zone, confirmation) et UN seul bouton « Continuer » vers la prochaine action calculée par le serveur
+//    (handy/onboarding.py). Une fois le service en ligne, l'accueil prend le relais (« Activer mes commandes », badge « Vérifié »).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -183,7 +184,8 @@ class _BeginnerProgressCardState extends State<BeginnerProgressCard> {
     final s = _state!;
     switch (s.nextCode) {
       case 'verify_identity':
-        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IdentityFlowScreen(simplified: true)));
+        await Navigator.of(context)
+            .push(MaterialPageRoute(builder: (_) => IdentityFlowScreen(simplified: true, initialStep: s.nextStep == 'face' ? 'face' : null)));
       case 'wait' || 'done' || 'blocked':
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProProfileScreen()));
       case 'verify_phone':
@@ -204,14 +206,15 @@ class _BeginnerProgressCardState extends State<BeginnerProgressCard> {
       key: const ValueKey('beginner-card'),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Expanded(child: Text('Mon inscription professionnelle', style: TratraTheme.style(TtType.h3))),
-          Text('${s.done}/${s.total}', style: TratraTheme.style(TtType.title, color: TtColors.primaryDark)),
+          Expanded(child: Text('Publier mon premier service', style: TratraTheme.style(TtType.h3))),
+          Text('${s.publishDone}/${s.publishTotal}', style: TratraTheme.style(TtType.title, color: TtColors.primaryDark)),
         ]),
         const SizedBox(height: TtSpace.s2),
         ClipRRect(
           borderRadius: BorderRadius.circular(TtRadius.pill),
           child:
-              LinearProgressIndicator(value: s.total == 0 ? 0 : s.done / s.total, minHeight: 10, backgroundColor: TtColors.lineSoft, color: TtColors.primary),
+              LinearProgressIndicator(
+                  value: s.publishTotal == 0 ? 0 : s.publishDone / s.publishTotal, minHeight: 10, backgroundColor: TtColors.lineSoft, color: TtColors.primary),
         ),
         const SizedBox(height: TtSpace.s3),
         Wrap(spacing: TtSpace.s2, runSpacing: TtSpace.s2, children: [
@@ -234,7 +237,7 @@ class _BeginnerProgressCardState extends State<BeginnerProgressCard> {
         if (s.nextCode == 'blocked')
           const SizedBox.shrink()
         else if (waiting)
-          Text('L’équipe Tratra vérifie votre dossier. Vous serez prévenu(e) par notification.',
+          Text('${s.nextLabel}. Vous serez prévenu(e) par notification.',
               style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft)),
         if (!waiting) Text('Prochaine étape : ${s.nextLabel}', style: TratraTheme.style(TtType.body).copyWith(fontWeight: FontWeight.w600)),
         const SizedBox(height: TtSpace.s3),

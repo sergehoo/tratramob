@@ -69,7 +69,9 @@ Future<void> openProvide(BuildContext context) => pushPage(
     );
 Future<void> openProProfile(BuildContext context) => pushPage(context, const ProProfileScreen());
 /// « Vérifier mon identité » : le parcours guidé (une seule entrée pour la pièce d'identité et la vérification faciale).
-Future<void> openKyc(BuildContext context) => pushPage(context, const IdentityFlowScreen());
+/// `step: 'face'` ouvre directement la vérification faciale (« Obtenir le badge Vérifié ») quand elle est proposée.
+Future<void> openKyc(BuildContext context, {String? step}) => pushPage(context, IdentityFlowScreen(initialStep: step));
+Future<void> openVerifyPhone(BuildContext context) => Navigator.pushNamed(context, RouteNames.verifyPhone, arguments: const OtpArgs());
 /// Autres justificatifs (diplômes, casier, assurance…) et historique des pièces.
 Future<void> openDocuments(BuildContext context) => pushPage(context, const KycScreen());
 Future<void> openAddresses(BuildContext context) => pushPage(context, const AddressesScreen());

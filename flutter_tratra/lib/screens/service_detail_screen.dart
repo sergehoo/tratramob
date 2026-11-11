@@ -145,7 +145,7 @@ class _ServiceDetailScreenState extends State<ServiceDetailScreen> {
     return Scaffold(
       backgroundColor: TtColors.canvas,
       appBar: const TratraAppBar(title: 'Détail du service'),
-      bottomNavigationBar: _BookingBar(price: formatServicePrice(s), onBook: _book),
+      bottomNavigationBar: _BookingBar(price: formatServicePrice(s), onBook: _book, canBook: s.canOrder, mention: s.verificationLabel),
       body: RefreshIndicator(
         onRefresh: _loadSimilar,
         color: TtColors.primary,
@@ -591,10 +591,14 @@ class _SimilarSkeleton extends StatelessWidget {
 
 /// Barre d'action collante : tarif + CTA principal vers la réservation.
 class _BookingBar extends StatelessWidget {
-  const _BookingBar({required this.price, required this.onBook});
+  const _BookingBar({required this.price, required this.onBook, this.canBook = true, this.mention});
 
   final String price;
   final VoidCallback onBook;
+
+  /// Faux tant que l'identité du professionnel n'est pas vérifiée : le service est visible, mais aucune commande n'est possible.
+  final bool canBook;
+  final String? mention;
 
   @override
   Widget build(BuildContext context) {
@@ -631,13 +635,20 @@ class _BookingBar extends StatelessWidget {
               ),
               const SizedBox(width: TtSpace.s4),
               Expanded(
-                child: TratraButton(
-                  label: 'Réserver',
-                  size: TratraButtonSize.lg,
-                  block: true,
-                  leading: const Icon(Icons.event_available_rounded),
-                  onPressed: onBook,
-                ),
+                child: canBook
+                    ? TratraButton(
+                        key: const ValueKey('service-book'),
+                        label: 'Réserver',
+                        size: TratraButtonSize.lg,
+                        block: true,
+                        leading: const Icon(Icons.event_available_rounded),
+                        onPressed: onBook,
+                      )
+                    : Text(
+                        'Profil ${(mention ?? 'Non vérifié').toLowerCase()} : ce professionnel ne reçoit pas encore de commandes.',
+                        key: const ValueKey('service-no-order'),
+                        style: TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft),
+                      ),
               ),
             ],
           ),

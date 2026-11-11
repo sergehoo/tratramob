@@ -16,7 +16,7 @@ class TrustBadgeInfo {
 
 const Map<String, TrustBadgeInfo> trustBadgeInfo = {
   'NOUVEAU': TrustBadgeInfo('Nouveau', 'Profil créé, identité pas encore vérifiée.', TratraTone.gray, Icons.auto_awesome_rounded),
-  'VERIFIE': TrustBadgeInfo('Vérifié', 'Pièce d’identité contrôlée par l’équipe Tratra et profil complet.', TratraTone.primary, Icons.verified_rounded),
+  'VERIFIE': TrustBadgeInfo('Vérifié', 'Pièce d’identité et vérification faciale validées par l’équipe Tratra.', TratraTone.primary, Icons.verified_rounded),
   'EXPERT': TrustBadgeInfo('Expert', 'Expertise démontrée : justificatifs approuvés et résultats atteints.', TratraTone.accent, Icons.workspace_premium_rounded),
   'SUR': TrustBadgeInfo('Sûr', 'Fiabilité mesurée : ponctualité, absence de litiges et avis des clients.', TratraTone.night, Icons.shield_rounded),
 };

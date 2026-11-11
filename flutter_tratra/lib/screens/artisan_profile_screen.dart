@@ -137,6 +137,10 @@ class _ArtisanProfileScreenState extends State<ArtisanProfileScreen> {
       description: (j['description'] ?? j['bio'] ?? '').toString(),
       trustBadges: trustBadgeCodes(j['badges']),
       trustScore: j['trust_score'] is num ? (j['trust_score'] as num).round() : null,
+      verificationLabel: j['verification'] is Map && '${(j['verification'] as Map)['label'] ?? ''}'.trim().isNotEmpty
+          ? '${(j['verification'] as Map)['label']}'.trim()
+          : null,
+      canOrder: j.containsKey('can_order') ? j['can_order'] == true : true,
     );
   }
 
@@ -504,7 +508,8 @@ class _ProfileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final a = artisan;
-    final hasBadges = a.isCertified || a.isAvailable || a.trustBadges.isNotEmpty;
+    final mention = a.isCertified ? null : a.verificationLabel;
+    final hasBadges = a.isCertified || a.isAvailable || a.trustBadges.isNotEmpty || mention != null;
 
     return TratraCard(
       variant: TratraCardVariant.night,
@@ -559,20 +564,29 @@ class _ProfileHeader extends StatelessWidget {
                 if (a.trustBadges.isNotEmpty)
                   TratraTrustBadges(a.trustBadges, onNight: true)
                 else if (a.isCertified)
-                  const TratraBadge('Vérifié', tone: TratraTone.success, icon: Icons.verified_rounded),
+                  const TratraBadge('Vérifié', tone: TratraTone.success, icon: Icons.verified_rounded)
+                else if (mention != null)
+                  TratraBadge(mention, key: const ValueKey('artisan-mention'), tone: TratraTone.gray),
                 if (a.isAvailable)
                   const TratraBadge('Disponible', tone: TratraTone.primary, dot: true),
               ],
             ),
           ],
           const SizedBox(height: TtSpace.s5),
-          TratraButton(
-            label: 'Contacter',
-            variant: TratraButtonVariant.accent,
-            block: true,
-            leading: const Icon(Icons.chat_bubble_outline_rounded),
-            onPressed: onContact,
-          ),
+          if (a.canOrder)
+            TratraButton(
+              label: 'Contacter',
+              variant: TratraButtonVariant.accent,
+              block: true,
+              leading: const Icon(Icons.chat_bubble_outline_rounded),
+              onPressed: onContact,
+            )
+          else
+            Text(
+              'Ce professionnel n’a pas encore fait vérifier son identité : il ne reçoit ni message ni commande pour le moment.',
+              key: const ValueKey('artisan-no-order'),
+              style: TratraTheme.style(TtType.bodySm, color: Colors.white70),
+            ),
         ],
       ),
     );

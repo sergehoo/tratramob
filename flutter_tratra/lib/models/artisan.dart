@@ -40,7 +40,15 @@ class Artisan {
     this.trustBadges = const [],
     this.trustScore,
     this.userId,
+    this.verificationLabel,
+    this.canOrder = true,
   });
+
+  /// Niveau affiché (« Non vérifié », « Identité vérifiée », « Vérifié »), fourni par le serveur ; null avec d'anciennes réponses.
+  final String? verificationLabel;
+
+  /// Le professionnel peut être contacté et recevoir une commande (identité vérifiée).
+  final bool canOrder;
 
   // Méthode fromJson — tolère le snake_case du backend Django DRF
   // (image_url, hourly_rate, ...) ET le camelCase, pour éviter la perte de données.
@@ -72,8 +80,8 @@ class Artisan {
       distance: toDouble(pick(['distance_m', 'distance'])),
       isAvailable: (pick(['online', 'is_available', 'isAvailable']) ?? false) == true,
       hourlyRate: toDouble(pick(['hourly_rate', 'hourlyRate'])),
-      isCertified:
-          (pick(['is_approved', 'is_certified', 'isCertified']) ?? false) == true,
+      // « Vérifié » : uniquement le badge attribué par le serveur (jamais la simple activation des commandes).
+      isCertified: (pick(['is_verified', 'is_certified', 'isCertified']) ?? false) == true,
       responseTime: pick(['response_time', 'responseTime'])?.toString(),
       yearsExperience: toInt(pick(['experience_years', 'years_experience', 'yearsExperience'])),
       specialties: List<String>.from(pick(['specialties']) ?? const []),
@@ -81,7 +89,15 @@ class Artisan {
       trustBadges: _trustCodes(json['badges']),
       trustScore: json['trust_score'] is num ? (json['trust_score'] as num).round() : null,
       userId: _userId(json),
+      verificationLabel: _verificationLabel(json),
+      canOrder: json.containsKey('can_order') ? json['can_order'] == true : true,
     );
+  }
+
+  static String? _verificationLabel(Map<String, dynamic> json) {
+    final v = json['verification'];
+    final label = v is Map ? '${v['label'] ?? ''}'.trim() : '';
+    return label.isEmpty ? null : label;
   }
 
   String? get specialty => null;
