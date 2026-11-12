@@ -34,7 +34,8 @@ void main() {
     for (final label in ['Prénom', 'Nom', 'Téléphone', 'Mot de passe', 'Confirmer le mot de passe']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
-    expect(find.textContaining('conditions d’utilisation'), findsOneWidget);
+    expect(find.text('J’accepte les Conditions d’utilisation et la politique de confidentialité.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('terms-open')), findsOneWidget);                  // conditions ouvrables depuis l'inscription
     // plus de nom d'utilisateur, d'e-mail obligatoire, ni de choix de profil
     for (final gone in ['Adresse email', "Nom d'utilisateur", 'Artisan', 'Entreprise', 'Client']) {
       expect(find.text(gone), findsNothing, reason: gone);

@@ -2,6 +2,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_tratra/core/legal.dart';
 import 'package:flutter_tratra/core/phone/phone_value.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/routes.dart';
@@ -30,8 +31,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   late final StorageService _storageService;
 
   bool _isLoading = false;
-  bool _acceptTerms = false;
+  bool _acceptTerms = false; // jamais précochée
   bool _showTermsWarning = false;
+  String _termsVersion = LegalLinks.termsVersion; // remplacée par la version du serveur si les conditions ont changé
+  String? _termsNotice;
   String? _error;
   bool _slow = false; // la requête dure : message d'attente
 
@@ -87,6 +90,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         phone: _phone.e164!,
         phoneCountry: _phone.iso.name,
         password: _passwordController.text,
+        acceptTerms: _acceptTerms,
+        termsVersion: _termsVersion,
       );
 
       final token = _apiService.authToken;
@@ -107,6 +112,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
           arguments: const OtpArgs(autoSend: true));
     } catch (e) {
       if (!mounted) return;
+      final current = outdatedTermsVersion(e);
+      if (current != null) {
+        // Conditions modifiées depuis ce build : la personne relit la nouvelle version et recoche elle-même la case.
+        setState(() {
+          _termsVersion = current;
+          _acceptTerms = false;
+          _termsNotice = 'Les Conditions d’utilisation ont été mises à jour. Relisez-les, puis cochez à nouveau la case.';
+        });
+        return;
+      }
       setState(() => _error = authErrorMessage(e));
     } finally {
       slowTimer.cancel();
@@ -240,27 +255,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 onSubmitted: (_) => _register(),
               ),
               const SizedBox(height: TtSpace.s3),
-              CheckboxListTile(
+              TermsConsent(
+                key: const ValueKey('register-terms'),
                 value: _acceptTerms,
                 onChanged: (value) => setState(() {
-                  _acceptTerms = value ?? false;
-                  if (_acceptTerms) _showTermsWarning = false;
+                  _acceptTerms = value;
+                  if (_acceptTerms) {
+                    _showTermsWarning = false;
+                    _termsNotice = null;
+                  }
                 }),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-                shape:
-                    RoundedRectangleBorder(borderRadius: TtRadius.controlAll),
-                title: Text(
-                  'J’accepte les conditions d’utilisation et la politique de confidentialité.',
-                  style:
-                      TratraTheme.style(TtType.bodySm, color: TtColors.inkSoft),
-                ),
               ),
               AuthNotice(
                 tone: TratraAlertTone.warning,
-                message: _showTermsWarning
-                    ? 'Veuillez accepter les conditions d’utilisation'
-                    : null,
+                message: _termsNotice ??
+                    (_showTermsWarning
+                        ? 'Cochez « J’accepte les Conditions d’utilisation » pour créer votre compte.'
+                        : null),
               ),
               AuthNotice(
                 tone: TratraAlertTone.info,

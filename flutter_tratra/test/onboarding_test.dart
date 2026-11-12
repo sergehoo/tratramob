@@ -486,6 +486,11 @@ void main() {
       await t.pumpAndSettle();
       expect(server.private, isEmpty);
       expect('${await t.runAsync(_localDraft)}', isNot(contains(secret)), reason: 'jamais de mot de passe dans le brouillon');
+      expect(_enabled(t), isFalse, reason: 'case « J’accepte les Conditions d’utilisation » non cochée : aucun compte créé');
+      expect(t.widget<CheckboxListTile>(find.byKey(const ValueKey('terms-accept'))).value, isFalse, reason: 'jamais précochée');
+      expect(find.byKey(const ValueKey('terms-open')), findsOneWidget, reason: 'conditions ouvrables avant d’accepter');
+      await _tap(t, find.byKey(const ValueKey('terms-accept')));
+      expect(_enabled(t), isTrue);
 
       await _continue(t); // « Créer mon compte »
       expect(signups, ['Awa|Koné|+2250700000000']);
@@ -534,6 +539,7 @@ void main() {
       await t.enterText(_input('onb-password'), 'Essai2026x');
       await t.enterText(_input('onb-confirm'), 'Essai2026x');
       await t.pumpAndSettle();
+      await _tap(t, find.byKey(const ValueKey('terms-accept')));
       await _continue(t);
       expect(find.text('Confirmez votre numéro'), findsOneWidget);
       expect(server.draft['trade'], 12, reason: 'le brouillon rejoint le compte dès sa création');

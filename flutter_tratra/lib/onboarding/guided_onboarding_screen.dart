@@ -18,11 +18,13 @@ import 'package:provider/provider.dart';
 
 import 'package:flutter_tratra/core/api_exception.dart';
 import 'package:flutter_tratra/core/base_api.dart';
+import 'package:flutter_tratra/core/legal.dart';
 import 'package:flutter_tratra/core/phone/phone_value.dart';
 import 'package:flutter_tratra/core/session.dart';
 import 'package:flutter_tratra/design/design.dart';
 import 'package:flutter_tratra/kyc/identity_flow_screen.dart';
 import 'package:flutter_tratra/models/category.dart';
+import 'package:flutter_tratra/models/user.dart';
 import 'package:flutter_tratra/onboarding/onboarding_api.dart';
 import 'package:flutter_tratra/onboarding/voice_guide.dart';
 import 'package:flutter_tratra/routes.dart';
@@ -94,6 +96,8 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
   PhoneValue _phone = PhoneValue.empty;
   String? _phoneError;
   bool _showPassword = true;
+  bool _acceptTerms = false; // case « J'accepte les Conditions d'utilisation » : jamais précochée, exigée avant la création du compte
+  String _termsVersion = LegalLinks.termsVersion;
 
   bool get _signedIn => context.read<Session>().isAuthenticated;
 
@@ -249,7 +253,8 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
     return switch (step) {
       'names' => 'Écrivez votre prénom et votre nom, comme sur votre pièce d’identité. Vous ne les écrirez qu’une seule fois.',
       'phone' => 'Écrivez votre numéro de téléphone. Vous recevrez un code par SMS.',
-      'password' => 'Choisissez un mot de passe. Il doit avoir au moins 8 caractères, avec une majuscule, une minuscule et un chiffre. Gardez-le bien.',
+      'password' => 'Choisissez un mot de passe. Il doit avoir au moins 8 caractères, avec une majuscule, une minuscule et un chiffre. Gardez-le bien. '
+          'Puis lisez les conditions d’utilisation et cochez la case si vous les acceptez.',
       'verify' => 'Nous allons vous envoyer un code par SMS pour confirmer votre numéro.',
       'service' => _draft.tradeId == null
           ? 'Première étape sur trois. Quel est votre métier ? Touchez la carte de votre métier, ou écrivez-le dans la recherche.'
@@ -401,7 +406,7 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
     }
     return switch (_step) {
       'names' => _first.text.trim().length >= 2 && _last.text.trim().length >= 2,
-      'password' => _passwordRules.every((r) => r.$2) && _password.text == _confirm.text,
+      'password' => _passwordRules.every((r) => r.$2) && _password.text == _confirm.text && _acceptTerms,
       'service' => _draft.tradeId != null,
       'zone' => _draft.commune.isNotEmpty,
       'confirm' => _experienceQuestion == null || _draft.answers[_experienceQuestion!.key] != null,
@@ -488,7 +493,24 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
     final apiService = context.read<ApiService>();
     final storage = context.read<StorageService>();
     final session = context.read<Session>();
-    final user = await apiService.register(firstName: first, lastName: last, phone: phone.e164!, phoneCountry: phone.iso.name, password: password);
+    final User user;
+    try {
+      user = await apiService.register(
+          firstName: first, lastName: last, phone: phone.e164!, phoneCountry: phone.iso.name, password: password,
+          acceptTerms: _acceptTerms, termsVersion: _termsVersion);
+    } catch (e) {
+      final current = outdatedTermsVersion(e);
+      if (current == null) rethrow;
+      // Conditions modifiées depuis ce build : la personne relit la nouvelle version et recoche elle-même la case.
+      if (mounted) {
+        setState(() {
+          _termsVersion = current;
+          _acceptTerms = false;
+          _error = 'Les conditions d’utilisation ont été mises à jour. Relisez-les, puis cochez à nouveau la case.';
+        });
+      }
+      return false;
+    }
     final token = apiService.authToken;
     if (token == null || token.isEmpty) {
       if (mounted) setState(() => _error = 'Compte créé. Connectez-vous avec votre numéro et votre mot de passe pour continuer.');
@@ -1132,6 +1154,15 @@ class _GuidedOnboardingScreenState extends State<GuidedOnboardingScreen> {
           onChanged: (v) => setState(() => _showPassword = v ?? true),
           title: const Text('Afficher le mot de passe'),
           controlAffinity: ListTileControlAffinity.leading,
+        ),
+        const Divider(height: TtSpace.s5),
+        TermsConsent(
+          key: const ValueKey('onb-terms'),
+          value: _acceptTerms,
+          onChanged: (v) => setState(() {
+            _acceptTerms = v;
+            if (v) _error = null;
+          }),
         ),
       ];
 }

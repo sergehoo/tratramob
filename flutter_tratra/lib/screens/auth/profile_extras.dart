@@ -14,6 +14,7 @@ import 'package:flutter_tratra/routes.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_nav.dart';
 import 'package:flutter_tratra/screens/dashboard/dash_ui.dart';
 import 'package:flutter_tratra/screens/dashboard/dashboard_core.dart';
+import 'package:flutter_tratra/screens/dashboard/legal_info_screen.dart';
 import 'package:flutter_tratra/screens/dashboard/notification_preferences_screen.dart';
 
 /// Modifie nom, prénom, téléphone et e-mail (facultatif). Renvoie `true` si le serveur a enregistré le changement, ou
@@ -176,6 +177,8 @@ class AccountShortcuts extends StatelessWidget {
       ('Paramètres', [
         (Icons.notifications_none_rounded, 'Notifications et confidentialité', 'Alertes, communications promotionnelles',
             () => pushPage(context, const NotificationPreferencesScreen())),
+        (Icons.gavel_rounded, 'Informations légales', 'Conditions d’utilisation, confidentialité, suppression de compte',
+            () => pushPage(context, const LegalInfoScreen())),
       ]),
     ];
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

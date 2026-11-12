@@ -519,11 +519,15 @@ class ApiService {
   /// Inscription du compte UNIQUE (POST /users/) : prénom, nom, téléphone (E.164, +225 par défaut),
   /// mot de passe et acceptation des conditions. Ni identifiant ni e-mail : la connexion se fait par
   /// téléphone. Le téléphone reste NON vérifié tant qu'un code OTP n'a pas été validé.
+  /// `acceptTerms` : la case « J'accepte les Conditions d'utilisation » réellement cochée par la personne (jamais supposée) ;
+  /// `termsVersion` : version des conditions proposée (voir core/legal.dart), enregistrée par le serveur avec la date.
   Future<Map<String, dynamic>> registerWithDetails({
     required String firstName,
     required String lastName,
     required String phone,
     required String password,
+    required bool acceptTerms,
+    String? termsVersion,
     String? phoneCountry,
   }) async {
     authToken = null; // point d'accès public : jamais le jeton d'une session précédente
@@ -533,7 +537,8 @@ class ApiService {
       'phone': phone,
       if (phoneCountry != null) 'phone_country': phoneCountry,
       'password': password,
-      'accept_terms': true,
+      'accept_terms': acceptTerms,
+      if (termsVersion != null) 'terms_version': termsVersion,
     };
 
     final response = await client.post(
@@ -610,6 +615,8 @@ class ApiService {
     required String lastName,
     required String phone,
     required String password,
+    required bool acceptTerms,
+    String? termsVersion,
     String? phoneCountry,
   }) async {
     final result = await registerWithDetails(
@@ -617,6 +624,8 @@ class ApiService {
       lastName: lastName,
       phone: phone,
       password: password,
+      acceptTerms: acceptTerms,
+      termsVersion: termsVersion,
       phoneCountry: phoneCountry,
     );
 
